@@ -49,7 +49,7 @@ body{display:flex;flex-direction:column}
 .ci{padding:12px 16px;background:transparent}
 .ibox{display:flex;gap:8px;align-items:flex-end;background:var(--bg2);border:1px solid var(--bdr);border-radius:16px;padding:8px 8px 8px 14px;transition:all .15s;box-shadow:0 1px 4px rgba(0,0,0,.04)}
 .ibox:focus-within{border-color:#6366f1;background:#fff;box-shadow:0 0 0 2px rgba(99,102,241,.1)}
-.ita{flex:1;background:transparent;border:none;outline:none;color:var(--txt);font-family:Inter,sans-serif;font-size:12.5px;resize:none;min-height:20px;max-height:100px;line-height:1.5}
+.ita{flex:1;background:transparent;border:none;outline:none;color:var(--txt);font-family:Inter,sans-serif;font-size:12.5px;resize:none;min-height:44px;max-height:150px;line-height:1.5;line-height:1.5}
 .ita::placeholder{color:var(--txt2);opacity:.7}
 .sbtn{width:32px;height:32px;border-radius:50%;border:none;background:#6366f1;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s}
 .sbtn:hover{background:#4f46e5}
@@ -154,7 +154,7 @@ body{display:flex;flex-direction:column}
       <div class="ibox">
         <input type="file" id="fileIn" accept="image/*,.pdf" style="display:none" onchange="handleFile(this.files[0])">
         <button class="sbtn" style="background:#475569" onclick="document.getElementById('fileIn').click()" title="Загрузить фото дома или чертёж">📷</button>
-        <textarea class="ita" id="ci" placeholder="Опишите здание или прикрепите фото/чертёж…" rows="1"
+        <textarea class="ita" id="ci" placeholder="Опишите здание или прикрепите фото/чертёж…" rows="2"
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"
           oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
         <button class="sbtn" onclick="send()">➤</button>
