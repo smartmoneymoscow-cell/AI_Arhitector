@@ -169,6 +169,7 @@ body{display:flex;flex-direction:column}
         <textarea class="ita" id="ci" placeholder="Опишите здание или прикрепите фото/чертёж…" rows="3"
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"
           oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
+        <button class="sbtn" id="mic-btn" onclick="toggleMic()" style="background:#64748b" title="Голосовой ввод">🎤</button>
         <button class="sbtn" onclick="send()">➤</button>
       </div>
       <div id="filePreview" style="display:none;margin-top:6px;padding:6px;background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;font-size:11px;align-items:center;gap:6px">
@@ -221,9 +222,252 @@ body{display:flex;flex-direction:column}
 </div>
 <div class="notif" id="notif"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/RGBELoader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js">
+
+// ═══════════════════ VOICE INPUT ═══════════════════════════════
+let recognition = null;
+let isListening = false;
+
+function initVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return false;
+  
+  recognition = new SpeechRecognition();
+  recognition.lang = 'ru-RU';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  
+  recognition.onresult = (event) => {
+    const inp = document.getElementById('ci');
+    if (!inp) return;
+    let transcript = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+    }
+    inp.value = transcript;
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
+  };
+  
+  recognition.onend = () => {
+    isListening = false;
+    const btn = document.getElementById('mic-btn');
+    if (btn) {
+      btn.style.background = '#64748b';
+      btn.textContent = '🎤';
+    }
+  };
+  
+  recognition.onerror = (event) => {
+    console.warn('Voice error:', event.error);
+    isListening = false;
+    const btn = document.getElementById('mic-btn');
+    if (btn) {
+      btn.style.background = '#64748b';
+      btn.textContent = '🎤';
+    }
+    if (event.error === 'not-allowed') {
+      showNotif('Разрешите доступ к микрофону', 'warn');
+    }
+  };
+  
+  return true;
+}
+
+function toggleMic() {
+  if (!recognition && !initVoice()) {
+    showNotif('Голосовой ввод не поддерживается в этом браузере', 'warn');
+    return;
+  }
+  
+  const btn = document.getElementById('mic-btn');
+  if (isListening) {
+    recognition.stop();
+    isListening = false;
+    if (btn) {
+      btn.style.background = '#64748b';
+      btn.textContent = '🎤';
+    }
+  } else {
+    try {
+      recognition.start();
+      isListening = true;
+      if (btn) {
+        btn.style.background = '#ef4444';
+        btn.textContent = '⏹';
+      }
+    } catch(e) {
+      showNotif('Не удалось запустить запись', 'warn');
+    }
+  }
+}
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/RGBELoader.js">
+
+// ═══════════════════ VOICE INPUT ═══════════════════════════════
+let recognition = null;
+let isListening = false;
+
+function initVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return false;
+  
+  recognition = new SpeechRecognition();
+  recognition.lang = 'ru-RU';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  
+  recognition.onresult = (event) => {
+    const inp = document.getElementById('ci');
+    if (!inp) return;
+    let transcript = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+    }
+    inp.value = transcript;
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
+  };
+  
+  recognition.onend = () => {
+    isListening = false;
+    const btn = document.getElementById('mic-btn');
+    if (btn) {
+      btn.style.background = '#64748b';
+      btn.textContent = '🎤';
+    }
+  };
+  
+  recognition.onerror = (event) => {
+    console.warn('Voice error:', event.error);
+    isListening = false;
+    const btn = document.getElementById('mic-btn');
+    if (btn) {
+      btn.style.background = '#64748b';
+      btn.textContent = '🎤';
+    }
+    if (event.error === 'not-allowed') {
+      showNotif('Разрешите доступ к микрофону', 'warn');
+    }
+  };
+  
+  return true;
+}
+
+function toggleMic() {
+  if (!recognition && !initVoice()) {
+    showNotif('Голосовой ввод не поддерживается в этом браузере', 'warn');
+    return;
+  }
+  
+  const btn = document.getElementById('mic-btn');
+  if (isListening) {
+    recognition.stop();
+    isListening = false;
+    if (btn) {
+      btn.style.background = '#64748b';
+      btn.textContent = '🎤';
+    }
+  } else {
+    try {
+      recognition.start();
+      isListening = true;
+      if (btn) {
+        btn.style.background = '#ef4444';
+        btn.textContent = '⏹';
+      }
+    } catch(e) {
+      showNotif('Не удалось запустить запись', 'warn');
+    }
+  }
+}
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js">
+
+// ═══════════════════ VOICE INPUT ═══════════════════════════════
+let recognition = null;
+let isListening = false;
+
+function initVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return false;
+  
+  recognition = new SpeechRecognition();
+  recognition.lang = 'ru-RU';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  
+  recognition.onresult = (event) => {
+    const inp = document.getElementById('ci');
+    if (!inp) return;
+    let transcript = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+    }
+    inp.value = transcript;
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
+  };
+  
+  recognition.onend = () => {
+    isListening = false;
+    const btn = document.getElementById('mic-btn');
+    if (btn) {
+      btn.style.background = '#64748b';
+      btn.textContent = '🎤';
+    }
+  };
+  
+  recognition.onerror = (event) => {
+    console.warn('Voice error:', event.error);
+    isListening = false;
+    const btn = document.getElementById('mic-btn');
+    if (btn) {
+      btn.style.background = '#64748b';
+      btn.textContent = '🎤';
+    }
+    if (event.error === 'not-allowed') {
+      showNotif('Разрешите доступ к микрофону', 'warn');
+    }
+  };
+  
+  return true;
+}
+
+function toggleMic() {
+  if (!recognition && !initVoice()) {
+    showNotif('Голосовой ввод не поддерживается в этом браузере', 'warn');
+    return;
+  }
+  
+  const btn = document.getElementById('mic-btn');
+  if (isListening) {
+    recognition.stop();
+    isListening = false;
+    if (btn) {
+      btn.style.background = '#64748b';
+      btn.textContent = '🎤';
+    }
+  } else {
+    try {
+      recognition.start();
+      isListening = true;
+      if (btn) {
+        btn.style.background = '#ef4444';
+        btn.textContent = '⏹';
+      }
+    } catch(e) {
+      showNotif('Не удалось запустить запись', 'warn');
+    }
+  }
+}
+
+</script>
 <script>
 'use strict';
 // ═══════════════════ CLAUDE API ════════════════════════════════
@@ -2367,6 +2611,87 @@ function checkMobile(){
   if(!isMob){sb.style.transform='';const ov=document.getElementById('sb-overlay');if(ov)ov.style.display='none';}
 }
 window.addEventListener('resize',()=>{checkMobile();resizeR();if(ST.hasModel&&ST.view!=='ext'&&ST.view!=='int')draw2D(ST.view);});
+
+
+// ═══════════════════ VOICE INPUT ═══════════════════════════════
+let recognition = null;
+let isListening = false;
+
+function initVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return false;
+  
+  recognition = new SpeechRecognition();
+  recognition.lang = 'ru-RU';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  
+  recognition.onresult = (event) => {
+    const inp = document.getElementById('ci');
+    if (!inp) return;
+    let transcript = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+    }
+    inp.value = transcript;
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
+  };
+  
+  recognition.onend = () => {
+    isListening = false;
+    const btn = document.getElementById('mic-btn');
+    if (btn) {
+      btn.style.background = '#64748b';
+      btn.textContent = '🎤';
+    }
+  };
+  
+  recognition.onerror = (event) => {
+    console.warn('Voice error:', event.error);
+    isListening = false;
+    const btn = document.getElementById('mic-btn');
+    if (btn) {
+      btn.style.background = '#64748b';
+      btn.textContent = '🎤';
+    }
+    if (event.error === 'not-allowed') {
+      showNotif('Разрешите доступ к микрофону', 'warn');
+    }
+  };
+  
+  return true;
+}
+
+function toggleMic() {
+  if (!recognition && !initVoice()) {
+    showNotif('Голосовой ввод не поддерживается в этом браузере', 'warn');
+    return;
+  }
+  
+  const btn = document.getElementById('mic-btn');
+  if (isListening) {
+    recognition.stop();
+    isListening = false;
+    if (btn) {
+      btn.style.background = '#64748b';
+      btn.textContent = '🎤';
+    }
+  } else {
+    try {
+      recognition.start();
+      isListening = true;
+      if (btn) {
+        btn.style.background = '#ef4444';
+        btn.textContent = '⏹';
+      }
+    } catch(e) {
+      showNotif('Не удалось запустить запись', 'warn');
+    }
+  }
+}
+
 </script>
 
 </body>
