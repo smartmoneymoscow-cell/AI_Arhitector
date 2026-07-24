@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>ArchAI v10.2</title>
+<title>Architect</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -124,7 +124,7 @@ body{display:flex;flex-direction:column}
   <div class="sb" id="sb">
     <div style="padding:12px 16px 8px;display:flex;align-items:center;gap:10px">
       <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex-shrink:0">A</div>
-      <div style="font-size:13px;font-weight:600;color:var(--txt)">ArchAI</div>
+      <div style="font-size:13px;font-weight:600;color:var(--txt)">Architect</div>
     </div>
     <!-- CHAT TAB -->
     <div id="tab-chat" class="chat">
@@ -271,7 +271,7 @@ async function callClaude(msg,sys,maxTok){
   }
   // ── Standalone fallback: OpenRouter free models ─────────
   const key='';
-  const orHeaders={'Content-Type':'application/json','HTTP-Referer':'https://archai.app','X-Title':'ArchAI'};
+  const orHeaders={'Content-Type':'application/json','HTTP-Referer':'https://archai.app','X-Title':'Architect'};
   if(key) orHeaders['Authorization']='Bearer '+key;
   const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
     method:'POST',
@@ -1647,7 +1647,7 @@ async function analyzeImage(b64,mediaType,userText){
   }
   // Standalone fallback — OpenRouter free model
   const key='';
-  const orHeaders={'Content-Type':'application/json','HTTP-Referer':'https://archai.app','X-Title':'ArchAI'};
+  const orHeaders={'Content-Type':'application/json','HTTP-Referer':'https://archai.app','X-Title':'Architect'};
   if(key) orHeaders['Authorization']='Bearer '+key;
   const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
     method:'POST',
@@ -1925,7 +1925,7 @@ function draw2D(mode){
   ctx.textAlign='right';ctx.font='600 11px JetBrains Mono,monospace';ctx.fillStyle=SHEET.title;
   ctx.fillText(scaleTxt,W2-20,H2-30);
   ctx.font='10px Inter,sans-serif';ctx.fillStyle=SHEET.sub;
-  ctx.fillText('ArchAI · '+new Date().toLocaleDateString('ru-RU'),W2-20,H2-16);
+  ctx.fillText('Architect · '+new Date().toLocaleDateString('ru-RU'),W2-20,H2-16);
   // North arrow (plan only)
   if(mode==='plan'){
     const nx=W2-44,ny=44;
@@ -2326,7 +2326,7 @@ function addMsg(role,html){
   const area=document.getElementById('tab-chat');if(!area)return;
   const d=document.createElement('div');d.className='msg '+(role==='u'?'u':'a');
   const t=new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'});
-  if(role==='a')d.innerHTML=`<div class="mmeta"><div class="av">A</div>ArchAI <span style="font-size:9px;opacity:.6">${t}</span></div><div class="bub">${typeof html==='string'?html.replace(/\n/g,'<br>'):escHtml(String(html))}</div>`;
+  if(role==='a')d.innerHTML=`<div class="mmeta"><div class="av">A</div>Architect <span style="font-size:9px;opacity:.6">${t}</span></div><div class="bub">${typeof html==='string'?html.replace(/\n/g,'<br>'):escHtml(String(html))}</div>`;
   else d.innerHTML=`<div class="mmeta" style="justify-content:flex-end"><span style="font-size:9px;opacity:.6">${t}</span></div><div class="bub">${html}</div>`;
   area.appendChild(d);area.scrollTop=area.scrollHeight;
 }
@@ -2334,7 +2334,7 @@ function addThink(steps){
   const area=document.getElementById('tab-chat');if(!area)return;
   const d=document.createElement('div');d.className='msg a';
   const rows=steps.map(s=>`<div class="think-row"><div class="tc">✓</div>${s}</div>`).join('');
-  d.innerHTML=`<div class="think"><div style="font-weight:700;margin-bottom:6px;font-size:11px">🧠 Мышление ArchAI</div>${rows}</div>`;
+  d.innerHTML=`<div class="think"><div style="font-weight:700;margin-bottom:6px;font-size:11px">🧠 Мышление Architect</div>${rows}</div>`;
   area.appendChild(d);area.scrollTop=area.scrollHeight;
 }
 let typEl=null;

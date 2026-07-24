@@ -1,5 +1,5 @@
 """
-ArchAI — Full Server
+Architect — Full Server
 Serves frontend + proxies Claude API + generates Blender scripts.
 
 Endpoints:
@@ -529,7 +529,7 @@ def proxy_claude():
     headers = {
         "Content-Type": "application/json",
         "HTTP-Referer": "https://archai.app",
-        "X-Title": "ArchAI",
+        "X-Title": "Architect",
     }
     if OPENROUTER_KEY:
         headers["Authorization"] = f"Bearer {OPENROUTER_KEY}"
@@ -572,7 +572,7 @@ def generate_building():
         params.setdefault(k, v)
 
     # Try OpenRouter (free model) for better parsing
-    headers = {"Content-Type": "application/json", "HTTP-Referer": "https://archai.app", "X-Title": "ArchAI"}
+    headers = {"Content-Type": "application/json", "HTTP-Referer": "https://archai.app", "X-Title": "Architect"}
     if OPENROUTER_KEY:
         headers["Authorization"] = f"Bearer {OPENROUTER_KEY}"
 
@@ -670,7 +670,7 @@ def render_interior():
 # MAIN
 # ═══════════════════════════════════════════════════════════════
 if __name__ == '__main__':
-    print(f"🏗️  ArchAI Server starting on port {PORT}")
+    print(f"🏗️  Architect Server starting on port {PORT}")
     print(f"📡 OpenRouter: {FREE_MODEL} (free)")
     print(f"🌐 http://localhost:{PORT}")
     app.run(host='0.0.0.0', port=PORT, debug=False)
