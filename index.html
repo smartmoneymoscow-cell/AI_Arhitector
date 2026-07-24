@@ -1566,12 +1566,7 @@ async function analyzeImage(b64,mediaType,userText){
   if(r.ok){
     const raw=(await r.json()).choices?.[0]?.message?.content||'{}';
     return JSON.parse(raw.replace(/```json|```/g,'').trim());
-  }}
-      ]}]})
-  });
-  if(!r.ok) throw new Error('Vision API '+r.status);
-  const raw=(await r.json()).content?.[0]?.text||'{}';
-  return JSON.parse(raw.replace(/```json|```/g,'').trim());
+  }
 }
 
 
@@ -2238,14 +2233,6 @@ function removeTyping(){const t=document.getElementById('typ');if(t)t.remove();t
 ).value||'';
   const model=(document.getElementById('model-select')||{}).value||'google/gemma-4-31b-it:free';
   if(!v || v.startsWith('sk-or-')){
-    
-    
-    
-    showNotif(v?'✅ Ключ и модель сохранены':'✅ Модель сохранена (бесплатный режим)');
-  } else {
-    showNotif('❌ Ключ должен начинаться с sk-or- (или оставьте пустым для бесплатных моделей)','warn');
-  }
-}
 window.addEventListener('DOMContentLoaded',()=>{
   try{ initThree(); loadHDRI("day"); }catch(e){console.error('initThree failed:',e);} checkMobile(); checkBackend();
   setTimeout(()=>addMsg('a','👋 <b>ArchAI v10.2</b> — 3D без вопросов.<br><br>Напишите что нужно:<br>• <i>двухэтажный кирпичный дом 10×12</i><br>• <i>офис 5 этажей стекло</i><br>• <i>деревянный коттедж с террасой</i><br><br>Или нажмите шаблон ниже.'),600);
