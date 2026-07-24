@@ -22,8 +22,11 @@ from flask_cors import CORS
 # ═══════════════════════════════════════════════════════════════
 # CONFIG
 # ═══════════════════════════════════════════════════════════════
-ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-ANTHROPIC_BASE = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_BASE = "https://openrouter.ai/api/v1"
+# Free models on OpenRouter
+FREE_MODEL = "google/gemma-4-31b-it:free"  # best free model for structured output
+FREE_MODEL_FAST = "openai/gpt-oss-20b:free"  # fast free model
 PORT = int(os.environ.get("PORT", 8080))
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__))
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
@@ -497,28 +500,57 @@ def serve_static(filename):
 @app.route('/api/v1/health')
 @app.route('/health')
 def health():
-    return jsonify({"status": "ok", "service": "archai-server"})
+    return jsonify({"status": "ok", "service": "archai-server", "model": FREE_MODEL, "free": True})
 
 @app.route('/api/v1/proxy/claude', methods=['POST'])
 def proxy_claude():
-    """Proxy to Anthropic API."""
-    if not ANTHROPIC_KEY:
-        return jsonify({"error": "ANTHROPIC_API_KEY not set"}), 500
-
+    """Proxy to OpenRouter (free models). Accepts Anthropic-format, converts to OpenAI format."""
     data = request.json or {}
+
+    # Convert Anthropic format to OpenAI format
+    system = data.get('system', 'Отвечай по-русски.')
+    messages = data.get('messages', [])
+
+    # Extract text from Anthropic content blocks
+    openai_msgs = [{"role": "system", "content": system}]
+    for msg in messages:
+        role = msg.get('role', 'user')
+        content = msg.get('content', '')
+        if isinstance(content, list):
+            # Anthropic format: [{type: 'text', text: '...'}]
+            text = ' '.join(b.get('text', '') for b in content if b.get('type') == 'text')
+        else:
+            text = str(content)
+        openai_msgs.append({"role": role, "content": text})
+
+    model = FREE_MODEL
+    max_tokens = data.get('max_tokens', 400)
+
     headers = {
         "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_KEY,
-        "anthropic-version": "2023-06-01",
+        "HTTP-Referer": "https://archai.app",
+        "X-Title": "ArchAI",
     }
+    if OPENROUTER_KEY:
+        headers["Authorization"] = f"Bearer {OPENROUTER_KEY}"
+
     try:
         r = httpx.post(
-            f"{ANTHROPIC_BASE}/v1/messages",
+            f"{OPENROUTER_BASE}/chat/completions",
             headers=headers,
-            json=data,
-            timeout=120.0,
+            json={
+                "model": model,
+                "messages": openai_msgs,
+                "max_tokens": max_tokens,
+                "temperature": 0.7,
+            },
+            timeout=60.0,
         )
-        return jsonify(r.json()), r.status_code
+        if r.status_code == 200:
+            text = r.json()["choices"][0]["message"]["content"]
+            # Return in Anthropic-compatible format
+            return jsonify({"content": [{"type": "text", "text": text}]}), 200
+        return jsonify({"error": r.text}), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
@@ -539,28 +571,34 @@ def generate_building():
     for k, v in defaults.items():
         params.setdefault(k, v)
 
-    # Try Claude for better parsing
-    if ANTHROPIC_KEY:
-        try:
-            r = httpx.post(
-                f"{ANTHROPIC_BASE}/v1/messages",
-                headers={"Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01"},
-                json={
-                    "model": "claude-haiku-4-5-20251001",
-                    "max_tokens": 300,
-                    "system": 'Извлеки параметры здания. ТОЛЬКО JSON: {"type":"house|office|cottage","floors":null,"width":null,"length":null,"roof_type":null,"facade_material":null,"has_balcony":false,"has_terrace":false,"has_garage":false} null=не упомянуто.',
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-                timeout=30.0,
-            )
-            if r.status_code == 200:
-                raw = r.json()["content"][0]["text"]
-                parsed = json.loads(raw.replace("```json", "").replace("```", "").strip())
-                for k, v in parsed.items():
-                    if v is not None and v != "null":
-                        params[k] = v
-        except Exception:
-            pass
+    # Try OpenRouter (free model) for better parsing
+    headers = {"Content-Type": "application/json", "HTTP-Referer": "https://archai.app", "X-Title": "ArchAI"}
+    if OPENROUTER_KEY:
+        headers["Authorization"] = f"Bearer {OPENROUTER_KEY}"
+
+    try:
+        r = httpx.post(
+            f"{OPENROUTER_BASE}/chat/completions",
+            headers=headers,
+            json={
+                "model": FREE_MODEL,
+                "max_tokens": 300,
+                "temperature": 0.3,
+                "messages": [
+                    {"role": "system", "content": 'Извлеки параметры здания. ТОЛЬКО JSON без markdown: {"type":"house|office|cottage","floors":null,"width":null,"length":null,"roof_type":null,"facade_material":null,"has_balcony":false,"has_terrace":false,"has_garage":false} null=не упомянуто.'},
+                    {"role": "user", "content": prompt},
+                ],
+            },
+            timeout=30.0,
+        )
+        if r.status_code == 200:
+            raw = r.json()["choices"][0]["message"]["content"]
+            parsed = json.loads(raw.replace("```json", "").replace("```", "").strip())
+            for k, v in parsed.items():
+                if v is not None and v != "null":
+                    params[k] = v
+    except Exception:
+        pass
 
     # Generate script
     script = generate_bpy_script(params)
@@ -593,6 +631,6 @@ def render_interior():
 # ═══════════════════════════════════════════════════════════════
 if __name__ == '__main__':
     print(f"🏗️  ArchAI Server starting on port {PORT}")
-    print(f"📡 Claude API: {'configured' if ANTHROPIC_KEY else 'not set'}")
+    print(f"📡 OpenRouter: {FREE_MODEL} (free)")
     print(f"🌐 http://localhost:{PORT}")
     app.run(host='0.0.0.0', port=PORT, debug=False)

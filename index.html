@@ -254,21 +254,25 @@ async function callClaude(msg,sys,maxTok){
       if(r.ok) return (await r.json()).content?.[0]?.text||'';
     }catch(e){console.warn('Proxy failed, trying direct API:',e.message);}
   }
-  // ── Standalone fallback: user provides own key ─────────
-  const key=localStorage.getItem('anthropic_key')||'';
-  if(!key){
-    throw new Error('Для анализа нужен Anthropic API ключ. Откройте Settings или запустите с backend.');
-  }
-  const r=await fetch('https://api.anthropic.com/v1/messages',{
+  // ── Standalone fallback: OpenRouter free models ─────────
+  const key=localStorage.getItem('openrouter_key')||'';
+  const orHeaders={'Content-Type':'application/json','HTTP-Referer':'https://archai.app','X-Title':'ArchAI'};
+  if(key) orHeaders['Authorization']='Bearer '+key;
+  const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
     method:'POST',
-    headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01',
-             'x-api-key':key,'anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:maxTok||400,
-                         system:sys||'Отвечай по-русски.',
-                         messages:[{role:'user',content:msg}]})
+    headers:orHeaders,
+    body:JSON.stringify({
+      model:localStorage.getItem('or_model')||'google/gemma-4-31b-it:free',
+      max_tokens:maxTok||400,
+      temperature:0.7,
+      messages:[
+        {role:'system',content:sys||'Отвечай по-русски.'},
+        {role:'user',content:msg}
+      ]
+    })
   });
-  if(!r.ok) throw new Error('API '+r.status);
-  return (await r.json()).content?.[0]?.text||'';
+  if(!r.ok) throw new Error('OpenRouter '+r.status);
+  return (await r.json()).choices?.[0]?.message?.content||'';
 }
 
 // ═══════════════════ LOCAL PARSER ════════════════════════════
@@ -1542,17 +1546,27 @@ async function analyzeImage(b64,mediaType,userText){
     }
     }catch(e){console.warn('Vision proxy failed:',e.message);}
   }
-  // Standalone fallback
-  const key=localStorage.getItem('anthropic_key')||'';
-  if(!key) throw new Error('Нужен API ключ для анализа фото');
-  const r=await fetch('https://api.anthropic.com/v1/messages',{
+  // Standalone fallback — OpenRouter free model
+  const key=localStorage.getItem('openrouter_key')||'';
+  const orHeaders={'Content-Type':'application/json','HTTP-Referer':'https://archai.app','X-Title':'ArchAI'};
+  if(key) orHeaders['Authorization']='Bearer '+key;
+  const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
     method:'POST',
-    headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01',
-             'x-api-key':key,'anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:500,
+    headers:orHeaders,
+    body:JSON.stringify({
+      model:'nvidia/nemotron-nano-12b-v2-vl:free',
+      max_tokens:500,
+      temperature:0.3,
       messages:[{role:'user',content:[
-        {type:'image',source:{type:'base64',media_type:mediaType,data:b64}},
+        {type:'image_url',image_url:{url:`data:${mediaType};base64,${b64}`}},
         {type:'text',text:prompt}
+      ]}]
+    })
+  });
+  if(r.ok){
+    const raw=(await r.json()).choices?.[0]?.message?.content||'{}';
+    return JSON.parse(raw.replace(/```json|```/g,'').trim());
+  }}
       ]}]})
   });
   if(!r.ok) throw new Error('Vision API '+r.status);
@@ -2224,17 +2238,21 @@ function removeTyping(){const t=document.getElementById('typ');if(t)t.remove();t
 function openSettings(){
   const m=document.getElementById('settings-modal');
   const inp=document.getElementById('api-key-input');
-  if(inp)inp.value=localStorage.getItem('anthropic_key')||'';
+  if(inp)inp.value=localStorage.getItem('openrouter_key')||'';
+  const sel=document.getElementById('model-select');
+  if(sel)sel.value=localStorage.getItem('or_model')||'google/gemma-4-31b-it:free';
   if(m)m.style.display='flex';
 }
 function saveKey(){
   const v=(document.getElementById('api-key-input')||{}).value||'';
-  if(v.startsWith('sk-ant-')){
-    localStorage.setItem('anthropic_key',v);
+  const model=(document.getElementById('model-select')||{}).value||'google/gemma-4-31b-it:free';
+  if(!v || v.startsWith('sk-or-')){
+    localStorage.setItem('openrouter_key',v);
+    localStorage.setItem('or_model',model);
     document.getElementById('settings-modal').style.display='none';
-    showNotif('✅ API ключ сохранён (только локально)');
+    showNotif(v?'✅ Ключ и модель сохранены':'✅ Модель сохранена (бесплатный режим)');
   } else {
-    showNotif('❌ Неверный формат ключа (должен начинаться с sk-ant-)','warn');
+    showNotif('❌ Ключ должен начинаться с sk-or- (или оставьте пустым для бесплатных моделей)','warn');
   }
 }
 window.addEventListener('DOMContentLoaded',()=>{
@@ -2261,14 +2279,20 @@ function checkMobile(){
 window.addEventListener('resize',()=>{checkMobile();resizeR();if(ST.hasModel&&ST.view!=='ext'&&ST.view!=='int')draw2D(ST.view);});
 </script>
 
-<!-- Settings Modal (standalone mode: user provides own key) -->
+<!-- Settings Modal -->
 <div id="settings-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:12px;padding:24px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <h3 style="margin:0 0 8px;font-size:15px;color:#0f172a">⚙️ Настройки API</h3>
-    <p style="font-size:12px;color:#64748b;margin:0 0 16px">Только для автономного режима (file://). В production используйте backend proxy.</p>
-    <label style="font-size:12px;font-weight:600;color:#374151">Anthropic API Key</label>
-    <input id="api-key-input" type="password" placeholder="sk-ant-api03-..."
+  <div style="background:#fff;border-radius:12px;padding:24px;width:380px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <h3 style="margin:0 0 8px;font-size:15px;color:#0f172a">⚙️ Настройки AI</h3>
+    <p style="font-size:12px;color:#64748b;margin:0 0 16px">OpenRouter — бесплатно. Ключ опционален (повышает лимиты).</p>
+    <label style="font-size:12px;font-weight:600;color:#374151">OpenRouter Key <span style="color:#9ca3af;font-weight:400">(необязательно)</span></label>
+    <input id="api-key-input" type="password" placeholder="sk-or-v1-... (или пусто)"
       style="width:100%;margin-top:4px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;font-family:monospace;box-sizing:border-box">
+    <label style="font-size:12px;font-weight:600;color:#374151;margin-top:12px;display:block">Модель</label>
+    <select id="model-select" style="width:100%;margin-top:4px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;box-sizing:border-box">
+      <option value="google/gemma-4-31b-it:free">Gemma 4 31B (бесплатно)</option>
+      <option value="nvidia/nemotron-3-super-120b-a12b:free">Nemotron 120B (бесплатно)</option>
+      <option value="openai/gpt-oss-20b:free">GPT-OSS 20B (бесплатно)</option>
+    </select>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button onclick="saveKey()" style="flex:1;padding:8px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">Сохранить</button>
       <button onclick="document.getElementById('settings-modal').style.display='none'"
