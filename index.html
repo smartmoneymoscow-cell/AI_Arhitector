@@ -216,30 +216,43 @@ body{display:flex;flex-direction:column}
 // In standalone HTML mode (no backend), falls back to direct Anthropic call
 // with user-supplied key from localStorage (optional, graceful degradation).
 const API_BASE = (()=>{
-  // Check if running with backend (not file://)
   const proto = window.location.protocol;
   if(proto === 'file:') return null;  // standalone mode
-  return window.location.origin;      // same-origin backend
+  return window.location.origin;      // same-origin backend (will be tested on load)
 })();
+let _backendOk = null; // null = not checked yet
+
+async function checkBackend(){
+  if(!API_BASE){_backendOk=false;return;}
+  try{
+    const ctrl=new AbortController();
+    setTimeout(()=>ctrl.abort(),4000);
+    const r=await fetch(API_BASE+'/api/v1/health',{signal:ctrl.signal});
+    _backendOk=r.ok;
+  }catch(e){_backendOk=false;}
+  console.log('Backend proxy:',_backendOk?'available':'unavailable (direct API mode)');
+}
 
 async function callClaude(msg,sys,maxTok){
   // ── Prefer backend proxy (key stays server-side) ──────
-  if(API_BASE){
-    const r=await fetch(API_BASE+'/api/v1/proxy/claude',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-haiku-4-5-20251001',
-        max_tokens:maxTok||400,
-        system:sys||'Отвечай по-русски.',
-        messages:[{role:'user',content:[{type:'text',text:msg}]}]
-      })
-    });
-    if(!r.ok){
-      const err=await r.json().catch(()=>({detail:'unknown'}));
-      throw new Error((err.detail||'API error')+' ('+r.status+')');
-    }
-    return (await r.json()).content?.[0]?.text||'';
+  if(API_BASE && _backendOk===null) await checkBackend();
+  if(API_BASE && _backendOk){
+    try{
+      const ctrl=new AbortController();
+      setTimeout(()=>ctrl.abort(),15000);
+      const r=await fetch(API_BASE+'/api/v1/proxy/claude',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        signal:ctrl.signal,
+        body:JSON.stringify({
+          model:'claude-haiku-4-5-20251001',
+          max_tokens:maxTok||400,
+          system:sys||'Отвечай по-русски.',
+          messages:[{role:'user',content:[{type:'text',text:msg}]}]
+        })
+      });
+      if(r.ok) return (await r.json()).content?.[0]?.text||'';
+    }catch(e){console.warn('Proxy failed, trying direct API:',e.message);}
   }
   // ── Standalone fallback: user provides own key ─────────
   const key=localStorage.getItem('anthropic_key')||'';
@@ -1507,10 +1520,14 @@ async function analyzeImage(b64,mediaType,userText){
     '"confidence":0-100,"description":"1 предложение"}.'+(userText?' '+escHtml(userText):'');
 
   // Backend proxy path (production)
-  if(API_BASE){
-    const r=await fetch(API_BASE+'/api/v1/proxy/claude',{
+  if(API_BASE && _backendOk){
+    try{
+      const ctrl=new AbortController();
+      setTimeout(()=>ctrl.abort(),30000);
+      const r=await fetch(API_BASE+'/api/v1/proxy/claude',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
+      signal:ctrl.signal,
       body:JSON.stringify({
         model:'claude-sonnet-4-6',max_tokens:500,
         messages:[{role:'user',content:[
@@ -1519,9 +1536,11 @@ async function analyzeImage(b64,mediaType,userText){
         ]}]
       })
     });
-    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||'Vision API '+r.status);}
-    const raw=(await r.json()).content?.[0]?.text||'{}';
-    return JSON.parse(raw.replace(/```json|```/g,'').trim());
+    if(r.ok){
+      const raw=(await r.json()).content?.[0]?.text||'{}';
+      return JSON.parse(raw.replace(/```json|```/g,'').trim());
+    }
+    }catch(e){console.warn('Vision proxy failed:',e.message);}
   }
   // Standalone fallback
   const key=localStorage.getItem('anthropic_key')||'';
@@ -2219,7 +2238,7 @@ function saveKey(){
   }
 }
 window.addEventListener('DOMContentLoaded',()=>{
-  try{ initThree(); loadHDRI("day"); }catch(e){console.error('initThree failed:',e);} checkMobile();
+  try{ initThree(); loadHDRI("day"); }catch(e){console.error('initThree failed:',e);} checkMobile(); checkBackend();
   setTimeout(()=>addMsg('a','👋 <b>ArchAI v10.2</b> — 3D без вопросов.<br><br>Напишите что нужно:<br>• <i>двухэтажный кирпичный дом 10×12</i><br>• <i>офис 5 этажей стекло</i><br>• <i>деревянный коттедж с террасой</i><br><br>Или нажмите шаблон ниже.'),600);
 });
 // Mobile sidebar toggle
