@@ -7,52 +7,52 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#f0f2f5;--bg2:#fff;--bg3:#f5f7fa;--acc:#2563eb;--txt:#0f172a;--txt2:#64748b;--bdr:#e2e8f0;--ok:#059669;--warn:#d97706}
+:root{--bg:#f7f7f8;--bg2:#fff;--bg3:#f0f0f0;--bg3:#f5f7fa;--acc:#6366f1;--txt:#0f172a;--txt2:#64748b;--bdr:#e2e8f0;--ok:#059669;--warn:#d97706}
 html,body{height:100%;overflow:hidden;font-family:Inter,sans-serif;color:var(--txt);background:var(--bg)}
 body{display:flex;flex-direction:column}
 .top{height:52px;background:var(--bg2);border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.07)}
 .logo{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700}
-.logo-ic{width:30px;height:30px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900}
-.logo-ai{color:#2563eb}
-.badge{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700}
+.logo-ic{width:30px;height:30px;background:linear-gradient(135deg,#6366f1,#7c3aed);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900}
+.logo-ai{color:#6366f1}
+.badge{background:#eff6ff;color:#6366f1;border:1px solid #bfdbfe;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700}
 .status{font-size:11px;color:var(--txt2);display:flex;align-items:center;gap:5px}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .main{display:flex;flex:1;overflow:hidden}
 /* SIDEBAR */
-.sb{width:360px;flex-shrink:0;border-right:1px solid var(--bdr);background:var(--bg2);display:flex;flex-direction:column}
+.sb{width:420px;flex-shrink:0;border-right:1px solid var(--bdr);background:var(--bg2);display:flex;flex-direction:column}
 .stabs{display:flex;border-bottom:1px solid var(--bdr);padding:0 8px}
 .stab{flex:1;padding:10px 4px;text-align:center;font-size:11px;font-weight:600;color:var(--txt2);cursor:pointer;border-bottom:2px solid transparent;text-transform:uppercase;transition:all .15s}
-.stab.on{color:#2563eb;border-color:#2563eb}
+.stab.on{color:#6366f1;border-color:#6366f1}
 .chat{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}
 .chat::-webkit-scrollbar{width:3px}
 .chat::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px}
 .msg{max-width:88%;display:flex;flex-direction:column}
 .msg.u{align-self:flex-end}.msg.a{align-self:flex-start}
 .mmeta{font-size:10px;color:var(--txt2);margin-bottom:2px;display:flex;align-items:center;gap:4px}
-.av{width:18px;height:18px;border-radius:4px;background:linear-gradient(135deg,#2563eb,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700}
+.av{width:18px;height:18px;border-radius:4px;background:linear-gradient(135deg,#6366f1,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700}
 .bub{padding:9px 13px;border-radius:12px;font-size:12.5px;line-height:1.65;box-shadow:0 1px 3px rgba(0,0,0,.07)}
-.msg.u .bub{background:#2563eb;color:#fff;border-radius:12px 12px 4px 12px}
-.msg.a .bub{background:var(--bg2);border:1px solid var(--bdr);border-radius:4px 12px 12px 12px}
+.msg.u .bub{background:#6366f1;color:#fff;border-radius:16px 16px 4px 16px}
+.msg.a .bub{background:var(--bg2);border:1px solid var(--bdr);border-radius:4px 16px 16px 16px}
 .think{background:linear-gradient(135deg,#eff6ff,#f0fdf4);border:1px solid #bfdbfe;border-radius:12px;padding:10px 13px;font-size:11px;color:#1e40af;max-width:320px}
 .think-row{display:flex;align-items:center;gap:6px;padding:3px 0;border-top:1px solid #dbeafe}
 .think-row:first-of-type{border-top:none}
-.tc{width:14px;height:14px;border-radius:50%;background:#2563eb;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:8px}
+.tc{width:14px;height:14px;border-radius:50%;background:#6366f1;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:8px}
 .dots{display:flex;gap:4px;padding:9px 13px;background:var(--bg2);border:1px solid var(--bdr);border-radius:4px 12px 12px 12px}
-.d{width:5px;height:5px;border-radius:50%;background:#2563eb;animation:bop .9s infinite}
+.d{width:5px;height:5px;border-radius:50%;background:#6366f1;animation:bop .9s infinite}
 .d:nth-child(2){animation-delay:.17s}.d:nth-child(3){animation-delay:.34s}
 @keyframes bop{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-5px)}}
-.qpbar{padding:7px 10px;border-top:1px solid var(--bdr);display:flex;flex-wrap:wrap;gap:5px;background:var(--bg2)}
-.qp{padding:4px 10px;border-radius:20px;border:1px solid var(--bdr);background:var(--bg);color:var(--txt2);font-size:11px;cursor:pointer;transition:all .15s}
-.qp:hover{border-color:#2563eb;color:#2563eb;background:#eff6ff}
+.qpbar{padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px;background:transparent}
+.qp{padding:8px 14px;border-radius:20px;border:1px solid var(--bdr);background:var(--bg2);color:var(--txt2);font-size:12px;cursor:pointer;transition:all .15s;font-weight:500}
+.qp:hover{border-color:#6366f1;color:#6366f1;background:#f5f3ff}
 
-.ci{padding:8px 10px;border-top:1px solid var(--bdr);background:var(--bg2)}
-.ibox{display:flex;gap:5px;align-items:flex-end;background:var(--bg3);border:1.5px solid var(--bdr);border-radius:12px;padding:5px 5px 5px 11px;transition:border .15s}
-.ibox:focus-within{border-color:#2563eb;background:#fff}
+.ci{padding:12px 16px;background:transparent}
+.ibox{display:flex;gap:8px;align-items:flex-end;background:var(--bg2);border:1px solid var(--bdr);border-radius:16px;padding:8px 8px 8px 14px;transition:all .15s;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.ibox:focus-within{border-color:#6366f1;background:#fff;box-shadow:0 0 0 2px rgba(99,102,241,.1)}
 .ita{flex:1;background:transparent;border:none;outline:none;color:var(--txt);font-family:Inter,sans-serif;font-size:12.5px;resize:none;min-height:20px;max-height:100px;line-height:1.5}
 .ita::placeholder{color:var(--txt2);opacity:.7}
-.sbtn{width:30px;height:30px;border-radius:7px;border:none;background:#2563eb;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.sbtn:hover{background:#1d4ed8}
+.sbtn{width:32px;height:32px;border-radius:50%;border:none;background:#6366f1;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s}
+.sbtn:hover{background:#4f46e5}
 .pnl{padding:10px 12px;overflow-y:auto;flex:1}
 .psec{background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;padding:11px;margin-bottom:8px}
 .psec h4{font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--txt2);margin-bottom:8px;padding-bottom:7px;border-bottom:1px solid var(--bdr)}
@@ -63,10 +63,10 @@ body{display:flex;flex-direction:column}
 .vtbar{height:44px;background:var(--bg2);border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;padding:0 12px;flex-shrink:0;gap:6px}
 .vtabs{display:flex;gap:2px;background:var(--bg3);padding:3px;border-radius:8px}
 .vtab{padding:4px 10px;border-radius:5px;font-size:11px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--txt2);transition:all .15s}
-.vtab.on{background:var(--bg2);color:#2563eb;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.vtab.on{background:var(--bg2);color:#6366f1;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.07)}
 .btn{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:6px;border:1px solid var(--bdr);background:var(--bg2);color:var(--txt);font-size:11px;font-weight:500;cursor:pointer;transition:all .15s}
 .btn:hover{background:var(--bg3)}
-.btn-p{background:#2563eb;border-color:#2563eb;color:#fff}
+.btn-p{background:#6366f1;border-color:#6366f1;color:#fff}
 .btn-p:hover{background:#1d4ed8}
 .cwrap{flex:1;position:relative;overflow:hidden;background:#b4bec8}
 #c3d{width:100%;height:100%;display:block;cursor:grab}
@@ -76,19 +76,19 @@ body{display:flex;flex-direction:column}
 .empt-title{font-size:15px;font-weight:600;color:var(--txt)}
 .empt-sub{font-size:12px;max-width:260px;text-align:center;line-height:1.5}
 .genov{position:absolute;inset:0;background:rgba(220,226,234,.9);backdrop-filter:blur(8px);display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;z-index:10}
-.spin{width:44px;height:44px;border:3px solid var(--bdr);border-top-color:#2563eb;border-radius:50%;animation:spin 1s linear infinite}
+.spin{width:44px;height:44px;border:3px solid var(--bdr);border-top-color:#6366f1;border-radius:50%;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .gen-title{font-size:14px;font-weight:700;color:var(--txt)}
 .gen-sub{font-size:11px;color:var(--txt2)}
 .genbar{width:220px;height:4px;background:var(--bdr);border-radius:2px;overflow:hidden}
-.genfill{height:100%;background:linear-gradient(90deg,#2563eb,#7c3aed);border-radius:2px;transition:width .4s;width:0}
+.genfill{height:100%;background:linear-gradient(90deg,#6366f1,#7c3aed);border-radius:2px;transition:width .4s;width:0}
 .gensteps{display:flex;flex-direction:column;gap:3px;width:260px;margin-top:4px}
 .gs{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--txt2)}
-.gs.done{color:var(--ok)}.gs.active{color:#2563eb;font-weight:600}
+.gs.done{color:var(--ok)}.gs.active{color:#6366f1;font-weight:600}
 .lbadge{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.95);border:1px solid var(--bdr);border-radius:20px;padding:4px 14px;font-size:11px;pointer-events:none;display:none;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .fnav{position:absolute;right:10px;top:50%;transform:translateY(-50%);display:none;flex-direction:column;gap:4px}
 .fnbtn{width:28px;height:28px;border-radius:6px;border:1px solid var(--bdr);background:rgba(255,255,255,.92);font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;box-shadow:0 1px 3px rgba(0,0,0,.08)}
-.fnbtn.on,.fnbtn:hover{border-color:#2563eb;color:#2563eb;background:#eff6ff}
+.fnbtn.on,.fnbtn:hover{border-color:#6366f1;color:#6366f1;background:#eff6ff}
 .hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.9);border:1px solid var(--bdr);border-radius:20px;padding:4px 14px;font-size:10px;color:var(--txt2);pointer-events:none;white-space:nowrap;display:none}
 .notif{position:fixed;bottom:16px;right:16px;background:var(--bg2);border-radius:12px;padding:10px 14px;font-size:12px;display:none;align-items:center;gap:7px;box-shadow:0 4px 12px rgba(0,0,0,.1);border-left:3px solid var(--ok);z-index:200}
 @media(max-width:768px){.sb{position:fixed;left:0;top:52px;bottom:0;z-index:40;transform:translateX(-100%);transition:transform .3s;box-shadow:4px 0 20px rgba(0,0,0,.15)}.main{flex-direction:column}.viewer{height:calc(100vh - 52px)}}
@@ -97,26 +97,29 @@ body{display:flex;flex-direction:column}
 <body>
 <div id="sb-overlay" onclick="toggleSB()" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.4);z-index:39"></div>
 <div class="top">
-  <button id="mob-btn" onclick="toggleSB()" style="display:none;width:32px;height:32px;border-radius:7px;border:1px solid var(--bdr);background:var(--bg2);cursor:pointer;font-size:17px;margin-right:8px">☰</button><div class="logo"><div class="logo-ic">A</div>Arch<span class="logo-ai">AI</span><span class="badge">v10.2</span></div>
-  <div class="status"><span class="dot"></span>Claude AI активен</div>
-  <div style="display:flex;gap:6px">
-    <button class="btn" onclick="newProj()">+ Новый</button>
-    <button class="btn btn-p" onclick="showExp()">↓ Экспорт</button>
+  <button id="mob-btn" onclick="toggleSB()" style="display:none;width:32px;height:32px;border-radius:8px;border:none;background:transparent;cursor:pointer;font-size:18px;margin-right:8px">☰</button>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;cursor:pointer">A</div>
+    <div class="logo" style="font-size:15px;font-weight:600">Arch<span class="logo-ai">AI</span></div>
+  </div>
+  <div style="display:flex;gap:6px;align-items:center">
+    <button class="btn" onclick="newProj()" style="font-size:12px;padding:6px 12px;border-radius:8px">+ Новый</button>
+    <button class="btn btn-p" onclick="showExp()" style="font-size:12px;padding:6px 12px;border-radius:8px">↓ Экспорт</button>
   </div>
 </div>
 <div class="main">
   <!-- SIDEBAR -->
   <div class="sb" id="sb">
-    <div class="stabs">
-      <div class="stab on" onclick="swTab('chat',this)">Чат</div>
-      <div class="stab" onclick="swTab('props',this)">Объект</div>
-      <div class="stab" onclick="swTab('rooms',this)">Этажи</div>
+    <div style="padding:12px 16px 8px;display:flex;align-items:center;gap:10px">
+      <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex-shrink:0">A</div>
+      <div style="font-size:13px;font-weight:600;color:var(--txt)">ArchAI</div>
     </div>
     <!-- CHAT TAB -->
     <div id="tab-chat" class="chat">
-      <div class="msg a">
-        <div class="mmeta"><div class="av">A</div>ArchAI</div>
-        <div class="bub">Опишите здание — генерирую 3D без вопросов.<br><br><b>Примеры:</b><br>• <i>двухэтажный кирпичный дом 10×12</i><br>• <i>офис 5 этажей стекло плоская кровля</i><br>• <i>деревянный коттедж 12×15</i></div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:40px 20px;text-align:center">
+        <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;font-weight:800">A</div>
+        <div style="font-size:22px;font-weight:700;color:var(--txt);line-height:1.3">Что вы хотите<br>построить?</div>
+        <div style="font-size:13px;color:var(--txt2);max-width:280px;line-height:1.5">Опишите здание или интерьер — я сгенерирую 3D-модель</div>
       </div>
     </div>
     <!-- PROPS TAB -->
@@ -140,7 +143,7 @@ body{display:flex;flex-direction:column}
       <div id="rooms-list" style="font-size:12px;color:var(--txt2);padding:10px 0">Создайте проект для просмотра помещений</div>
     </div>
     <!-- QUICK PROMPTS -->
-    <div class="qpbar">
+    <div class="qpbar" id="qpbar">
       <div class="qp" onclick="go('жилой дом 2 этажа кирпич 10×12 двускатная')">🏠 Жилой дом</div>
       <div class="qp" onclick="go('офис 5 этажей стекло плоская кровля 20×24')">🏢 Офис</div>
       <div class="qp" onclick="go('деревянный коттедж 2 этажа терраса 12×15')">🌲 Коттедж</div>
@@ -1390,15 +1393,15 @@ function mkLbl(text,x,y,z,fg,bg,sz,grp){
   sz=sz||220;const cv=document.createElement('canvas');cv.width=sz;cv.height=52;
   const c=cv.getContext('2d');c.fillStyle=bg||'rgba(255,255,255,.95)';
   c.beginPath();if(c.roundRect)c.roundRect(2,2,sz-4,48,7);else c.rect(2,2,sz-4,48);c.fill();
-  c.strokeStyle=fg||'#2563eb';c.lineWidth=2;c.stroke();
-  c.fillStyle=fg||'#2563eb';c.font='bold '+Math.round(sz*.09)+'px Inter,sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText(text,sz/2,26);
+  c.strokeStyle=fg||'#6366f1';c.lineWidth=2;c.stroke();
+  c.fillStyle=fg||'#6366f1';c.font='bold '+Math.round(sz*.09)+'px Inter,sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText(text,sz/2,26);
   const tx=new THREE.CanvasTexture(cv);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tx,transparent:true,depthTest:false}));
   sp.scale.set(sz/56,.93,1);sp.position.set(x,y,z);(grp||lblG).add(sp);
 }
 function addAnns(b,W,L,H){
   clearLbls();
-  mkLbl('← '+b.W+' м →',0,H+4.5,0,'#2563eb','rgba(239,246,255,.95)',220);
+  mkLbl('← '+b.W+' м →',0,H+4.5,0,'#6366f1','rgba(239,246,255,.95)',220);
   mkLbl('↑ '+H.toFixed(1)+' м',W/2+4.5,H/2,0,'#059669','rgba(240,253,244,.95)',180);
   mkLbl(b.L+' м →',0,H/2,L/2+4.5,'#7c3aed','rgba(245,243,255,.95)',180);
 }
@@ -1787,6 +1790,12 @@ async function send(){
   }
 
   if(!text){return;}
+  // Hide welcome screen
+  const welcome = document.querySelector('#tab-chat > div[style*="justify-content:center"]');
+  if(welcome) welcome.style.display='none';
+  // Show quick prompts bar
+  const qpbar = document.getElementById('qpbar');
+  if(qpbar) qpbar.style.display='flex';
   addMsg('u',text);if(inp)inp.value='';
   // Building request
   if(BUILD_RE.test(text)||text.length>6){
@@ -1930,7 +1939,7 @@ function draw2DPlan(ctx,cx,cy,sc,b){
 
   // ── ROOMS (real x/z/w/d from building model) ──
   const RC={l:'#eef4ff',k:'#fff7e6',s:'#f4f0ff',b:'#e8fbff',h:'#eefbf2'};
-  const RS={l:'#2563eb',k:'#d97706',s:'#7c3aed',b:'#0891b2',h:'#059669'};
+  const RS={l:'#6366f1',k:'#d97706',s:'#7c3aed',b:'#0891b2',h:'#059669'};
   const RN={l:'Гостиная',k:'Кухня',s:'Спальня',b:'Санузел',h:'Коридор'};
   const floorRooms=(b.rooms||[]).filter(r=>(r.fl||r.floor||1)===ST.curFloor+1);
 
@@ -2326,7 +2335,7 @@ function removeTyping(){const t=document.getElementById('typ');if(t)t.remove();t
   if(!v || v.startsWith('sk-or-')){
 window.addEventListener('DOMContentLoaded',()=>{
   try{ initThree(); loadHDRI("day"); }catch(e){console.error('initThree failed:',e);} checkMobile(); checkBackend();
-  setTimeout(()=>addMsg('a','👋 <b>ArchAI v10.2</b> — 3D без вопросов.<br><br>Напишите что нужно:<br>• <i>двухэтажный кирпичный дом 10×12</i><br>• <i>офис 5 этажей стекло</i><br>• <i>деревянный коттедж с террасой</i><br><br>Или нажмите шаблон ниже.'),600);
+  // Welcome screen is in HTML, no need to add message
 });
 // Mobile sidebar toggle
 function toggleSB(){
