@@ -46,12 +46,12 @@ body{display:flex;flex-direction:column}
 .qp{padding:8px 14px;border-radius:20px;border:1px solid var(--bdr);background:var(--bg2);color:var(--txt2);font-size:12px;cursor:pointer;transition:all .15s;font-weight:500}
 .qp:hover{border-color:#6366f1;color:#6366f1;background:#f5f3ff}
 
-.ci{padding:12px 16px;background:transparent}
-.ibox{display:flex;gap:8px;align-items:flex-end;background:var(--bg2);border:1px solid var(--bdr);border-radius:16px;padding:8px 8px 8px 14px;transition:all .15s;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.ci{padding:16px;background:transparent}
+.ibox{display:flex;gap:10px;align-items:flex-end;background:var(--bg2);border:1px solid var(--bdr);border-radius:16px;padding:12px 12px 12px 16px;transition:all .15s;box-shadow:0 1px 4px rgba(0,0,0,.04)}
 .ibox:focus-within{border-color:#6366f1;background:#fff;box-shadow:0 0 0 2px rgba(99,102,241,.1)}
-.ita{flex:1;background:transparent;border:none;outline:none;color:var(--txt);font-family:Inter,sans-serif;font-size:12.5px;resize:none;min-height:44px;max-height:150px;line-height:1.5;line-height:1.5}
+.ita{flex:1;background:transparent;border:none;outline:none;color:var(--txt);font-family:Inter,sans-serif;font-size:14px;resize:none;min-height:80px;max-height:200px;line-height:1.6}
 .ita::placeholder{color:var(--txt2);opacity:.7}
-.sbtn{width:32px;height:32px;border-radius:50%;border:none;background:#6366f1;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s}
+.sbtn{width:36px;height:36px;border-radius:50%;border:none;background:#6366f1;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s}
 .sbtn:hover{background:#4f46e5}
 .pnl{padding:10px 12px;overflow-y:auto;flex:1}
 .psec{background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;padding:11px;margin-bottom:8px}
@@ -91,7 +91,19 @@ body{display:flex;flex-direction:column}
 .fnbtn.on,.fnbtn:hover{border-color:#6366f1;color:#6366f1;background:#eff6ff}
 .hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.9);border:1px solid var(--bdr);border-radius:20px;padding:4px 14px;font-size:10px;color:var(--txt2);pointer-events:none;white-space:nowrap;display:none}
 .notif{position:fixed;bottom:16px;right:16px;background:var(--bg2);border-radius:12px;padding:10px 14px;font-size:12px;display:none;align-items:center;gap:7px;box-shadow:0 4px 12px rgba(0,0,0,.1);border-left:3px solid var(--ok);z-index:200}
-@media(max-width:768px){.sb{position:fixed;left:0;top:52px;bottom:0;z-index:40;transform:translateX(-100%);transition:transform .3s;box-shadow:4px 0 20px rgba(0,0,0,.15)}.main{flex-direction:column}.viewer{height:calc(100vh - 52px)}}
+@media(max-width:768px){
+.sb{position:fixed;left:0;top:52px;bottom:0;z-index:40;transform:translateX(-100%);transition:transform .3s;box-shadow:4px 0 20px rgba(0,0,0,.15);width:100vw}
+.main{flex-direction:column}
+.viewer{height:calc(100vh - 52px)}
+.ita{min-height:60px;font-size:16px}
+.ibox{padding:10px 10px 10px 14px;border-radius:14px}
+.sbtn{width:40px;height:40px}
+.qp{white-space:nowrap;font-size:11px;padding:6px 12px}
+}
+@media(min-width:769px) and (max-width:1024px){
+.sb{width:380px}
+.ita{min-height:70px}
+}
 </style>
 </head>
 <body>
@@ -154,7 +166,7 @@ body{display:flex;flex-direction:column}
       <div class="ibox">
         <input type="file" id="fileIn" accept="image/*,.pdf" style="display:none" onchange="handleFile(this.files[0])">
         <button class="sbtn" style="background:#475569" onclick="document.getElementById('fileIn').click()" title="Загрузить фото дома или чертёж">📷</button>
-        <textarea class="ita" id="ci" placeholder="Опишите здание или прикрепите фото/чертёж…" rows="2"
+        <textarea class="ita" id="ci" placeholder="Опишите здание или прикрепите фото/чертёж…" rows="3"
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"
           oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
         <button class="sbtn" onclick="send()">➤</button>
