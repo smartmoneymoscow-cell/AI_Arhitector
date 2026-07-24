@@ -602,15 +602,37 @@ def generate_building():
 
     # Generate script
     script = generate_bpy_script(params)
-
     job_id = uuid.uuid4().hex[:8]
 
-    return jsonify({
-        "job_id": job_id,
-        "params": params,
-        "script": script,
-        "prompt": prompt,
-    })
+    # Run in Blender to produce GLB
+    import tempfile, subprocess
+    script_path = os.path.join(OUTPUT_DIR, f"{job_id}.py")
+    output_file = os.path.join(OUTPUT_DIR, f"{job_id}.glb")
+
+    with open(script_path, 'w') as f:
+        f.write(script)
+        f.write(f"\nimport bpy\nbpy.ops.export_scene.gltf(filepath=r'{output_file}', export_format='GLB')\n")
+
+    blender = os.environ.get('BLENDER_PATH', 'blender')
+    try:
+        result = subprocess.run(
+            [blender, '--background', '--factory-startup', '--python', script_path],
+            capture_output=True, text=True, timeout=120
+        )
+    except Exception as e:
+        return jsonify({"error": f"Blender failed: {e}", "params": params, "script": script}), 500
+    finally:
+        if os.path.exists(script_path):
+            os.remove(script_path)
+
+    if os.path.exists(output_file):
+        return send_file(
+            output_file,
+            as_attachment=True,
+            download_name=f"archai_{job_id}.glb",
+            mimetype='model/gltf-binary',
+        )
+    return jsonify({"error": "Blender export failed", "stderr": result.stderr[-300:], "params": params}), 500
 
 @app.route('/api/v1/render/interior', methods=['POST'])
 def render_interior():
@@ -619,11 +641,29 @@ def render_interior():
     script = generate_interior_script(data)
     job_id = uuid.uuid4().hex[:8]
 
-    return jsonify({
-        "job_id": job_id,
-        "params": data,
-        "script": script,
-    })
+    # Run in Blender
+    import subprocess
+    script_path = os.path.join(OUTPUT_DIR, f"{job_id}_int.py")
+    output_file = os.path.join(OUTPUT_DIR, f"{job_id}_int.png")
+
+    with open(script_path, 'w') as f:
+        f.write(script)
+
+    blender = os.environ.get('BLENDER_PATH', 'blender')
+    try:
+        result = subprocess.run(
+            [blender, '--background', '--factory-startup', '--python', script_path],
+            capture_output=True, text=True, timeout=300
+        )
+    except Exception as e:
+        return jsonify({"error": f"Blender failed: {e}"}), 500
+    finally:
+        if os.path.exists(script_path):
+            os.remove(script_path)
+
+    if os.path.exists(output_file):
+        return send_file(output_file, as_attachment=True, download_name=f"archai_interior_{job_id}.png")
+    return jsonify({"error": "Render failed", "stderr": result.stderr[-300:]}), 500
 
 
 # ═══════════════════════════════════════════════════════════════
