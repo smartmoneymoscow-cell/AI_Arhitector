@@ -1410,6 +1410,90 @@ function renderGS(ai){
   el.innerHTML=GSTEPS.map((s,i)=>`<div class="gs ${i<ai?'done':i===ai?'active':''}">${i<ai?'✅':i===ai?'⟳':'○'} ${s.l}</div>`).join('');
 }
 
+// ═══════════════════ BLENDER SERVER INTEGRATION ═══════════════════
+async function generateViaBlenderServer(prompt) {
+  /*
+   * Try to generate building via Blender server.
+   * Returns true if successful (GLB loaded), false to fall back to local.
+   */
+  if(!API_BASE || !_backendOk) return false;
+  
+  try {
+    addThink(['🖥 Запрос к Blender серверу…']);
+    
+    const ctrl = new AbortController();
+    setTimeout(()=>ctrl.abort(), 60000); // 60s for Blender generation
+    
+    const r = await fetch(API_BASE + '/api/v1/generate/building', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      signal: ctrl.signal,
+      body: JSON.stringify({prompt: prompt, export_format: 'glb'})
+    });
+    
+    if(!r.ok) return false;
+    
+    const blob = await r.blob();
+    if(blob.size < 100) return false;
+    
+    addThink(['📦 Модель получена: ' + (blob.size/1024).toFixed(1) + ' KB', '🔄 Загружаю в 3D viewer…']);
+    
+    // Load GLB into Three.js
+    const url = URL.createObjectURL(blob);
+    const loader = new THREE.GLTFLoader();
+    
+    return new Promise((resolve) => {
+      loader.load(url, (gltf) => {
+        // Clear existing model
+        if(scene) {
+          const toRemove = [];
+          scene.traverse(child => {
+            if(child.isMesh && child.name !== 'Ground') toRemove.push(child);
+          });
+          toRemove.forEach(obj => {
+            if(obj.geometry) obj.geometry.dispose();
+            if(obj.material) {
+              if(Array.isArray(obj.material)) obj.material.forEach(m=>m.dispose());
+              else obj.material.dispose();
+            }
+            scene.remove(obj);
+          });
+        }
+        
+        // Add new model
+        const model = gltf.scene;
+        scene.add(model);
+        
+        // Fit camera
+        const box = new THREE.Box3().setFromObject(model);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        panX = center.x;
+        panY = center.z;
+        radius = maxDim * 1.8;
+        resetCam();
+        
+        ST.hasModel = true;
+        URL.revokeObjectURL(url);
+        
+        addMsg('a', '✅ <b>Модель сгенерирована в Blender</b><br>' +
+          '📦 ' + (blob.size/1024).toFixed(1) + ' KB | ' +
+          '🏠 ' + size.x.toFixed(1) + '×' + size.y.toFixed(1) + '×' + size.z.toFixed(1) + ' м');
+        showNotif('✅ Blender модель загружена');
+        resolve(true);
+      }, null, (err) => {
+        console.warn('GLB load failed:', err);
+        URL.revokeObjectURL(url);
+        resolve(false);
+      });
+    });
+  } catch(e) {
+    console.warn('Blender server unavailable:', e.message);
+    return false;
+  }
+}
+
 function startGen(bld){
   if(ST.generating)return;ST.generating=true;
   const ov=document.getElementById('genov'),gf=document.getElementById('gf');
@@ -1707,6 +1791,13 @@ async function send(){
   // Building request
   if(BUILD_RE.test(text)||text.length>6){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🧠 Извлекаю параметры…']);
+    
+    // Try Blender server first
+    const serverOk = await generateViaBlenderServer(text);
+    if(serverOk) return;
+    
+    // Fall back to local Three.js generation
+    addThink(['🖥 Сервер недоступен — генерирую локально…']);
     // Parse locally first (guaranteed, instant)
     let parsed=parseLocal(text);
     // Try Claude API for better accuracy (non-blocking)
