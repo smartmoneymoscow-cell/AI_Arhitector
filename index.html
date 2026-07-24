@@ -45,9 +45,7 @@ body{display:flex;flex-direction:column}
 .qpbar{padding:7px 10px;border-top:1px solid var(--bdr);display:flex;flex-wrap:wrap;gap:5px;background:var(--bg2)}
 .qp{padding:4px 10px;border-radius:20px;border:1px solid var(--bdr);background:var(--bg);color:var(--txt2);font-size:11px;cursor:pointer;transition:all .15s}
 .qp:hover{border-color:#2563eb;color:#2563eb;background:#eff6ff}
-.chips{padding:5px 10px;border-top:1px solid var(--bdr);display:flex;flex-wrap:wrap;gap:4px;background:var(--bg2)}
-.chip-active{background:#2563eb!important;color:#fff!important;border-color:#2563eb!important;}.chip{padding:3px 9px;border-radius:20px;border:1px solid var(--bdr);font-size:11px;color:var(--txt2);cursor:pointer;transition:all .15s}
-.chip:hover{border-color:#0891b2;color:#0891b2;background:#ecfeff}
+
 .ci{padding:8px 10px;border-top:1px solid var(--bdr);background:var(--bg2)}
 .ibox{display:flex;gap:5px;align-items:flex-end;background:var(--bg3);border:1.5px solid var(--bdr);border-radius:12px;padding:5px 5px 5px 11px;transition:border .15s}
 .ibox:focus-within{border-color:#2563eb;background:#fff}
@@ -148,30 +146,7 @@ body{display:flex;flex-direction:column}
       <div class="qp" onclick="go('деревянный коттедж 2 этажа терраса 12×15')">🌲 Коттедж</div>
       <div class="qp" onclick="go('таунхаус 3 этажа минимализм 8×16')">🏙 Таунхаус</div>
     </div>
-    <div class="chips">
-      <div class="chip" onclick="go('добавь балконы')">Балконы</div>
-      <div class="chip" onclick="go('плоская кровля')">Кровля</div>
-      <div class="chip" onclick="setView('int')">Интерьер</div>
-      <div class="chip" onclick="setView('plan')">2D план</div>
-      <div class="chip" onclick="togWire()">Каркас</div>
-    </div>
-    <div class="chips" style="border-top:none;padding-top:0">
-      <div style="font-size:10px;color:var(--txt2);padding:1px 4px;font-weight:600">☀️ HDRI:</div>
-      <div class="chip" onclick="loadHDRI('day')">День</div>
-      <div class="chip" onclick="loadHDRI('sunset')">Закат</div>
-      <div class="chip" onclick="loadHDRI('overcast')">Пасмурно</div>
-      <div class="chip" onclick="loadHDRI('studio')">Студия</div>
-      <div class="chip" onclick="loadHDRI('night')">Ночь</div>
-    </div>
-    <div class="chips" style="border-top:none;padding-top:0;flex-wrap:wrap">
-      <div style="font-size:10px;color:var(--txt2);padding:1px 4px;font-weight:600">🎨 Стиль:</div>
-      <div class="chip style-chip" data-style="modern"    onclick="applyStylePreset('modern')">🏙 Современный</div>
-      <div class="chip style-chip" data-style="classic"   onclick="applyStylePreset('classic')">🏛 Классический</div>
-      <div class="chip style-chip" data-style="scandi"    onclick="applyStylePreset('scandi')">🌲 Скандинавский</div>
-      <div class="chip style-chip" data-style="hitech"    onclick="applyStylePreset('hitech')">⚡ Хай-тек</div>
-      <div class="chip style-chip" data-style="barnhouse" onclick="applyStylePreset('barnhouse')">🏚 Барнхаус</div>
-      <div class="chip style-chip" data-style="chalet"    onclick="applyStylePreset('chalet')">🏔 Шале</div>
-    </div>
+
     <div class="ci">
       <div class="ibox">
         <input type="file" id="fileIn" accept="image/*,.pdf" style="display:none" onchange="handleFile(this.files[0])">
@@ -1632,9 +1607,7 @@ let activeStyle = null;
 function applyStylePreset(key){
   const s=STYLE_PRESETS[key]; if(!s) return;
   activeStyle=key;
-  document.querySelectorAll('.style-chip').forEach(c=>{
-    c.classList.toggle('chip-active', c.dataset.style===key);
-  });
+
   if(Object.keys(ST).length>2){
     Object.assign(ST,{mat:s.mat,roof:s.roof,fH:s.fH,fc:s.fc,rc:s.rc,tc:s.tc,dc:s.dc,
       winType:s.winType,winFrame:s.winFrame,winColor:s.winColor});
