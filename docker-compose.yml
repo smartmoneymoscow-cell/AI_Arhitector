@@ -1,0 +1,26 @@
+services:
+  gateway:
+    build: ./gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - LLM_SERVICE_URL=http://llm-service:8081
+      - BLENDER_SERVICE_URL=http://blender-service:8082
+      - PORT=8080
+    depends_on:
+      - llm-service
+      - blender-service
+
+  llm-service:
+    build: ./llm-service
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - PORT=8081
+
+  blender-service:
+    build: ./blender-service
+    environment:
+      - PORT=8082
+      - BLENDER_PATH=blender
+    volumes:
+      - ./output:/app/output

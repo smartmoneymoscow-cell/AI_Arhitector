@@ -1,15 +1,44 @@
 services:
+  # Gateway — маршрутизатор + фронтенд
   - type: web
-    name: architect
+    name: architect-gateway
     runtime: docker
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./gateway/Dockerfile
     region: oregon
     plan: free
-    healthCheckPath: /api/v1/health
+    healthCheckPath: /health
+    envVars:
+      - key: LLM_SERVICE_URL
+        value: https://architect-llm.onrender.com
+      - key: BLENDER_SERVICE_URL
+        value: https://architect-blender.onrender.com
+      - key: PORT
+        value: "8080"
+
+  # LLM Service — прокси к OpenRouter
+  - type: web
+    name: architect-llm
+    runtime: docker
+    dockerfilePath: ./llm-service/Dockerfile
+    region: oregon
+    plan: free
+    healthCheckPath: /health
     envVars:
       - key: OPENROUTER_API_KEY
         sync: false
       - key: PORT
-        value: "8080"
+        value: "8081"
+
+  # Blender Service — генерация зданий + интерьеров
+  - type: web
+    name: architect-blender
+    runtime: docker
+    dockerfilePath: ./blender-service/Dockerfile
+    region: oregon
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8082"
       - key: BLENDER_PATH
         value: "blender"

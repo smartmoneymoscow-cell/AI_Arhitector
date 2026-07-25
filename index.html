@@ -454,7 +454,7 @@ const API_BASE = (()=>{
   // Auto-detect: if on GitHub Pages, use Render backend
   const origin = window.location.origin;
   if(origin.includes('github.io') || origin.includes('githubusercontent.com'))
-    return 'https://architect-zpif.onrender.com';
+    return 'https://architect-gateway.onrender.com';
   return origin;      // same-origin backend
 })();
 let _backendOk = null; // null = not checked yet
