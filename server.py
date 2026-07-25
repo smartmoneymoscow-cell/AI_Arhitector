@@ -489,14 +489,6 @@ if bg:
 # ROUTES
 # ═══════════════════════════════════════════════════════════════
 
-@app.route('/')
-def serve_index():
-    return send_from_directory(FRONTEND_DIR, 'index.html')
-
-@app.route('/<path:filename>')
-def serve_static(filename):
-    return send_from_directory(FRONTEND_DIR, filename)
-
 @app.route('/api/v1/health')
 @app.route('/health')
 def health():
@@ -676,6 +668,16 @@ def render_interior():
 # ═══════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════
+# Static file serving (AFTER all API routes to avoid catch-all conflicts)
+@app.route('/')
+def serve_index():
+    return send_from_directory(FRONTEND_DIR, 'index.html')
+
+@app.route('/<path:filename>')
+def serve_static(filename):
+    return send_from_directory(FRONTEND_DIR, filename)
+
+
 if __name__ == '__main__':
     print(f"🏗️  Architect Server starting on port {PORT}")
     print(f"📡 OpenRouter: {FREE_MODEL} (free)")
