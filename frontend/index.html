@@ -1731,6 +1731,73 @@ async function generateViaBlenderServer(prompt) {
   }
 }
 
+async function renderInteriorViaServer(prompt, style, furniture) {
+  if(!API_BASE || !_backendOk) return null;
+  try {
+    addThink(['🖥 Запрос к Blender серверу (интерьер)…']);
+    const ctrl = new AbortController();
+    setTimeout(()=>ctrl.abort(), 180000); // 3 min for interior render
+    const r = await fetch(API_BASE + '/api/v1/render/interior', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      signal: ctrl.signal,
+      body: JSON.stringify({width:6, length:8, height:3, style:style||'modern', furniture:furniture||['sofa','table','chandelier']})
+    });
+    if(!r.ok) return null;
+    const blob = await r.blob();
+    if(blob.size < 1000) return null;
+    // Display rendered interior PNG in viewer
+    const url = URL.createObjectURL(blob);
+    const c3d = document.getElementById('c3d');
+    const cwrap = document.getElementById('cwrap');
+    document.getElementById('empt').style.display='none';
+    // Create img overlay for interior render
+    let imgEl = document.getElementById('interior-img');
+    if(!imgEl) {
+      imgEl = document.createElement('img');
+      imgEl.id = 'interior-img';
+      imgEl.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#1a1a2e;z-index:5';
+      cwrap.appendChild(imgEl);
+    }
+    imgEl.src = url;
+    imgEl.style.display = 'block';
+    if(c3d) c3d.style.display = 'none';
+    ST.hasModel = true;
+    ST.isInterior = true;
+    addMsg('a', '✅ <b>Интерьер сгенерирован</b><br>🎨 Стиль: ' + (style||'modern') + '<br>🛋 Мебель: ' + (furniture||[]).join(', '));
+    showNotif('✅ Интерьер готов');
+    return true;
+  } catch(e) {
+    console.warn('Interior render failed:', e.message);
+    return null;
+  }
+}
+
+function parseInteriorParams(text) {
+  const t = text.toLowerCase();
+  const style = /хай.?тек|hitech/.test(t) ? 'modern' :
+                /классик|classic/.test(t) ? 'classic' :
+                /скандинав|scandi/.test(t) ? 'scandinavian' :
+                /лофт|loft/.test(t) ? 'loft' :
+                /минималист|minimalist/.test(t) ? 'minimalist' : 'modern';
+  const furniture = [];
+  if(/диван|sofa/.test(t)) furniture.push('sofa');
+  if(/стол|table/.test(t)) furniture.push('table');
+  if(/кровать|bed/.test(t)) furniture.push('bed');
+  if(/люстр|свет|светильник|chandelier/.test(t)) furniture.push('chandelier');
+  if(/ванн|bath/.test(t)) furniture.push('bath');
+  if(/шкаф|wardrobe/.test(t)) furniture.push('wardrobe');
+  if(/стул|chair/.test(t)) furniture.push('chair');
+  // Default furniture if none specified
+  if(furniture.length === 0) {
+    if(/кухн|kitchen/.test(t)) { furniture.push('table','chair'); }
+    else if(/ванн|bath/.test(t)) { furniture.push('bath'); }
+    else if(/спальн|bedroom/.test(t)) { furniture.push('bed'); }
+    else { furniture.push('sofa','table','chandelier'); }
+  }
+  return { style, furniture };
+}
+
 function startGen(bld){
   if(ST.generating)return;ST.generating=true;
   const ov=document.getElementById('genov'),gf=document.getElementById('gf');
@@ -1809,6 +1876,9 @@ function doFinish(bld,ov,gf){
 
 // ═══════════════════ SEND ════════════════════════════════════
 const BUILD_RE=/дом|здани|офис|коттедж|вилл|склад|таунхаус|этаж|комнат|кирпич|фасад|кровля|строи|проект|гараж|терраса|мансарда|балкон|дерев|стекл|плоская|скатная|загородн|жилой/i;
+const INTERIOR_RE=/интерьер|спальн|гостин|кухн|ванн|мебел|диван|кроват|стул|шкаф|прихож|коридор|детск|кабинет|столов|гардероб|холл|салон|лoft|лофт/i;
+const LANDSCAPE_RE=/ландшафт|сад|газон|дорожк|забор|беседк|бассейн|пруд|деревья|клумб|цветник|террас|патио|двор|участок|огород/i;
+const CONSTRUCT_RE=/конструкц|ферм|балк|перекрыт|колонн|армопояс|сваи|фундамент|несущ|стен.*несущ|каркас|модул|панел/i;
 
 
 // ═══════════════════ PHOTO/BLUEPRINT UPLOAD ════════════════
@@ -2031,7 +2101,44 @@ async function send(){
   const qpbar = document.getElementById('qpbar');
   if(qpbar) qpbar.style.display='flex';
   addMsg('u',text);if(inp)inp.value='';
-  // Building request — local parse is guaranteed, LLM is optional enhancement
+  // ── INTERIOR PATH ────────────────────────────────────
+  if(INTERIOR_RE.test(text)){
+    addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🛋 Определяю параметры интерьера…']);
+    const ip = parseInteriorParams(text);
+    addThink(['✅ Стиль: '+ip.style+' | Мебель: '+ip.furniture.join(', '),'🖥 Генерирую интерьер через Blender…']);
+    const ok = await renderInteriorViaServer(text, ip.style, ip.furniture);
+    if(ok) return;
+    // Fallback: show in chat
+    addMsg('a','⚠️ Сервер рендера интерьера недоступен. Проверьте настройки Backend URL (⚙️).');
+    return;
+  }
+
+  // ── LANDSCAPE PATH ───────────────────────────────────
+  if(LANDSCAPE_RE.test(text)){
+    addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🌳 Планирую ландшафт…']);
+    // For now, generate a building with landscape features
+    let parsed=parseLocal('дом 1 этаж 8x10');
+    parsed.type='house';
+    const bld=applyParams(text,parsed);
+    bld.label='Ландшафтный проект';
+    addThink(['✅ Ландшафт: '+text.slice(0,60),'🚀 Генерирую 3D…']);
+    setTimeout(()=>startGen(bld),300);
+    return;
+  }
+
+  // ── CONSTRUCTION PATH ────────────────────────────────
+  if(CONSTRUCT_RE.test(text)){
+    addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🏗 Анализирую конструкцию…']);
+    let parsed=parseLocal('дом 1 этаж 10x12');
+    parsed.type='house';
+    const bld=applyParams(text,parsed);
+    bld.label='Конструктивный элемент';
+    addThink(['✅ Конструкция: '+text.slice(0,60),'🚀 Генерирую 3D…']);
+    setTimeout(()=>startGen(bld),300);
+    return;
+  }
+
+  // ── BUILDING PATH ────────────────────────────────────
   if(BUILD_RE.test(text)||text.length>6){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🧠 Извлекаю параметры…']);
     
