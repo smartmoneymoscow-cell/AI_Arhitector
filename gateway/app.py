@@ -1,9 +1,8 @@
 """
-API Gateway
+API Gateway — routes requests to microservices
 """
 import os
 import requests
-import json
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
@@ -11,51 +10,33 @@ app = Flask(__name__)
 CORS(app)
 
 BLENDER_SVC = os.environ.get("BLENDER_SERVICE_URL", "http://localhost:8082")
+LLM_SVC = os.environ.get("LLM_SERVICE_URL", "https://ai-arch-llmproxy.onrender.com")
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
-
-# OpenRouter config
-OR_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-OR_BASE = "https://openrouter.ai/api/v1"
-OR_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 
 
 @app.route("/health")
 @app.route("/api/v1/health")
 def health():
-    services = {"blender": "unknown"}
-    try:
-        r = requests.get(f"{BLENDER_SVC}/health", timeout=5)
-        services["blender"] = "ok" if r.status_code == 200 else "error"
-    except:
-        services["blender"] = "unreachable"
+    services = {}
+    for name, url in [("llm", LLM_SVC), ("blender", BLENDER_SVC)]:
+        try:
+            r = requests.get(f"{url}/health", timeout=5)
+            services[name] = "ok" if r.status_code == 200 else "error"
+        except:
+            services[name] = "unreachable"
     return jsonify({"status": "ok", "service": "gateway", "services": services})
 
 
 @app.route("/api/v1/proxy/claude", methods=["POST"])
 def proxy_claude():
-    data = request.json or {}
-    messages = data.get("messages", [])
-    max_tokens = data.get("max_tokens", 400)
-    headers = {"Content-Type": "application/json", "HTTP-Referer": "https://archai.app", "X-Title": "Architect"}
-    if OR_KEY:
-        headers["Authorization"] = f"Bearer {OR_KEY}"
     try:
-        r = requests.post(
-            f"{OR_BASE}/chat/completions",
-            headers=headers,
-            json={"model": OR_MODEL, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7},
-            timeout=60.0,
-        )
+        r = requests.post(f"{LLM_SVC}/api/v1/chat/completions", json=request.json, timeout=60)
+        r.encoding = "utf-8"
         if r.status_code == 200:
-            r.encoding = "utf-8"
             result = r.json()
             text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
             return jsonify({"content": [{"type": "text", "text": text or ""}]}), 200
-        try:
-            error_data = r.json()
-            return jsonify({"error": json.dumps(error_data, ensure_ascii=False)}), r.status_code
-        except:
-            return jsonify({"error": "OpenRouter API error"}), r.status_code
+        return jsonify({"error": r.json()}), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
@@ -94,5 +75,6 @@ def serve_static(filename):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     print(f"Gateway starting on port {port}")
+    print(f"LLM: {LLM_SVC}")
     print(f"Blender: {BLENDER_SVC}")
     app.run(host="0.0.0.0", port=port, debug=False)
