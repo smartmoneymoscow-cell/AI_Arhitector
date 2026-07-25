@@ -665,7 +665,7 @@ def render_interior():
     try:
         result = subprocess.run(
             [blender, '--background', '--factory-startup', '--log-level', '0', '--python', script_path],
-            capture_output=True, text=True, timeout=300
+            capture_output=True, text=True, timeout=300, env={**os.environ, 'DISPLAY': ':99'}
         )
     except Exception as e:
         return jsonify({"error": f"Blender failed: {e}"}), 500
