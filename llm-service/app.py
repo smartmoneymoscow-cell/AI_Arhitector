@@ -61,7 +61,7 @@ def chat_completions():
         if r.status_code == 200:
             result = r.json()
             return jsonify(result), 200
-        return jsonify({"error": r.text}), r.status_code
+        return jsonify({"error": r.text.encode("utf-8", errors="replace").decode("utf-8")}), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
