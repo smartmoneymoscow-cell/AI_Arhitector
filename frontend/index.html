@@ -451,7 +451,11 @@ const API_BASE = (()=>{
   // Check localStorage for custom backend URL
   const stored = localStorage.getItem('archai_backend_url');
   if(stored) return stored.replace(/\/+$/,'');
-  return window.location.origin;      // same-origin backend
+  // Auto-detect: if on GitHub Pages, use Render backend
+  const origin = window.location.origin;
+  if(origin.includes('github.io') || origin.includes('githubusercontent.com'))
+    return 'https://architect-zpif.onrender.com';
+  return origin;      // same-origin backend
 })();
 let _backendOk = null; // null = not checked yet
 
