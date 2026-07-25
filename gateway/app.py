@@ -46,17 +46,12 @@ def proxy_claude():
             timeout=60.0,
         )
         if r.status_code == 200:
+            r.encoding = "utf-8"
             result = r.json()
             text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-            # Ensure text is properly encoded
-            if text and isinstance(text, bytes):
-                text = text.decode("utf-8", errors="replace")
             return jsonify({"content": [{"type": "text", "text": text or ""}]}), 200
-        # Handle error response with proper encoding
-        error_text = r.text
-        if isinstance(error_text, bytes):
-            error_text = error_text.decode("utf-8", errors="replace")
-        return jsonify({"error": error_text}), r.status_code
+        r.encoding = "utf-8"
+        return jsonify({"error": r.text}), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
