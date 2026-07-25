@@ -45,9 +45,12 @@ def proxy_claude():
         )
         if r.status_code == 200:
             result = r.json()
-            # Convert OpenAI format to Anthropic-compatible format for frontend
-            content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-            return jsonify({"content": [{"type": "text", "text": str(content)}]}), 200
+            choices = result.get("choices", [])
+            if choices:
+                content = choices[0].get("message", {}).get("content", "")
+            else:
+                content = ""
+            return jsonify({"content": [{"type": "text", "text": content or ""}]}), 200
         return jsonify({"error": r.text}), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 502
