@@ -550,8 +550,8 @@ def proxy_claude():
         if r.status_code == 200:
             text = r.json()["choices"][0]["message"]["content"]
             # Return in Anthropic-compatible format
-            return jsonify({"content": [{"type": "text", "text": text}]}), 200
-        return jsonify({"error": r.text}), r.status_code
+            return jsonify({"content": [{"type": "text", "text": text or ""}]}), 200
+        return jsonify({"error": str(r.text)}), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
