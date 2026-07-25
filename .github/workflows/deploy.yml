@@ -1,0 +1,148 @@
+# ═══════════════════════════════════════════════════════════════
+# CD Pipeline — Architect v10.2
+# Deploys on merge to main
+# ═══════════════════════════════════════════════════════════════
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.nojekyll'
+      - 'colab/**'
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false  # don't cancel in-flight deploys
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Build & Push Docker images to GitHub Container Registry
+  # ─────────────────────────────────────────────────────────────
+  docker-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service:
+          - name: gateway
+            context: ./gateway
+            file: ./gateway/Dockerfile
+          - name: llm-service
+            context: ./llm-service
+            file: ./llm-service/Dockerfile
+          - name: blender-service
+            context: ./blender-service
+            file: ./blender-service/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Build and push ${{ matrix.service.name }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.file }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
+
+  # ─────────────────────────────────────────────────────────────
+  # Deploy to Render (via deploy hook)
+  # ─────────────────────────────────────────────────────────────
+  deploy-render:
+    needs: docker-push
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Trigger Render deploy
+        run: |
+          # Render auto-deploys on push to main (configured in render.yaml)
+          # If you have a deploy hook URL, uncomment below:
+          # curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+          echo "✅ Docker images pushed to GHCR"
+          echo "📦 Render will auto-deploy from main branch"
+          echo "🔗 Check deploy status at https://dashboard.render.com"
+
+  # ─────────────────────────────────────────────────────────────
+  # Deploy frontend to GitHub Pages
+  # ─────────────────────────────────────────────────────────────
+  deploy-pages:
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload frontend artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # ─────────────────────────────────────────────────────────────
+  # Notify on completion
+  # ─────────────────────────────────────────────────────────────
+  notify:
+    needs: [docker-push, deploy-render, deploy-pages]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deployment summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Push | ${{ needs.docker-push.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Render Deploy | ${{ needs.deploy-render.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| GitHub Pages | ${{ needs.deploy-pages.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+
+      # Uncomment to send Discord/Slack notification:
+      # - name: Notify Discord
+      #   if: always()
+      #   uses: sarisia/actions-status-discord@v1
+      #   with:
+      #     webhook: ${{ secrets.DISCORD_WEBHOOK }}
+      #     status: ${{ needs.docker-push.result }}
+      #     title: "Deploy ${{ github.ref_name }}"

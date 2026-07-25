@@ -1,0 +1,246 @@
+# ═══════════════════════════════════════════════════════════════
+# CI Pipeline — Architect v10.2
+# Runs on every PR and push to main/dev
+# ═══════════════════════════════════════════════════════════════
+name: CI
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Detect which parts changed (skip unnecessary jobs)
+  # ─────────────────────────────────────────────────────────────
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      docker: ${{ steps.filter.outputs.docker }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'server.py'
+              - 'gateway/**'
+              - 'llm-service/**'
+              - 'blender-service/**'
+              - 'blender/**'
+              - 'requirements.txt'
+              - 'gateway/requirements.txt'
+              - 'llm-service/requirements.txt'
+              - 'blender-service/requirements.txt'
+            frontend:
+              - 'frontend/**'
+              - 'index.html'
+              - 'tests/**'
+            docker:
+              - 'Dockerfile'
+              - 'docker-compose.yml'
+              - 'gateway/Dockerfile'
+              - 'llm-service/Dockerfile'
+              - 'blender-service/Dockerfile'
+              - '.dockerignore'
+
+  # ─────────────────────────────────────────────────────────────
+  # Python Lint + Type Check
+  # ─────────────────────────────────────────────────────────────
+  lint-python:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install linters
+        run: pip install ruff
+
+      - name: Ruff lint
+        run: ruff check server.py gateway/ llm-service/ blender-service/ blender/ --output-format=github
+
+      - name: Ruff format check
+        run: ruff format --check server.py gateway/ llm-service/ blender-service/ blender/
+
+  # ─────────────────────────────────────────────────────────────
+  # Python Unit Tests
+  # ─────────────────────────────────────────────────────────────
+  test-python:
+    needs: [changes, lint-python]
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run server import test
+        run: python -c "import server; print('✅ server.py imports OK')"
+
+      - name: Run gateway import test
+        run: |
+          cd gateway
+          pip install -r requirements.txt
+          python -c "import app; print('✅ gateway/app.py imports OK')"
+
+      - name: Run llm-service import test
+        run: |
+          cd llm-service
+          pip install -r requirements.txt
+          python -c "import app; print('✅ llm-service/app.py imports OK')"
+
+      - name: Run blender-service import test
+        run: |
+          cd blender-service
+          pip install -r requirements.txt
+          python -c "import app; print('✅ blender-service/app.py imports OK')"
+
+      - name: Run existing tests
+        run: |
+          if [ -f "tests/test_server.py" ]; then
+            pytest tests/test_server.py -v --tb=short
+          else
+            echo "⚠️ No Python tests found — add tests/ directory with pytest tests"
+          fi
+
+  # ─────────────────────────────────────────────────────────────
+  # Frontend Tests (Node.js)
+  # ─────────────────────────────────────────────────────────────
+  test-frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run chat generation tests
+        run: node tests/test_chat.js
+
+      - name: Validate HTML
+        run: |
+          # Basic HTML validation — check for common issues
+          if grep -q "<!DOCTYPE html>" index.html || grep -q "<!doctype html>" index.html; then
+            echo "✅ HTML has doctype"
+          else
+            echo "⚠️ Missing doctype in index.html"
+          fi
+
+  # ─────────────────────────────────────────────────────────────
+  # Docker Build (verify images compile)
+  # ─────────────────────────────────────────────────────────────
+  docker-build:
+    needs: [changes, lint-python]
+    if: needs.changes.outputs.docker == 'true' || needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - name: gateway
+            context: ./gateway
+            file: ./gateway/Dockerfile
+          - name: llm-service
+            context: ./llm-service
+            file: ./llm-service/Dockerfile
+          - name: blender-service
+            context: ./blender-service
+            file: ./blender-service/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.service.name }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.file }}
+          push: false
+          tags: architect/${{ matrix.service.name }}:ci-${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
+
+  # ─────────────────────────────────────────────────────────────
+  # Security — dependency audit
+  # ─────────────────────────────────────────────────────────────
+  security:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: pip audit
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --desc || true
+
+      - name: Check for secrets in code
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified
+
+  # ─────────────────────────────────────────────────────────────
+  # All checks passed gate
+  # ─────────────────────────────────────────────────────────────
+  ci-ok:
+    if: always()
+    needs: [changes, lint-python, test-python, test-frontend, docker-build, security]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          echo "=== Job Results ==="
+          echo "lint-python:    ${{ needs.lint-python.result }}"
+          echo "test-python:    ${{ needs.test-python.result }}"
+          echo "test-frontend:  ${{ needs.test-frontend.result }}"
+          echo "docker-build:   ${{ needs.docker-build.result }}"
+          echo "security:       ${{ needs.security.result }}"
+
+          # Fail if any required job failed (skip "skipped" ones)
+          for result in \
+            "${{ needs.lint-python.result }}" \
+            "${{ needs.test-python.result }}" \
+            "${{ needs.test-frontend.result }}" \
+            "${{ needs.docker-build.result }}" \
+            "${{ needs.security.result }}"; do
+            if [ "$result" = "failure" ]; then
+              echo "❌ Some checks failed"
+              exit 1
+            fi
+          done
+          echo "✅ All checks passed"

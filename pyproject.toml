@@ -1,0 +1,58 @@
+# ═══════════════════════════════════════════════════════════════
+# Python project config — Architect v10.2
+# ═══════════════════════════════════════════════════════════════
+
+[project]
+name = "architect"
+version = "10.2.0"
+requires-python = ">=3.10"
+
+# ── Ruff (linter + formatter) ──────────────────────────────────
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "S",    # flake8-bandit (security)
+    "T20",  # flake8-print
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "S101",   # use of assert (fine in tests)
+    "T201",   # print statements (CLI tools)
+    "B008",   # function call in default arg (Flask patterns)
+    "S603",   # subprocess call (Blender integration)
+    "S607",   # partial executable path
+    "N802",   # function name casing (Russian conventions)
+    "N803",   # argument name casing
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "T201"]
+"blender/**" = ["S603", "S607", "T201"]
+"test_*.py" = ["S101", "T201"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ── Pytest ──────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks integration tests requiring external services",
+]
