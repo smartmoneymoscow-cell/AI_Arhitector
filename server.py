@@ -615,7 +615,7 @@ def generate_building():
     blender = os.environ.get('BLENDER_PATH', 'blender')
     try:
         result = subprocess.run(
-            [blender, '--background', '--factory-startup', '--python', script_path],
+            [blender, '--background', '--factory-startup', '--log-level', '0', '--python', script_path],
             capture_output=True, text=True, timeout=120
         )
     except Exception as e:
@@ -631,7 +631,7 @@ def generate_building():
             download_name=f"archai_{job_id}.glb",
             mimetype='model/gltf-binary',
         )
-    return jsonify({"error": "Blender export failed", "stderr": result.stderr[-300:], "params": params}), 500
+    return jsonify({"error": "Blender export failed", "stderr": result.stderr[-1000:], "params": params}), 500
 
 @app.route('/api/v1/render/interior', methods=['POST'])
 def render_interior():
@@ -647,11 +647,24 @@ def render_interior():
 
     with open(script_path, 'w') as f:
         f.write(script)
+        # Add render-to-PNG command
+        render_cmd = (
+            "\nimport bpy"
+            "\nbpy.context.scene.render.filepath = r'" + output_file + "'"
+            "\nbpy.context.scene.render.engine = 'CYCLES'"
+            "\nbpy.context.scene.cycles.device = 'CPU'"
+            "\nbpy.context.scene.cycles.samples = 32"
+            "\nbpy.context.scene.render.resolution_x = 1024"
+            "\nbpy.context.scene.render.resolution_y = 768"
+            "\nbpy.ops.render.render(write_still=True)"
+            "\n"
+        )
+        f.write(render_cmd)
 
     blender = os.environ.get('BLENDER_PATH', 'blender')
     try:
         result = subprocess.run(
-            [blender, '--background', '--factory-startup', '--python', script_path],
+            [blender, '--background', '--factory-startup', '--log-level', '0', '--python', script_path],
             capture_output=True, text=True, timeout=300
         )
     except Exception as e:
@@ -662,7 +675,7 @@ def render_interior():
 
     if os.path.exists(output_file):
         return send_file(output_file, as_attachment=True, download_name=f"archai_interior_{job_id}.png")
-    return jsonify({"error": "Render failed", "stderr": result.stderr[-300:]}), 500
+    return jsonify({"error": "Render failed", "stderr": result.stderr[-1000:]}), 500
 
 
 # ═══════════════════════════════════════════════════════════════
