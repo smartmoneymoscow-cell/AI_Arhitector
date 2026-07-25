@@ -651,8 +651,11 @@ def render_interior():
         render_cmd = (
             "\nimport bpy"
             "\nbpy.context.scene.render.filepath = r'" + output_file + "'"
-            "\nbpy.context.scene.render.engine = 'BLENDER_EEVEE'"
-            "\nbpy.context.scene.eevee.taa_render_samples = 64"
+            "\nbpy.context.scene.render.engine = 'CYCLES'"
+            "\nbpy.context.scene.cycles.device = 'CPU'"
+            "\nbpy.context.scene.cycles.samples = 16"
+            "\nbpy.context.scene.cycles.use_denoising = False"
+            "\nbpy.context.scene.use_nodes = False"
             "\nbpy.context.scene.render.resolution_x = 1024"
             "\nbpy.context.scene.render.resolution_y = 768"
             "\nbpy.ops.render.render(write_still=True)"
