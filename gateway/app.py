@@ -3,6 +3,7 @@ API Gateway
 """
 import os
 import requests
+import json
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
@@ -50,8 +51,11 @@ def proxy_claude():
             result = r.json()
             text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
             return jsonify({"content": [{"type": "text", "text": text or ""}]}), 200
-        r.encoding = "utf-8"
-        return jsonify({"error": r.text}), r.status_code
+        try:
+            error_data = r.json()
+            return jsonify({"error": json.dumps(error_data, ensure_ascii=False)}), r.status_code
+        except:
+            return jsonify({"error": "OpenRouter API error"}), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
