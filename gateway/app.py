@@ -1,57 +1,48 @@
 """
-API Gateway — маршрутизация запросов к микросервисам
-- /health → self
-- /api/v1/proxy/claude → LLM Service
-- /api/v1/generate/building → Blender Service
-- /api/v1/render/interior → Blender Service
-- /* → статика (фронтенд)
+API Gateway
 """
 import os
 import httpx
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
-OPENROUTER_KEY = ***"OPENROUTER_API_KEY", "")
-OPENROUTER_BASE = "https://openrouter.ai/api/v1"
-LLM_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
-
 app = Flask(__name__)
 CORS(app)
 
-MONOLITH_URL = os.environ.get("MONOLITH_URL", "https://architect-zpif.onrender.com")
-LLM_SERVICE = MONOLITH_URL
-BLENDER_SERVICE = os.environ.get("BLENDER_SERVICE_URL", "http://localhost:8082")
-FRONTEND_DIR = os.environ.get("FRONTEND_DIR", os.path.join(os.path.dirname(__file__), "..", "frontend"))
+BLENDER_SVC = os.environ.get("BLENDER_SERVICE_URL", "http://localhost:8082")
+FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
+
+# OpenRouter config
+OR_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OR_BASE = "https://openrouter.ai/api/v1"
+OR_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 
 
 @app.route("/health")
 @app.route("/api/v1/health")
 def health():
-    # Check all services
-    services = {}
-    for name, url in [("llm", LLM_SERVICE), ("blender", BLENDER_SERVICE)]:
-        try:
-            r = httpx.get(f"{url}/health", timeout=5.0)
-            services[name] = "ok" if r.status_code == 200 else "error"
-        except:
-            services[name] = "unreachable"
+    services = {"blender": "unknown"}
+    try:
+        r = httpx.get(f"{BLENDER_SVC}/health", timeout=5.0)
+        services["blender"] = "ok" if r.status_code == 200 else "error"
+    except:
+        services["blender"] = "unreachable"
     return jsonify({"status": "ok", "service": "gateway", "services": services})
 
 
 @app.route("/api/v1/proxy/claude", methods=["POST"])
 def proxy_claude():
-    """LLM proxy — calls OpenRouter directly."""
     data = request.json or {}
     messages = data.get("messages", [])
     max_tokens = data.get("max_tokens", 400)
     headers = {"Content-Type": "application/json", "HTTP-Referer": "https://archai.app", "X-Title": "Architect"}
-    if OPENROUTER_KEY:
-        ***"Authorization"] = f"Bearer {OPENROUTER_KEY}"
+    if OR_KEY:
+        headers["Authorization"] = f"Bearer {OR_KEY}"
     try:
         r = httpx.post(
-            f"{OPENROUTER_BASE}/chat/completions",
+            f"{OR_BASE}/chat/completions",
             headers=headers,
-            json={"model": LLM_MODEL, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7},
+            json={"model": OR_MODEL, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7},
             timeout=60.0,
         )
         if r.status_code == 200:
@@ -64,15 +55,10 @@ def proxy_claude():
 
 @app.route("/api/v1/generate/building", methods=["POST"])
 def generate_building():
-    """Проксирует запрос генерации здания к Blender Service."""
     try:
-        r = httpx.post(
-            f"{BLENDER_SERVICE}/api/v1/generate/building",
-            json=request.json,
-            timeout=120.0,
-        )
+        r = httpx.post(f"{BLENDER_SVC}/api/v1/generate/building", json=request.json, timeout=120.0)
         if r.status_code == 200:
-            return r.content, 200, {"Content-Type": r.headers.get("Content-Type", "model/gltf-binary")}
+            return r.content, 200, {"Content-Type": "model/gltf-binary"}
         return jsonify(r.json()), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 502
@@ -80,21 +66,15 @@ def generate_building():
 
 @app.route("/api/v1/render/interior", methods=["POST"])
 def render_interior():
-    """Проксирует запрос рендера интерьера к Blender Service."""
     try:
-        r = httpx.post(
-            f"{BLENDER_SERVICE}/api/v1/render/interior",
-            json=request.json,
-            timeout=300.0,
-        )
+        r = httpx.post(f"{BLENDER_SVC}/api/v1/render/interior", json=request.json, timeout=300.0)
         if r.status_code == 200:
-            return r.content, 200, {"Content-Type": r.headers.get("Content-Type", "image/png")}
+            return r.content, 200, {"Content-Type": "image/png"}
         return jsonify(r.json()), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
 
-# Static frontend
 @app.route("/")
 def serve_index():
     return send_from_directory(FRONTEND_DIR, "index.html")
@@ -106,7 +86,6 @@ def serve_static(filename):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    print(f"🌐 Gateway starting on port {port}")
-    print(f"   LLM Service: {LLM_SERVICE}")
-    print(f"   Blender Service: {BLENDER_SERVICE}")
+    print(f"Gateway starting on port {port}")
+    print(f"Blender: {BLENDER_SVC}")
     app.run(host="0.0.0.0", port=port, debug=False)
