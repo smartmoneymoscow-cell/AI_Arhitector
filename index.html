@@ -757,6 +757,8 @@ function getWallMat(b){
 function initThree(){
   const cv=document.getElementById('c3d');
   if(!cv){console.error('Canvas #c3d not found');return;}
+  if(typeof THREE==='undefined'){console.error('THREE.js not loaded (CDN blocked?)');return;}
+  try{
   renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true});
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
   renderer.shadowMap.enabled=true;
@@ -777,7 +779,7 @@ function initThree(){
   sun.shadow.camera.top=60;sun.shadow.camera.bottom=-60;
   sun.shadow.bias=-.0006;
   scene.add(sun);
-  scene.add(Object.assign(new THREE.DirectionalLight(0xd0e8ff,.5),{}).position.set(-20,15,-20)&&new THREE.DirectionalLight(0xd0e8ff,.5));
+  const fill=new THREE.DirectionalLight(0xd0e8ff,.5);fill.position.set(-20,15,-20);scene.add(fill);
   // Ground plane
   const gnd=new THREE.Mesh(new THREE.PlaneGeometry(400,400),new THREE.MeshStandardMaterial({map:grassTex(),roughness:.95}));
   gnd.rotation.x=-Math.PI/2;gnd.position.y=-.1;gnd.receiveShadow=true;scene.add(gnd);
@@ -816,6 +818,7 @@ function initThree(){
   // Render loop
   (function loop(){requestAnimationFrame(loop);if(renderer&&scene&&camera)renderer.render(scene,camera);})();
   console.log('Three.js initialized OK');
+  }catch(e){console.error('initThree error:',e);}
 }
 
 function clamp(v,mn,mx){return Math.max(mn,Math.min(mx,v));}
@@ -1673,6 +1676,7 @@ async function generateViaBlenderServer(prompt) {
     
     // Load GLB into Three.js
     const url = URL.createObjectURL(blob);
+    if(typeof THREE.GLTFLoader==='undefined'){console.warn('GLTFLoader not available');resolve(false);return;}
     const loader = new THREE.GLTFLoader();
     
     return new Promise((resolve) => {
@@ -1728,7 +1732,16 @@ async function generateViaBlenderServer(prompt) {
 }
 
 function startGen(bld){
-  if(ST.generating)return;ST.generating=true;
+  if(ST.generating)return;
+  if(typeof THREE==='undefined'||!scene||!renderer){
+    try{initThree();}catch(e){}
+    if(!scene||!renderer){
+      addMsg('a','❌ 3D-движок не загружен. Проверьте интернет (нужен доступ к CDN) и обновите страницу.');
+      showNotif('Ошибка: THREE.js не загружен','warn');
+      return;
+    }
+  }
+  ST.generating=true;
   const ov=document.getElementById('genov'),gf=document.getElementById('gf');
   ov.style.display='flex';
   document.getElementById('empt').style.display='none';
@@ -2032,8 +2045,12 @@ async function send(){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🧠 Извлекаю параметры…']);
     
     // Try Blender server first
-    const serverOk = await generateViaBlenderServer(text);
-    if(serverOk) return;
+    try {
+      const serverOk = await generateViaBlenderServer(text);
+      if(serverOk) return;
+    } catch(blenderErr) {
+      console.warn('Blender server error:', blenderErr);
+    }
     
     // Parse locally first (guaranteed, instant, no API needed)
     let parsed=parseLocal(text);

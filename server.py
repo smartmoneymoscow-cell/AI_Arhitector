@@ -517,11 +517,18 @@ def proxy_claude():
         role = msg.get('role', 'user')
         content = msg.get('content', '')
         if isinstance(content, list):
-            # Anthropic format: [{type: 'text', text: '...'}]
-            text = ' '.join(b.get('text', '') for b in content if b.get('type') == 'text')
+            # Anthropic format → OpenAI format: preserve images + text
+            parts = []
+            for b in content:
+                if b.get('type') == 'text':
+                    parts.append({"type": "text", "text": b.get('text', '')})
+                elif b.get('type') == 'image':
+                    src = b.get('source', {})
+                    if src.get('type') == 'base64':
+                        parts.append({"type": "image_url", "image_url": {"url": f"data:{src.get('media_type','image/jpeg')};base64,{src.get('data','')}"}})
+            openai_msgs.append({"role": role, "content": parts if parts else str(content)})
         else:
-            text = str(content)
-        openai_msgs.append({"role": role, "content": text})
+            openai_msgs.append({"role": role, "content": str(content)})
 
     model = FREE_MODEL
     max_tokens = data.get('max_tokens', 400)
