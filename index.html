@@ -470,7 +470,7 @@ async function checkBackend(){
   console.log('Backend proxy:',_backendOk?'available':'unavailable (direct API mode)');
 }
 
-async function callClaude(msg,sys,maxTok){
+async function callAI(msg,sys,maxTok){
   // ── Prefer backend proxy (key stays server-side) ──────
   if(API_BASE && _backendOk===null) await checkBackend();
   if(API_BASE && _backendOk){
@@ -482,7 +482,7 @@ async function callClaude(msg,sys,maxTok){
         headers:{'Content-Type':'application/json'},
         signal:ctrl.signal,
         body:JSON.stringify({
-          model:'claude-haiku-4-5-20251001',
+          model:'auto',
           max_tokens:maxTok||400,
           system:sys||'Отвечай по-русски.',
           messages:[{role:'user',content:[{type:'text',text:msg}]}]
@@ -1849,7 +1849,7 @@ function clearFile(){
   document.getElementById('filePreview').style.display='none';
   document.getElementById('fileIn').value='';
 }
-// Send image to Claude Vision for building/blueprint analysis
+// Send image to AI Vision for building/blueprint analysis
 async function analyzeImage(b64,mediaType,userText){
   const prompt='Это фото дома или архитектурный чертёж. Верни ТОЛЬКО JSON без markdown: '+
     '{"type":"house|office|cottage|modern","floors":число,"width":метры,"length":метры,'+
@@ -1867,7 +1867,7 @@ async function analyzeImage(b64,mediaType,userText){
       headers:{'Content-Type':'application/json'},
       signal:ctrl.signal,
       body:JSON.stringify({
-        model:'claude-sonnet-4-6',max_tokens:500,
+        model:'auto',max_tokens:500,
         messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:mediaType,data:b64}},
           {type:'text',text:prompt}
@@ -1996,7 +1996,7 @@ async function send(){
       addMsg('a','📄 PDF-чертежи: распознавание размеров и стен (PaddleOCR/Florence-2) выполняется на сервере — см. <code>backend/app/agents</code>. В браузерной демке PDF не анализируется, но вы можете описать здание текстом.');
       return;
     }
-    addThink(['🖼 Анализирую изображение (Claude Vision)…','📐 Определяю тип, материалы, пропорции, кровлю…']);
+    addThink(['🖼 Анализирую изображение (AI Vision)…','📐 Определяю тип, материалы, пропорции, кровлю…']);
     try{
       const vis=await analyzeImage(fb64,mtype,ftext);
       const parsed=parseLocal(ftext||'');
@@ -2026,7 +2026,7 @@ async function send(){
       const parsed=parseLocal(fallbackText);
       const bld=applyParams(ftext||('здание (фото: '+fname+')'),parsed);
       addThink([
-        '⚠️ Claude Vision недоступен: '+e.message,
+        '⚠️ AI Vision недоступен: '+e.message,
         '📝 Использую текстовый анализ имени файла/подписи',
         '🚀 Генерирую базовую модель — уточните детали в чате'
       ]);
@@ -2063,7 +2063,7 @@ async function send(){
     const hasKey=getOpenRouterKey();
     if(hasKey||_backendOk){
       try{
-        const raw=await callClaude(text,
+        const raw=await callAI(text,
           'Извлеки параметры здания. ТОЛЬКО JSON без markdown: {"type":"house|office|cottage|modern","floors":null,"width":null,"length":null,"roof_type":null,"facade_material":null} null=не упомянуто.',
           300);
         const j=JSON.parse(raw.replace(/```json|```/g,'').trim());
@@ -2082,7 +2082,7 @@ async function send(){
     return;
   }
   showTyping();
-  try{const r=await callClaude('Ты архитектурный ИИ. 2 предл.: '+text,'',250);removeTyping();addMsg('a',r);}
+  try{const r=await callAI('Ты архитектурный ИИ. 2 предл.: '+text,'',250);removeTyping();addMsg('a',r);}
   catch(e){removeTyping();addMsg('a','Опишите здание — сразу сгенерирую 3D без вопросов.');}
 }
 

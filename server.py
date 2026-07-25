@@ -1,11 +1,11 @@
 """
 Architect — Full Server
-Serves frontend + proxies Claude API + generates Blender scripts.
+Serves frontend + proxies LLM API + generates Blender scripts.
 
 Endpoints:
     GET  /                           — Web interface
     GET  /api/v1/health              — Health check
-    POST /api/v1/proxy/claude        — Claude API proxy
+    POST /api/v1/proxy/claude        — LLM API proxy
     POST /api/v1/generate/building   — Text → 3D params + bpy script
     POST /api/v1/render/interior     — Interior params → bpy render script
 """
@@ -498,7 +498,7 @@ def health():
 
 @app.route('/api/v1/proxy/claude', methods=['POST'])
 def proxy_claude():
-    """Proxy to OpenRouter (free models). Accepts Anthropic-format, converts to OpenAI format."""
+    """Proxy to OpenRouter free models. Accepts Anthropic-format, converts to OpenAI format."""
     data = request.json or {}
 
     # Convert Anthropic format to OpenAI format
