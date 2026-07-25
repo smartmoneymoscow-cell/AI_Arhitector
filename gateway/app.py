@@ -11,6 +11,10 @@ import httpx
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
+OPENROUTER_KEY = ***"OPENROUTER_API_KEY", "")
+OPENROUTER_BASE = "https://openrouter.ai/api/v1"
+LLM_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
+
 app = Flask(__name__)
 CORS(app)
 
@@ -35,23 +39,26 @@ def health():
 
 @app.route("/api/v1/proxy/claude", methods=["POST"])
 def proxy_claude():
-    """Проксирует LLM-запросы к LLM Service."""
+    """LLM proxy — calls OpenRouter directly."""
     data = request.json or {}
+    messages = data.get("messages", [])
+    max_tokens = data.get("max_tokens", 400)
+
+    headers = {"Content-Type": "application/json", "HTTP-Referer": "https://archai.app", "X-Title": "Architect"}
+    if OPENROUTER_KEY:
+        headers["Authorization"] = f"Bearer {OPENROUTER_KEY}"
+
     try:
         r = httpx.post(
-            f"{LLM_SERVICE}/api/v1/chat/completions",
-            json=data,
+            f"{OPENROUTER_BASE}/chat/completions",
+            headers=headers,
+            json={"model": LLM_MODEL, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7},
             timeout=60.0,
         )
         if r.status_code == 200:
-            result = r.json()
-            choices = result.get("choices", [])
-            if choices:
-                content = choices[0].get("message", {}).get("content", "")
-            else:
-                content = ""
-            return jsonify({"content": [{"type": "text", "text": content or ""}]}), 200
-        return jsonify({"error": r.text}), r.status_code
+            text = r.json()["choices"][0]["message"]["content"]
+            return jsonify({"content": [{"type": "text", "text": text or ""}]}), 200
+        return jsonify({"error": str(r.text)}), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
