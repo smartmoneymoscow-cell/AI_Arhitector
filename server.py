@@ -25,8 +25,8 @@ from flask_cors import CORS
 OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 # Free models on OpenRouter
-FREE_MODEL = "nvidia/nemotron-nano-9b-v2:free"  # best free model for structured output
-FREE_MODEL_FAST = "google/gemma-4-31b-it:free"  # fast free model
+FREE_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"  # best free model for structured output
+FREE_MODEL_FAST = "nvidia/nemotron-3-nano-30b-a3b:free"  # fast free model
 PORT = int(os.environ.get("PORT", 8080))
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__))
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
