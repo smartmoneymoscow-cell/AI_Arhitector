@@ -40,10 +40,24 @@ def health():
 
 @app.route("/api/v1/proxy/claude", methods=["POST"])
 def proxy_claude():
-    """LLM proxy — calls monolith."""
+    """LLM proxy — calls OpenRouter directly."""
+    data = request.json or {}
+    messages = data.get("messages", [])
+    max_tokens = data.get("max_tokens", 400)
+    headers = {"Content-Type": "application/json", "HTTP-Referer": "https://archai.app", "X-Title": "Architect"}
+    if OPENROUTER_KEY:
+        ***"Authorization"] = f"Bearer {OPENROUTER_KEY}"
     try:
-        r = httpx.post(f"{LLM_SERVICE}/api/v1/proxy/claude", json=request.json, timeout=60.0)
-        return r.content, r.status_code, {"Content-Type": "application/json"}
+        r = httpx.post(
+            f"{OPENROUTER_BASE}/chat/completions",
+            headers=headers,
+            json={"model": LLM_MODEL, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7},
+            timeout=60.0,
+        )
+        if r.status_code == 200:
+            text = r.json()["choices"][0]["message"]["content"]
+            return jsonify({"content": [{"type": "text", "text": text or ""}]}), 200
+        return jsonify({"error": str(r.text)}), r.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
