@@ -1,12 +1,15 @@
 services:
   - type: web
-    name: architect-webservice
-    runtime: python
-    region: singapore
+    name: architect
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: oregon
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python server.py
     healthCheckPath: /api/v1/health
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.11"
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: PORT
+        value: "8080"
+      - key: BLENDER_PATH
+        value: "blender"
