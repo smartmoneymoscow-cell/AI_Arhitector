@@ -14,7 +14,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-LLM_SERVICE = os.environ.get("LLM_SERVICE_URL", "http://localhost:8081")
+LLM_SERVICE = os.environ.get("LLM_SERVICE_URL", "https://architect-zpif.onrender.com")
 BLENDER_SERVICE = os.environ.get("BLENDER_SERVICE_URL", "http://localhost:8082")
 FRONTEND_DIR = os.environ.get("FRONTEND_DIR", os.path.join(os.path.dirname(__file__), "..", "frontend"))
 
