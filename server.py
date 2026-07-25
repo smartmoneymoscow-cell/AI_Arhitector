@@ -653,7 +653,7 @@ def render_interior():
             "\nbpy.context.scene.render.filepath = r'" + output_file + "'"
             "\nbpy.context.scene.render.engine = 'CYCLES'"
             "\nbpy.context.scene.cycles.device = 'CPU'"
-            "\nbpy.context.scene.cycles.samples = 16"
+            "\nbpy.context.scene.cycles.samples = 4"
             "\nbpy.context.scene.cycles.use_denoising = False"
             "\nbpy.context.scene.use_nodes = False"
             "\nbpy.context.scene.render.resolution_x = 1024"
