@@ -18,7 +18,8 @@ LLM_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 app = Flask(__name__)
 CORS(app)
 
-LLM_SERVICE = os.environ.get("LLM_SERVICE_URL", "https://architect-zpif.onrender.com")
+MONOLITH_URL = os.environ.get("MONOLITH_URL", "https://architect-zpif.onrender.com")
+LLM_SERVICE = MONOLITH_URL
 BLENDER_SERVICE = os.environ.get("BLENDER_SERVICE_URL", "http://localhost:8082")
 FRONTEND_DIR = os.environ.get("FRONTEND_DIR", os.path.join(os.path.dirname(__file__), "..", "frontend"))
 
@@ -39,26 +40,10 @@ def health():
 
 @app.route("/api/v1/proxy/claude", methods=["POST"])
 def proxy_claude():
-    """LLM proxy — calls OpenRouter directly."""
-    data = request.json or {}
-    messages = data.get("messages", [])
-    max_tokens = data.get("max_tokens", 400)
-
-    headers = {"Content-Type": "application/json", "HTTP-Referer": "https://archai.app", "X-Title": "Architect"}
-    if OPENROUTER_KEY:
-        headers["Authorization"] = f"Bearer {OPENROUTER_KEY}"
-
+    """LLM proxy — calls monolith."""
     try:
-        r = httpx.post(
-            f"{OPENROUTER_BASE}/chat/completions",
-            headers=headers,
-            json={"model": LLM_MODEL, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7},
-            timeout=60.0,
-        )
-        if r.status_code == 200:
-            text = r.json()["choices"][0]["message"]["content"]
-            return jsonify({"content": [{"type": "text", "text": text or ""}]}), 200
-        return jsonify({"error": str(r.text)}), r.status_code
+        r = httpx.post(f"{LLM_SERVICE}/api/v1/proxy/claude", json=request.json, timeout=60.0)
+        return r.content, r.status_code, {"Content-Type": "application/json"}
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
