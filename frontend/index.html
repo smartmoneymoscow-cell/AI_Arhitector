@@ -113,11 +113,14 @@ body{display:flex;flex-direction:column}
 <div id="sb-overlay" onclick="toggleSB()" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.4);z-index:39"></div>
 <div class="top">
   <button id="mob-btn" onclick="toggleSB()" style="display:none;width:32px;height:32px;border-radius:8px;border:none;background:transparent;cursor:pointer;font-size:18px;margin-right:8px">☰</button>
-  <div style="display:flex;align-items:center;gap:12px">
-    <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;cursor:pointer">A</div>
-    <div class="logo" style="font-size:15px;font-weight:600">Architect</div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="logo" style="font-size:15px;font-weight:600">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;vertical-align:middle">A</span>
+      Architect
+    </div>
   </div>
   <div style="display:flex;gap:6px;align-items:center">
+    <button class="btn" onclick="openSettings()" style="font-size:13px;padding:6px 10px;border-radius:8px" title="Настройки">⚙️</button>
     <button class="btn" onclick="newProj()" style="font-size:12px;padding:6px 12px;border-radius:8px">+ Новый</button>
     <button class="btn btn-p" onclick="showExp()" style="font-size:12px;padding:6px 12px;border-radius:8px">↓ Экспорт</button>
   </div>
@@ -219,6 +222,30 @@ body{display:flex;flex-direction:column}
   </div>
 </div>
 <div class="notif" id="notif"></div>
+
+<!-- SETTINGS MODAL -->
+<div id="settings-modal" style="display:none;position:fixed;inset:0;z-index:300;background:rgba(15,23,42,.5);backdrop-filter:blur(4px);">
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg2);border-radius:16px;padding:28px;width:420px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.2);border:1px solid var(--bdr)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:16px;font-weight:700">⚙️ Настройки</div>
+      <button onclick="closeSettings()" style="width:28px;height:28px;border-radius:50%;border:none;background:var(--bg3);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;font-weight:600;color:var(--txt2);display:block;margin-bottom:6px">OpenRouter API Key</label>
+      <input id="settings-key" type="password" placeholder="sk-or-v1-..." style="width:100%;padding:10px 14px;border:1px solid var(--bdr);border-radius:10px;font-size:13px;font-family:monospace;background:var(--bg);color:var(--txt);outline:none;transition:border .15s" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='var(--bdr)'"/>
+      <div style="font-size:11px;color:var(--txt2);margin-top:6px;line-height:1.5">Ключ от <a href="https://openrouter.ai/keys" target="_blank" style="color:#6366f1">openrouter.ai/keys</a>. Бесплатные модели работают без баланса, но ключ обязателен.</div>
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:12px;font-weight:600;color:var(--txt2);display:block;margin-bottom:6px">Backend URL <span style="font-weight:400;color:var(--txt2)">(опционально)</span></label>
+      <input id="settings-backend" type="text" placeholder="http://localhost:8080" style="width:100%;padding:10px 14px;border:1px solid var(--bdr);border-radius:10px;font-size:13px;font-family:monospace;background:var(--bg);color:var(--txt);outline:none;transition:border .15s" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='var(--bdr)'"/>
+      <div style="font-size:11px;color:var(--txt2);margin-top:6px">Если запущен server.py — укажите адрес для Blender-рендеринга.</div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="closeSettings()" style="padding:8px 16px;font-size:12px">Отмена</button>
+      <button class="btn btn-p" onclick="saveSettings()" style="padding:8px 16px;font-size:12px">💾 Сохранить</button>
+    </div>
+  </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js">
 
@@ -421,7 +448,10 @@ function toggleMic() {
 const API_BASE = (()=>{
   const proto = window.location.protocol;
   if(proto === 'file:') return null;  // standalone mode
-  return window.location.origin;      // same-origin backend (will be tested on load)
+  // Check localStorage for custom backend URL
+  const stored = localStorage.getItem('archai_backend_url');
+  if(stored) return stored.replace(/\/+$/,'');
+  return window.location.origin;      // same-origin backend
 })();
 let _backendOk = null; // null = not checked yet
 
@@ -458,9 +488,9 @@ async function callClaude(msg,sys,maxTok){
     }catch(e){console.warn('Proxy failed, trying direct API:',e.message);}
   }
   // ── Standalone fallback: OpenRouter free models ─────────
-  const key='';
-  const orHeaders={'Content-Type':'application/json','HTTP-Referer':'https://archai.app','X-Title':'Architect'};
-  if(key) orHeaders['Authorization']='Bearer '+key;
+  const key=getOpenRouterKey();
+  if(!key) throw new Error('Нет API ключа. Откройте ⚙️ Настройки и введите OpenRouter API key.');
+  const orHeaders={'Content-Type':'application/json','HTTP-Referer':'https://archai.app','X-Title':'Architect','Authorization':'Bearer '+key};
   const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
     method:'POST',
     headers:orHeaders,
@@ -1834,9 +1864,9 @@ async function analyzeImage(b64,mediaType,userText){
     }catch(e){console.warn('Vision proxy failed:',e.message);}
   }
   // Standalone fallback — OpenRouter free model
-  const key='';
-  const orHeaders={'Content-Type':'application/json','HTTP-Referer':'https://archai.app','X-Title':'Architect'};
-  if(key) orHeaders['Authorization']='Bearer '+key;
+  const key=getOpenRouterKey();
+  if(!key) throw new Error('Нет API ключа для анализа изображений. Откройте ⚙️ Настройки.');
+  const orHeaders={'Content-Type':'application/json','HTTP-Referer':'https://archai.app','X-Title':'Architect','Authorization':'Bearer '+key};
   const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
     method:'POST',
     headers:orHeaders,
@@ -1990,6 +2020,11 @@ async function send(){
   }
 
   if(!text){return;}
+  // Check API key availability
+  if(!getOpenRouterKey() && (!_backendOk)){
+    addMsg('a','⚠️ <b>API ключ не настроен.</b> Нажмите <b>⚙️ Настройки</b> вверху и введите OpenRouter API ключ для работы чата.');
+    return;
+  }
   // Hide welcome screen
   const welcome = document.querySelector('#tab-chat > div[style*="justify-content:center"]');
   if(welcome) welcome.style.display='none';
@@ -2616,6 +2651,36 @@ function toggleMic() {
   };
 
   recognition.start();
+}
+
+// ═══════════════════ SETTINGS ═══════════════════════════════
+function openSettings(){
+  const m=document.getElementById('settings-modal');
+  if(!m) return;
+  document.getElementById('settings-key').value=localStorage.getItem('archai_openrouter_key')||'';
+  document.getElementById('settings-backend').value=localStorage.getItem('archai_backend_url')||'';
+  m.style.display='block';
+}
+function closeSettings(){
+  const m=document.getElementById('settings-modal');
+  if(m) m.style.display='none';
+}
+function saveSettings(){
+  const key=document.getElementById('settings-key').value.trim();
+  const backend=document.getElementById('settings-backend').value.trim();
+  if(key) localStorage.setItem('archai_openrouter_key',key);
+  else localStorage.removeItem('archai_openrouter_key');
+  if(backend) localStorage.setItem('archai_backend_url',backend.replace(/\/+$/,''));
+  else localStorage.removeItem('archai_backend_url');
+  _backendOk=null;
+  closeSettings();
+  showNotif('✅ Настройки сохранены');
+}
+function getOpenRouterKey(){
+  return localStorage.getItem('archai_openrouter_key')||'';
+}
+function getBackendUrl(){
+  return localStorage.getItem('archai_backend_url')||'';
 }
 
 </script>
