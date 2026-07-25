@@ -1,9 +1,9 @@
 FROM debian:bookworm-slim
 
-# Install Python + Blender + display libs
+# Install Python + Blender + numpy + display libs
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-venv \
+    python3 python3-pip python3-venv python3-numpy \
     blender \
     xvfb \
     libgl1-mesa-glx \
@@ -16,23 +16,18 @@ RUN apt-get update && \
 # Symlink python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
-# FIX: Blender bundles broken numpy in freestyle. Remove it and install working one.
-# Find Blender's numpy path and replace it.
-RUN BLENDER_NUMPY=$(find /usr/share/blender -path "*/freestyle/modules/numpy" -type d 2>/dev/null | head -1) && \
-    echo "Blender's broken numpy at: $BLENDER_NUMPY" && \
-    if [ -n "$BLENDER_NUMPY" ]; then \
-        rm -rf "$BLENDER_NUMPY" && \
-        echo "Removed broken numpy"; \
-    fi && \
-    # Also remove any other bundled numpy
+# Remove Blender's broken bundled numpy, replace with system numpy
+RUN echo "--- Cleaning Blender numpy ---" && \
+    find /usr/share/blender -name "numpy" -type d 2>/dev/null && \
     find /usr/share/blender -name "numpy" -type d -exec rm -rf {} + 2>/dev/null; \
-    # Install working numpy into Blender's freestyle/modules (where it expects it)
-    pip3 install --break-system-packages numpy --target=/tmp/numpy_pkg && \
+    echo "--- Copying system numpy ---" && \
+    SYS_NUMPY=$(python3 -c "import numpy; import os; print(os.path.dirname(numpy.__file__))") && \
+    echo "System numpy at: $SYS_NUMPY" && \
     BLENDER_MODULES="/usr/share/blender/scripts/freestyle/modules" && \
     mkdir -p "$BLENDER_MODULES" && \
-    cp -r /tmp/numpy_pkg/numpy "$BLENDER_MODULES/" && \
-    echo "Installed working numpy to $BLENDER_MODULES" && \
-    rm -rf /tmp/numpy_pkg
+    cp -r "$SYS_NUMPY" "$BLENDER_MODULES/" && \
+    echo "Copied numpy to $BLENDER_MODULES" && \
+    python3 -c "import sys; sys.path.insert(0,'$BLENDER_MODULES'); import numpy; print('OK:', numpy.__version__)"
 
 WORKDIR /app
 
