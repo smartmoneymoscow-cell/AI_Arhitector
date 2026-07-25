@@ -667,6 +667,7 @@ def render_interior():
             [blender, '--background', '--factory-startup', '--log-level', '0', '--python', script_path],
             capture_output=True, text=True, timeout=300, env={**os.environ, 'DISPLAY': ':99'}
         )
+        combined_log = (result.stdout or '') + '\n---STDERR---\n' + (result.stderr or '')
     except Exception as e:
         return jsonify({"error": f"Blender failed: {e}"}), 500
     finally:
@@ -675,7 +676,7 @@ def render_interior():
 
     if os.path.exists(output_file):
         return send_file(output_file, as_attachment=True, download_name=f"archai_interior_{job_id}.png")
-    return jsonify({"error": "Render failed", "stderr": result.stderr[-1000:]}), 500
+    return jsonify({"error": "Render failed", "log": combined_log[-2000:]}), 500
 
 
 # ═══════════════════════════════════════════════════════════════
