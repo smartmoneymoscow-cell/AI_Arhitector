@@ -1,13 +1,20 @@
 FROM python:3.11-slim
 
-# Install Blender + Xvfb (headless rendering)
+# Install Blender + Xvfb + system deps
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     blender \
     xvfb \
+    libgl1-mesa-glx \
+    libxi6 \
+    libxrender1 \
+    libxxf86vm1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Verify Blender installed
+# Blender's glTF exporter needs numpy
+RUN pip install --no-cache-dir numpy
+
+# Verify Blender
 RUN blender --version
 
 WORKDIR /app
