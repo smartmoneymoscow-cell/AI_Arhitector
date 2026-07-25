@@ -365,26 +365,31 @@ async function testVoiceInput() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TEST 4: NO API KEY → ERROR, NO CRASH
+// TEST 4: NO API KEY → STILL GENERATES (local parse only)
 // ═══════════════════════════════════════════════════════════════
 async function testNoApiKey() {
-  section('TEST 4: No API Key → Helpful Error');
+  section('TEST 4: No API Key → Still Generates (local parse)');
 
   const env = createEnv();
-  // No key set
+  // Do NOT set API key
 
   const ctx = injectApp(env);
   assert(ctx !== null, 'App code injected');
   if (!ctx) return;
 
-  env.elements['ci'].value = 'дом 2 этажа';
+  env.elements['ci'].value = 'дом 2 этажа кирпич 10×12';
 
-  ctx.send();
+  try { await ctx.send(); } catch(e) {}
   await new Promise(r => setTimeout(r, 100));
 
-  const err = env.log.msgLog.find(m => m.html && m.html.includes('API ключ'));
-  assert(err !== undefined, 'API key error shown');
-  assert(env.log.genCalls.length === 0, 'No generation without key');
+  // Should generate via local parse, NOT block with error
+  assert(env.log.genCalls.length > 0, `Generation works without API key (${env.log.genCalls.length}x)`);
+  if (env.log.genCalls.length > 0) {
+    assert(env.log.genCalls[0].floors === 2, `Floors from local parse: ${env.log.genCalls[0].floors}`);
+    assert(env.log.genCalls[0].W === 10, `Width from local parse: ${env.log.genCalls[0].W}`);
+  }
+  // Should NOT show 'API key' error
+  assert(!env.log.msgLog.some(m => m.html && m.html.includes('API ключ')), 'No API key error for building request');
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -2020,11 +2020,6 @@ async function send(){
   }
 
   if(!text){return;}
-  // Check API key availability
-  if(!getOpenRouterKey() && (!_backendOk)){
-    addMsg('a','⚠️ <b>API ключ не настроен.</b> Нажмите <b>⚙️ Настройки</b> вверху и введите OpenRouter API ключ для работы чата.');
-    return;
-  }
   // Hide welcome screen
   const welcome = document.querySelector('#tab-chat > div[style*="justify-content:center"]');
   if(welcome) welcome.style.display='none';
@@ -2032,7 +2027,7 @@ async function send(){
   const qpbar = document.getElementById('qpbar');
   if(qpbar) qpbar.style.display='flex';
   addMsg('u',text);if(inp)inp.value='';
-  // Building request
+  // Building request — local parse is guaranteed, LLM is optional enhancement
   if(BUILD_RE.test(text)||text.length>6){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🧠 Извлекаю параметры…']);
     
@@ -2040,24 +2035,31 @@ async function send(){
     const serverOk = await generateViaBlenderServer(text);
     if(serverOk) return;
     
-    // Fall back to local Three.js generation
-    addThink(['🖥 Сервер недоступен — генерирую локально…']);
-    // Parse locally first (guaranteed, instant)
+    // Parse locally first (guaranteed, instant, no API needed)
     let parsed=parseLocal(text);
-    // Try Claude API for better accuracy (non-blocking)
-    try{
-      const raw=await callClaude(text,
-        'Извлеки параметры здания. ТОЛЬКО JSON без markdown: {"type":"house|office|cottage|modern","floors":null,"width":null,"length":null,"roof_type":null,"facade_material":null} null=не упомянуто.',
-        300);
-      const j=JSON.parse(raw.replace(/```json|```/g,'').trim());
-      Object.entries(j).forEach(([k,v])=>{if(v!==null&&v!==undefined)parsed[k]=v;});
-    }catch(e){/* use local parse */}
+    
+    // Try LLM for better accuracy (non-blocking, optional)
+    const hasKey=getOpenRouterKey();
+    if(hasKey||_backendOk){
+      try{
+        const raw=await callClaude(text,
+          'Извлеки параметры здания. ТОЛЬКО JSON без markdown: {"type":"house|office|cottage|modern","floors":null,"width":null,"length":null,"roof_type":null,"facade_material":null} null=не упомянуто.',
+          300);
+        const j=JSON.parse(raw.replace(/```json|```/g,'').trim());
+        Object.entries(j).forEach(([k,v])=>{if(v!==null&&v!==undefined)parsed[k]=v;});
+      }catch(e){console.warn('LLM fallback, using local parse:',e.message);}
+    }
     const bld=applyParams(text,parsed);
     addThink(['✅ '+bld.label,'📐 '+bld.W+'×'+bld.L+'м | '+bld.floors+' эт. | '+bld.mat,'🚀 Генерирую 3D…']);
     setTimeout(()=>startGen(bld),300);
     return;
   }
-  // General chat
+  // General chat — needs API key
+  const hasKey=getOpenRouterKey();
+  if(!hasKey&&!_backendOk){
+    addMsg('a','Опишите здание (например «дом 2 этажа кирпич 10×12») — сгенерирую 3D без API ключа. Для AI-диалога нажмите ⚙️ и введите ключ.');
+    return;
+  }
   showTyping();
   try{const r=await callClaude('Ты архитектурный ИИ. 2 предл.: '+text,'',250);removeTyping();addMsg('a',r);}
   catch(e){removeTyping();addMsg('a','Опишите здание — сразу сгенерирую 3D без вопросов.');}
