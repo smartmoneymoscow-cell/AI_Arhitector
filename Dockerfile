@@ -16,13 +16,22 @@ RUN apt-get update && \
 # Symlink python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
-# Install numpy into Blender's Python modules path
-RUN pip3 install --break-system-packages numpy --target=/tmp/numpy_pkg && \
-    BLENDER_MODULES=$(find /usr/share/blender -name "modules" -type d 2>/dev/null | head -1) && \
-    echo "Blender modules dir: $BLENDER_MODULES" && \
-    if [ -n "$BLENDER_MODULES" ]; then \
-        cp -r /tmp/numpy_pkg/numpy "$BLENDER_MODULES/"; \
+# FIX: Blender bundles broken numpy in freestyle. Remove it and install working one.
+# Find Blender's numpy path and replace it.
+RUN BLENDER_NUMPY=$(find /usr/share/blender -path "*/freestyle/modules/numpy" -type d 2>/dev/null | head -1) && \
+    echo "Blender's broken numpy at: $BLENDER_NUMPY" && \
+    if [ -n "$BLENDER_NUMPY" ]; then \
+        rm -rf "$BLENDER_NUMPY" && \
+        echo "Removed broken numpy"; \
     fi && \
+    # Also remove any other bundled numpy
+    find /usr/share/blender -name "numpy" -type d -exec rm -rf {} + 2>/dev/null; \
+    # Install working numpy into Blender's freestyle/modules (where it expects it)
+    pip3 install --break-system-packages numpy --target=/tmp/numpy_pkg && \
+    BLENDER_MODULES="/usr/share/blender/scripts/freestyle/modules" && \
+    mkdir -p "$BLENDER_MODULES" && \
+    cp -r /tmp/numpy_pkg/numpy "$BLENDER_MODULES/" && \
+    echo "Installed working numpy to $BLENDER_MODULES" && \
     rm -rf /tmp/numpy_pkg
 
 WORKDIR /app
