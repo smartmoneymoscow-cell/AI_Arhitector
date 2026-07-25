@@ -2564,10 +2564,6 @@ let typEl=null;
 function showTyping(){const area=document.getElementById('tab-chat');if(!area)return;typEl=document.createElement('div');typEl.id='typ';typEl.className='msg a';typEl.innerHTML='<div class="mmeta"><div class="av">A</div></div><div class="dots"><div class="d"></div><div class="d"></div><div class="d"></div></div>';area.appendChild(typEl);area.scrollTop=area.scrollHeight;}
 function removeTyping(){const t=document.getElementById('typ');if(t)t.remove();typEl=null;}
 
-
-).value||'';
-  const model=(document.getElementById('model-select')||{}).value||'google/gemma-4-31b-it:free';
-  if(!v || v.startsWith('sk-or-')){
 window.addEventListener('DOMContentLoaded',()=>{
   try{ initThree(); loadHDRI("day"); }catch(e){console.error('initThree failed:',e);} checkMobile(); checkBackend();
   // Welcome screen is in HTML, no need to add message
