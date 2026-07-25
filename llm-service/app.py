@@ -27,7 +27,7 @@ def chat_completions():
     temperature = data.get("temperature", 0.7)
     model = data.get("model", MODEL)
 
-    headers = {"Content-Type": "application/json", "HTTP-Referer": "https://archai.app", "X-Title": "Architect LLM"}
+    headers = {"Content-Type": "application/json; charset=utf-8", "HTTP-Referer": "https://archai.app", "X-Title": "Architect LLM"}
     if OR_KEY:
         headers["Authorization"] = f"Bearer {OR_KEY}"
 
