@@ -2,6 +2,7 @@
 LLM Microservice — proxy to OpenRouter
 """
 import os
+import json
 import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -32,10 +33,11 @@ def chat_completions():
         headers["Authorization"] = f"Bearer {OR_KEY}"
 
     try:
+        payload = json.dumps({"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}, ensure_ascii=False)
         r = requests.post(
             f"{OR_BASE}/chat/completions",
             headers=headers,
-            json={"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": temperature},
+            data=payload.encode("utf-8"),
             timeout=60,
         )
         r.encoding = "utf-8"
