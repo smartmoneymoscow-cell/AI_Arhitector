@@ -2,7 +2,7 @@
 API Gateway
 """
 import os
-import httpx
+import requests
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
@@ -23,7 +23,7 @@ OR_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 def health():
     services = {"blender": "unknown"}
     try:
-        r = httpx.get(f"{BLENDER_SVC}/health", timeout=5.0)
+        r = requests.get(f"{BLENDER_SVC}/health", timeout=5)
         services["blender"] = "ok" if r.status_code == 200 else "error"
     except:
         services["blender"] = "unreachable"
@@ -39,7 +39,7 @@ def proxy_claude():
     if OR_KEY:
         headers["Authorization"] = f"Bearer {OR_KEY}"
     try:
-        r = httpx.post(
+        r = requests.post(
             f"{OR_BASE}/chat/completions",
             headers=headers,
             json={"model": OR_MODEL, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7},
@@ -64,7 +64,7 @@ def proxy_claude():
 @app.route("/api/v1/generate/building", methods=["POST"])
 def generate_building():
     try:
-        r = httpx.post(f"{BLENDER_SVC}/api/v1/generate/building", json=request.json, timeout=120.0)
+        r = requests.post(f"{BLENDER_SVC}/api/v1/generate/building", json=request.json, timeout=120)
         if r.status_code == 200:
             return r.content, 200, {"Content-Type": "model/gltf-binary"}
         return jsonify(r.json()), r.status_code
@@ -75,7 +75,7 @@ def generate_building():
 @app.route("/api/v1/render/interior", methods=["POST"])
 def render_interior():
     try:
-        r = httpx.post(f"{BLENDER_SVC}/api/v1/render/interior", json=request.json, timeout=300.0)
+        r = requests.post(f"{BLENDER_SVC}/api/v1/render/interior", json=request.json, timeout=300)
         if r.status_code == 200:
             return r.content, 200, {"Content-Type": "image/png"}
         return jsonify(r.json()), r.status_code
