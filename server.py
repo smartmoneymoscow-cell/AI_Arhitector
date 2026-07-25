@@ -341,8 +341,10 @@ def make_mat(name, color, rough=0.8, emit=0.0):
         bsdf.inputs["Base Color"].default_value = (*color, 1.0)
         bsdf.inputs["Roughness"].default_value = rough
         if emit > 0:
-            bsdf.inputs["Emission Color"].default_value = (*color, 1.0)
-            bsdf.inputs["Emission Strength"].default_value = emit
+            try: bsdf.inputs["Emission Color"].default_value = (*color, 1.0)
+            except: bsdf.inputs["Emission"].default_value = (*color, 1.0)
+            try: bsdf.inputs["Emission Strength"].default_value = emit
+            except: pass
     return mat
 
 wall_mat = make_mat("Wall", {sc['wall']}, 0.9)
