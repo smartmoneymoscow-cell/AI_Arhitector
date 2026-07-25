@@ -3,9 +3,18 @@ LLM Microservice — прокси к OpenRouter
 Эндпоинт: POST /api/v1/chat/completions
 """
 import os
+import sys
 import httpx
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+
+# Force UTF-8 encoding
+import locale
+try:
+    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+except:
+    pass
+os.environ['PYTHONIOENCODING'] = 'utf-8
 
 app = Flask(__name__)
 CORS(app)
