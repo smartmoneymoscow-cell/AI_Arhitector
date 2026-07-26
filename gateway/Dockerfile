@@ -9,8 +9,9 @@ ENV LC_ALL=en_US.UTF-8
 ENV PYTHONIOENCODING=utf-8
 
 WORKDIR /app
-COPY requirements.txt .
+COPY gateway/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
+COPY gateway/ ./gateway/
+COPY frontend/ ./frontend/
 EXPOSE 8080
-CMD ["python", "-X", "utf8", "app.py"]
+CMD ["python", "-X", "utf8", "gateway/app.py"]
