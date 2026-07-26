@@ -247,7 +247,7 @@ body{display:flex;flex-direction:column}
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js">
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js">
 
 
 
@@ -311,7 +311,7 @@ function toggleMic() {
 }
 
 </script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/RGBELoader.js">
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/RGBELoader.js">
 
 
 
@@ -375,7 +375,7 @@ function toggleMic() {
 }
 
 </script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js">
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js">
 
 
 
@@ -454,7 +454,7 @@ const API_BASE = (()=>{
   // Auto-detect: if on GitHub Pages, use Render backend
   const origin = window.location.origin;
   if(origin.includes('github.io') || origin.includes('githubusercontent.com'))
-    return 'https://architect-gateway.onrender.com';
+    return 'https://architect-zpif.onrender.com';
   return origin;      // same-origin backend
 })();
 let _backendOk = null; // null = not checked yet
@@ -768,7 +768,7 @@ function initThree(){
   renderer.setClearColor(0xb0bcc8,1);
   renderer.toneMapping=THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure=1.2;
-  try{renderer.outputColorSpace=THREE.SRGBColorSpace;}catch(e){}
+  try{renderer.outputColorSpace=THREE.SRGBColorSpace;}catch(e){try{renderer.outputEncoding=THREE.sRGBEncoding;}catch(e2){}}
   scene=new THREE.Scene();
   scene.fog=new THREE.Fog(0xb0bcc8,80,220);
   // Lighting
