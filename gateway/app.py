@@ -12,7 +12,9 @@ CORS(app)
 BLENDER_SVC = os.environ.get("BLENDER_SERVICE_URL", "http://localhost:8082")
 LLM_SVC = os.environ.get("LLM_SERVICE_URL", "https://ai-arch-llmproxy.onrender.com")
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
-# Docker fallback: if ../frontend doesn't exist, try /app/frontend
+# Docker: try /app/frontend if relative path doesn't work
+if not os.path.isdir(FRONTEND_DIR):
+    FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend")
 if not os.path.isdir(FRONTEND_DIR):
     FRONTEND_DIR = os.path.join("/", "app", "frontend")
 

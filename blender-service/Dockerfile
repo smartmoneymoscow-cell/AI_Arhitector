@@ -9,9 +9,9 @@ RUN SYS_NUMPY=$(python3 -c "import numpy,os;print(os.path.dirname(numpy.__file__
     BLENDER_MODULES="/usr/share/blender/scripts/freestyle/modules" && \
     mkdir -p "$BLENDER_MODULES" && cp -r "$SYS_NUMPY" "$BLENDER_MODULES/"
 WORKDIR /app
-COPY blender-service/requirements.txt .
+COPY requirements.txt .
 RUN pip3 install --break-system-packages -r requirements.txt
-COPY blender-service/ .
+COPY . .
 RUN mkdir -p output
 EXPOSE 8082
 CMD ["sh", "-c", "Xvfb :99 -screen 0 1024x768x24 &>/dev/null & export DISPLAY=:99 && exec python3 app.py"]

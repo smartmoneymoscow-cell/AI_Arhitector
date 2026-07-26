@@ -4,7 +4,6 @@ services:
     name: architect-gateway
     runtime: docker
     dockerfilePath: ./gateway/Dockerfile
-    rootDir: .
     region: oregon
     plan: free
     healthCheckPath: /health
@@ -21,7 +20,6 @@ services:
     name: architect-llm
     runtime: docker
     dockerfilePath: ./llm-service/Dockerfile
-    rootDir: .
     region: oregon
     plan: free
     healthCheckPath: /health
@@ -36,7 +34,6 @@ services:
     name: architect-blender
     runtime: docker
     dockerfilePath: ./blender-service/Dockerfile
-    rootDir: .
     region: oregon
     plan: free
     healthCheckPath: /health
