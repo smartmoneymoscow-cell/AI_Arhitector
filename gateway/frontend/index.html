@@ -1661,7 +1661,7 @@ async function generateViaBlenderServer(prompt) {
     addThink(['🖥 Запрос к Blender серверу…']);
     
     const ctrl = new AbortController();
-    setTimeout(()=>ctrl.abort(), 60000); // 60s for Blender generation
+    setTimeout(()=>ctrl.abort(), 15000); // 15s timeout - fall back to Three.js fast
     
     const r = await fetch(API_BASE + '/api/v1/generate/building', {
       method: 'POST',
@@ -1744,7 +1744,7 @@ async function renderInteriorViaServer(prompt, style, furniture) {
   try {
     addThink(['🖥 Запрос к Blender серверу (интерьер)…']);
     const ctrl = new AbortController();
-    setTimeout(()=>ctrl.abort(), 180000); // 3 min for interior render
+    setTimeout(()=>ctrl.abort(), 15000); // 15s timeout
     const r = await fetch(API_BASE + '/api/v1/render/interior', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -2113,11 +2113,16 @@ async function send(){
   if(INTERIOR_RE.test(text)){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🛋 Определяю параметры интерьера…']);
     const ip = parseInteriorParams(text);
-    addThink(['✅ Стиль: '+ip.style+' | Мебель: '+ip.furniture.join(', '),'🖥 Генерирую интерьер через Blender…']);
+    addThink(['✅ Стиль: '+ip.style+' | Мебель: '+ip.furniture.join(', '),'🖥 Генерирую интерьер…']);
     const ok = await renderInteriorViaServer(text, ip.style, ip.furniture);
     if(ok) return;
-    // Fallback: show in chat
-    addMsg('a','⚠️ Сервер рендера интерьера недоступен. Проверьте настройки Backend URL (⚙️).');
+    // Fallback: generate room via Three.js
+    addThink(['⚠️ Blender недоступен, генерирую интерьер в браузере…']);
+    let parsed=parseLocal('дом 1 этаж 6x8');
+    parsed.type='house';
+    const bld=applyParams(text,parsed);
+    bld.label='Интерьер: '+ip.style;
+    setTimeout(()=>startGen(bld),300);
     return;
   }
 
