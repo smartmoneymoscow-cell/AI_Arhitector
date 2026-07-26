@@ -219,6 +219,15 @@ door = bpy.context.active_object
 door.name = "Door"
 door.scale = (0.5, 0.04, 1.1)
 door.data.materials.append(door_mat)
+
+# Join all building parts into one object
+bpy.ops.object.select_all(action='DESELECT')
+for obj in bpy.data.objects:
+    if obj.name not in ('Ground','Camera','Sun') and obj.type=='MESH':
+        obj.select_set(True)
+bpy.context.view_layer.objects.active = bpy.data.objects.get('Foundation')
+bpy.ops.object.join()
+bpy.context.active_object.name = 'Building'
 '''
 
     # Balcony

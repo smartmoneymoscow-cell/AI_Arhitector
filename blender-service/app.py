@@ -110,6 +110,13 @@ elif "{roof_type}"=="flat":
     bpy.ops.object.transform_apply(scale=True);roof.data.materials.append(roof_mat)
 bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2-thick/2-0.01,1.1))
 door=bpy.context.active_object;door.name="Door";door.scale=(0.5,0.04,1.1);door.data.materials.append(door_mat)
+bpy.ops.object.select_all(action='DESELECT')
+for obj in bpy.data.objects:
+    if obj.name not in ('Ground','Camera','Sun') and obj.type=='MESH':
+        obj.select_set(True)
+bpy.context.view_layer.objects.active=bpy.data.objects.get('Foundation')
+bpy.ops.object.join()
+bpy.context.active_object.name='Building'
 '''
     if has_balcony:
         script += '''
