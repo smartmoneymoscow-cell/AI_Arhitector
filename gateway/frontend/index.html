@@ -1716,6 +1716,7 @@ async function generateViaBlenderServer(prompt) {
         ST.hasModel = true;
         const c3dEl = document.getElementById('c3d');
         if(c3dEl) c3dEl.style.display = 'block';
+        document.getElementById('empt').style.display='none';
         URL.revokeObjectURL(url);
         
         addMsg('a', '✅ <b>Модель сгенерирована в Blender</b><br>' +
