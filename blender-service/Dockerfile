@@ -1,17 +1,26 @@
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-numpy blender xvfb \
-    libgl1-mesa-glx libxi6 libxrender1 libxxf86vm1 libxkbcommon0 \
-    && rm -rf /var/lib/apt/lists/*
-RUN ln -sf /usr/bin/python3 /usr/bin/python
-RUN SYS_NUMPY=$(python3 -c "import numpy,os;print(os.path.dirname(numpy.__file__))") && \
-    find /usr/share/blender -name "numpy" -type d -exec rm -rf {} + 2>/dev/null; \
-    BLENDER_MODULES="/usr/share/blender/scripts/freestyle/modules" && \
-    mkdir -p "$BLENDER_MODULES" && cp -r "$SYS_NUMPY" "$BLENDER_MODULES/"
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    blender \
+    python3-pip \
+    xvfb \
+    locales && \
+    sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+ENV PYTHONIOENCODING=utf-8
+
 WORKDIR /app
 COPY requirements.txt .
-RUN pip3 install --break-system-packages -r requirements.txt
-COPY . .
-RUN mkdir -p output
+RUN pip3 install --no-cache-dir -r requirements.txt
+COPY app.py .
+COPY ../promt_parser.py /app/promt_parser.py
+RUN mkdir -p /app/output
+
 EXPOSE 8082
-CMD ["sh", "-c", "Xvfb :99 -screen 0 1024x768x24 &>/dev/null & export DISPLAY=:99 && exec python3 app.py"]
+CMD ["sh", "-c", "Xvfb :99 -screen 0 1024x768x24 & export DISPLAY=:99 && uvicorn app:app --host 0.0.0.0 --port 8082"]
