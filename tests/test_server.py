@@ -73,13 +73,13 @@ class TestParseBuildingParams:
         from server import parse_building_params
 
         params = parse_building_params("кирпичный дом")
-        assert params.get("material") == "brick" or params.get("mat") == "brick"
+        assert params.get("facade_material") == "brick"
 
     def test_parse_material_wood(self):
         from server import parse_building_params
 
         params = parse_building_params("деревянный дом")
-        assert params.get("material") == "wood" or params.get("mat") == "wood"
+        assert params.get("facade_material") == "wood"
 
     def test_parse_roof_flat(self):
         from server import parse_building_params
@@ -118,7 +118,7 @@ class TestGenerate:
     def test_generate_accepts_json(self, client):
         resp = client.post(
             "/api/v1/generate/building",
-            json={"text": "двухэтажный кирпичный дом 10×12"},
+            json={"prompt": "двухэтажный кирпичный дом 10×12"},
             content_type="application/json",
         )
         # Should return something (200 or 500 if Blender not available)

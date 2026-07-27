@@ -495,7 +495,7 @@ async function testLocalParser() {
 // TEST 9: CALLCLAUDE — KEY REQUIRED
 // ═══════════════════════════════════════════════════════════════
 async function testCallClaudeKeyCheck() {
-  section('TEST 9: callClaude() — Key Required');
+  section('TEST 9: callAI() — Key Required');
 
   const env = createEnv();
   // No key
@@ -505,12 +505,12 @@ async function testCallClaudeKeyCheck() {
   if (!ctx) return;
 
   let threw = false;
-  try { await ctx.callClaude('тест', '', 100); }
+  try { await ctx.callAI('тест', '', 100); }
   catch (e) {
     threw = true;
     assert(e.message.includes('API ключ') || e.message.includes('key'), `Error: ${e.message.slice(0,60)}`);
   }
-  assert(threw, 'callClaude() throws without key');
+  assert(threw, 'callAI() throws without key');
 }
 
 // ═══════════════════════════════════════════════════════════════
