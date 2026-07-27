@@ -1,15 +1,21 @@
 """
 Blender Microservice — генерация зданий (GLB) и интерьеров (PNG)
 Эндпоинты:
-  POST /api/v1/generate/building  → GLB файл
-  POST /api/v1/render/interior    → PNG файл
+  POST /api/v1/generate           → GLB или PNG (единый endpoint с роутингом)
+  POST /api/v1/generate/building  → GLB файл (legacy)
+  POST /api/v1/render/interior    → PNG файл (legacy)
   GET  /health
 """
 import os
+import sys
 import uuid
 import subprocess
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
+
+# Добавить путь к промт-парсеру
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from promt_parser import fallback_regex_parse, get_generation_type, DEFAULT_FURNITURE
 
 app = Flask(__name__)
 CORS(app)
@@ -49,17 +55,29 @@ def parse_building_params(text):
     return p
 
 
+def safe_val(value, default, valid_values=None):
+    """Валидация параметра перед подстановкой в bpy-скрипт.
+    Возвращает default если value невалидно."""
+    if value is None:
+        return default
+    if valid_values is not None and value not in valid_values:
+        return default
+    return value
+
+
 def generate_bpy_script(params):
-    W = params.get('width', 10)
-    L = params.get('length', 12)
-    floors = params.get('floors', 2)
-    fH = params.get('floor_height', 3.0)
-    thick = params.get('wall_thickness', 0.3)
-    roof_type = params.get('roof_type', 'gabled')
-    mat = params.get('facade_material', 'plaster')
-    has_balcony = params.get('has_balcony', False)
-    has_terrace = params.get('has_terrace', False)
-    has_garage = params.get('has_garage', False)
+    # Валидация всех параметров (Step 1.3)
+    W = safe_val(params.get('width'), 10, range(1, 201))
+    L = safe_val(params.get('length'), 12, range(1, 201))
+    floors = safe_val(params.get('floors'), 2, range(1, 21))
+    fH = safe_val(params.get('floor_height'), 3.0)
+    thick = safe_val(params.get('wall_thickness'), 0.3)
+    roof_type = safe_val(params.get('roof_type'), 'gabled', ['gabled', 'flat', 'hip'])
+    mat = safe_val(params.get('facade_material'), 'plaster',
+                   ['brick', 'wood', 'glass', 'stone', 'concrete', 'plaster'])
+    has_balcony = bool(params.get('has_balcony', False))
+    has_terrace = bool(params.get('has_terrace', False))
+    has_garage = bool(params.get('has_garage', False))
 
     colors = {'brick':(0.71,0.40,0.12),'wood':(0.55,0.41,0.13),'glass':(0.53,0.81,0.92),
               'plaster':(0.91,0.88,0.83),'stone':(0.50,0.50,0.50),'concrete':(0.63,0.63,0.63)}
@@ -161,6 +179,7 @@ def generate_interior_script(params):
         'scandinavian': {'wall':(0.98,0.98,0.98),'floor':(0.83,0.72,0.59),'accent':(0.56,0.74,0.56)},
         'loft':         {'wall':(0.63,0.63,0.63),'floor':(0.42,0.42,0.42),'accent':(1.0,0.42,0.21)},
         'minimalist':   {'wall':(1.0,1.0,1.0),'floor':(0.88,0.85,0.80),'accent':(0.0,0.0,0.0)},
+        'hitech':       {'wall':(0.9,0.9,0.95),'floor':(0.3,0.3,0.35),'accent':(0.0,0.6,0.8)},
     }
     sc = style_colors.get(style, style_colors['modern'])
 
@@ -237,6 +256,67 @@ light_data=bpy.data.lights.new("Chandelier","POINT");light_data.energy=500;light
 light_obj=bpy.data.objects.new("Chandelier",light_data)
 bpy.context.collection.objects.link(light_obj);light_obj.location=(0,0,H-1)
 '''
+    if 'desk' in furniture:
+        script += '''
+desk_mat=make_mat("Desk",(0.6,0.45,0.25),0.65)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(L/2-1,0,0.75))
+dtop=bpy.context.active_object;dtop.name="Desk_Top";dtop.scale=(0.5,0.8,0.03)
+bpy.ops.object.transform_apply(scale=True);dtop.data.materials.append(desk_mat)
+for dx,dy in [(-1,-1),(1,-1),(-1,1),(1,1)]:
+    bpy.ops.mesh.primitive_cylinder_add(radius=0.025,depth=0.75,location=(L/2-1+dx*0.45,dy*0.7,0.375))
+    dleg=bpy.context.active_object;dleg.name="Desk_Leg";dleg.data.materials.append(desk_mat)
+'''
+    if 'wardrobe' in furniture:
+        script += '''
+ward_mat=make_mat("Wardrobe",(0.45,0.32,0.18),0.7)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,L/2-0.5,0.9))
+ward=bpy.context.active_object;ward.name="Wardrobe";ward.scale=(0.8,0.4,0.9)
+bpy.ops.object.transform_apply(scale=True);ward.data.materials.append(ward_mat)
+'''
+    if 'nightstand' in furniture:
+        script += '''
+ns_mat=make_mat("Nightstand",(0.5,0.38,0.22),0.7)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(-1.2,0.5,0.25))
+ns=bpy.context.active_object;ns.name="Nightstand";ns.scale=(0.25,0.25,0.25)
+bpy.ops.object.transform_apply(scale=True);ns.data.materials.append(ns_mat)
+'''
+    if 'bookshelf' in furniture:
+        script += '''
+shelf_mat=make_mat("Bookshelf",(0.5,0.35,0.2),0.7)
+for i in range(3):
+    bpy.ops.mesh.primitive_cube_add(size=1,location=(-W/2+0.2,L/2-0.3,0.4+i*0.5))
+    sh=bpy.context.active_object;sh.name=f"Shelf_{i}";sh.scale=(0.15,0.25,0.02)
+    bpy.ops.object.transform_apply(scale=True);sh.data.materials.append(shelf_mat)
+'''
+    if 'sink' in furniture:
+        script += '''
+sink_mat=make_mat("Sink",(0.9,0.9,0.9),0.3,0.1)
+bpy.ops.mesh.primitive_cylinder_add(radius=0.2,depth=0.15,location=(-W/2+0.5,0,0.9))
+sn=bpy.context.active_object;sn.name="Sink";sn.data.materials.append(sink_mat)
+'''
+    if 'stove' in furniture:
+        script += '''
+stove_mat=make_mat("Stove",(0.2,0.2,0.2),0.5,0.3)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(-W/2+0.5,L/2-0.5,0.45))
+stv=bpy.context.active_object;stv.name="Stove";stv.scale=(0.3,0.3,0.45)
+bpy.ops.object.transform_apply(scale=True);stv.data.materials.append(stove_mat)
+'''
+    if 'bathtub' in furniture:
+        script += '''
+tub_mat=make_mat("Bathtub",(0.95,0.95,0.95),0.2)
+bpy.ops.mesh.primitive_cylinder_add(radius=0.5,depth=0.4,location=(L/2-1,0,0.2))
+tub=bpy.context.active_object;tub.name="Bathtub";tub.data.materials.append(tub_mat)
+'''
+    if 'chair' in furniture:
+        script += '''
+chair_mat=make_mat("Chair",(0.3,0.3,0.3),0.8)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(L/2-1,0.8,0.45))
+chseat=bpy.context.active_object;chseat.name="Chair_Seat";chseat.scale=(0.2,0.2,0.03)
+bpy.ops.object.transform_apply(scale=True);chseat.data.materials.append(chair_mat)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(L/2-1,0.8,0.7))
+chback=bpy.context.active_object;chback.name="Chair_Back";chback.scale=(0.2,0.03,0.25)
+bpy.ops.object.transform_apply(scale=True);chback.data.materials.append(chair_mat)
+'''
     script += '''
 cam=bpy.data.cameras.new("InteriorCam");cam.lens=24
 cam_obj=bpy.data.objects.new("Camera",cam)
@@ -263,32 +343,75 @@ def health():
     return jsonify({"status": "ok", "service": "blender-service", "blender": BLENDER})
 
 
-@app.route("/api/v1/generate/building", methods=["POST"])
-def generate_building():
+# ═══════════════════════════════════════════════════════════════
+# UNIFIED GENERATE ENDPOINT (Step 1.2)
+# ═══════════════════════════════════════════════════════════════
+@app.route("/api/v1/generate", methods=["POST"])
+def generate():
+    """Единый endpoint: промт → парсинг → роутинг → генерация."""
     data = request.json or {}
     prompt = data.get("prompt", "")
     if not prompt:
         return jsonify({"error": "prompt required"}), 400
 
-    params = parse_building_params(prompt)
-    defaults = {"type":"house","floors":2,"width":10,"length":12,"roof_type":"gabled","facade_material":"plaster"}
-    for k, v in defaults.items():
-        params.setdefault(k, v)
+    # Парсинг промта
+    params = fallback_regex_parse(prompt)
 
-    script = generate_bpy_script(params)
+    # Роутинг по типу объекта
+    gen_type = get_generation_type(params)
+
+    if gen_type == "interior":
+        # Интерьер/комната → PNG
+        room_type = params.get("room_type", "living")
+        furniture = params.get("furniture") or DEFAULT_FURNITURE.get(room_type, ["sofa", "table", "chandelier"])
+        interior_params = {
+            "width": params.get("width_m", 6),
+            "length": params.get("length_m", 8),
+            "height": params.get("height_m", 3),
+            "style": params.get("style", "modern"),
+            "furniture": furniture,
+        }
+        script = generate_interior_script(interior_params)
+        return _execute_blender_render(script, "png", f"archai_interior")
+    else:
+        # Здание → GLB
+        building_params = {
+            "width": params.get("width_m", 10),
+            "length": params.get("length_m", 12),
+            "floors": params.get("floors", 2),
+            "roof_type": params.get("roof_type", "gabled"),
+            "facade_material": params.get("material", "plaster"),
+            "has_balcony": "balcony" in params.get("features", []),
+            "has_terrace": "terrace" in params.get("features", []),
+            "has_garage": "garage" in params.get("features", []),
+        }
+        script = generate_bpy_script(building_params)
+        return _execute_blender_export(script, "glb", "archai_building")
+
+
+def _execute_blender_export(script, ext, prefix):
+    """Валидация + запуск Blender CLI для экспорта."""
     job_id = uuid.uuid4().hex[:8]
     script_path = os.path.join(OUTPUT_DIR, f"{job_id}.py")
-    output_file = os.path.join(OUTPUT_DIR, f"{job_id}.glb")
+    output_file = os.path.join(OUTPUT_DIR, f"{job_id}.{ext}")
 
+    # Валидация синтаксиса
+    try:
+        compile(script, f"<{job_id}>", "exec")
+    except SyntaxError as e:
+        return jsonify({"error": f"Script syntax error: {e}"}), 500
+
+    export_cmd = f"\nimport bpy\nbpy.ops.export_scene.gltf(filepath=r'{output_file}', export_format='GLB')\n"
     with open(script_path, "w") as f:
-        f.write(script)
-        f.write(f"\nimport bpy\nbpy.ops.export_scene.gltf(filepath=r'{output_file}', export_format='GLB')\n")
+        f.write(script + export_cmd)
 
     try:
         result = subprocess.run(
             [BLENDER, "--background", "--factory-startup", "--log-level", "0", "--python", script_path],
             capture_output=True, text=True, timeout=120
         )
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Blender timeout (120s)"}), 504
     except Exception as e:
         return jsonify({"error": f"Blender failed: {e}"}), 500
     finally:
@@ -296,37 +419,43 @@ def generate_building():
             os.remove(script_path)
 
     if os.path.exists(output_file):
-        return send_file(output_file, as_attachment=True, download_name=f"archai_{job_id}.glb", mimetype="model/gltf-binary")
-    return jsonify({"error": "Blender export failed", "stderr": result.stderr[-500:]}), 500
+        return send_file(output_file, as_attachment=True,
+                        download_name=f"{prefix}_{job_id}.{ext}",
+                        mimetype="model/gltf-binary")
+    return jsonify({"error": "Blender export failed", "stderr": (result.stderr or "")[-500:]}), 500
 
 
-@app.route("/api/v1/render/interior", methods=["POST"])
-def render_interior():
-    data = request.json or {}
-    script = generate_interior_script(data)
+def _execute_blender_render(script, ext, prefix):
+    """Валидация + запуск Blender CLI для рендера."""
     job_id = uuid.uuid4().hex[:8]
     script_path = os.path.join(OUTPUT_DIR, f"{job_id}_int.py")
-    output_file = os.path.join(OUTPUT_DIR, f"{job_id}_int.png")
+    output_file = os.path.join(OUTPUT_DIR, f"{job_id}_int.{ext}")
 
+    # Валидация синтаксиса
+    try:
+        compile(script, f"<{job_id}>", "exec")
+    except SyntaxError as e:
+        return jsonify({"error": f"Script syntax error: {e}"}), 500
+
+    render_cmd = (
+        "\nimport bpy"
+        f"\nbpy.context.scene.render.filepath = r'{output_file}'"
+        "\nbpy.context.scene.render.engine = 'BLENDER_EEVEE'"
+        "\nbpy.context.scene.render.resolution_x = 640"
+        "\nbpy.context.scene.render.resolution_y = 480"
+        "\nbpy.ops.render.render(write_still=True)"
+        "\n"
+    )
     with open(script_path, "w") as f:
-        f.write(script)
-        render_cmd = (
-            "\nimport bpy"
-            f"\nbpy.context.scene.render.filepath = r'{output_file}'"
-            "\nbpy.context.scene.render.engine = 'BLENDER_EEVEE'"
-            "\nbpy.context.scene.render.resolution_x = 320"
-            "\nbpy.context.scene.render.resolution_y = 240"
-            "\nbpy.ops.render.render(write_still=True)"
-            "\n"
-        )
-        f.write(render_cmd)
+        f.write(script + render_cmd)
 
     try:
         result = subprocess.run(
             [BLENDER, "--background", "--factory-startup", "--log-level", "0", "--python", script_path],
             capture_output=True, text=True, timeout=300
         )
-        combined_log = (result.stdout or "") + "\n---STDERR---\n" + (result.stderr or "")
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Blender render timeout (300s)"}), 504
     except Exception as e:
         return jsonify({"error": f"Blender failed: {e}"}), 500
     finally:
@@ -334,8 +463,41 @@ def render_interior():
             os.remove(script_path)
 
     if os.path.exists(output_file):
-        return send_file(output_file, as_attachment=True, download_name=f"archai_interior_{job_id}.png")
-    return jsonify({"error": "Render failed", "log": combined_log[-1000:]}), 500
+        return send_file(output_file, as_attachment=True,
+                        download_name=f"{prefix}_{job_id}.{ext}",
+                        mimetype="image/png")
+    return jsonify({"error": "Render failed", "stderr": (result.stderr or "")[-500:]}), 500
+
+
+# ═══════════════════════════════════════════════════════════════
+# LEGACY ENDPOINTS (обратная совместимость — делегируют в unified)
+# ═══════════════════════════════════════════════════════════════
+@app.route("/api/v1/generate/building", methods=["POST"])
+def generate_building_legacy():
+    """Legacy endpoint — delegates to unified /api/v1/generate."""
+    data = request.json or {}
+    data["object_type"] = "building"
+    # Обернуть prompt в data если передан только prompt
+    if "prompt" not in data:
+        # Старый формат: параметры напрямую
+        prompt_parts = []
+        if data.get("width") and data.get("length"):
+            prompt_parts.append(f"{data['width']}×{data['length']}")
+        if data.get("floors"):
+            prompt_parts.append(f"{data['floors']} этажа")
+        data["prompt"] = " ".join(prompt_parts) or "дом"
+    return generate()
+
+
+@app.route("/api/v1/render/interior", methods=["POST"])
+def render_interior_legacy():
+    """Legacy endpoint — delegates to unified /api/v1/generate."""
+    data = request.json or {}
+    data["object_type"] = "interior"
+    if "prompt" not in data:
+        style = data.get("style", "modern")
+        data["prompt"] = f"интерьер в стиле {style}"
+    return generate()
 
 
 if __name__ == "__main__":

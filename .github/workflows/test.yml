@@ -1,0 +1,19 @@
+name: Test Generation Pipeline
+on:
+  push:
+    branches: [main, fix/*]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install pytest httpx flask flask-cors requests
+      - name: Run tests
+        run: python -m pytest tests/test_generation.py -v --tb=short
