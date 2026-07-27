@@ -22,5 +22,6 @@ services:
     environment:
       - PORT=8082
       - BLENDER_PATH=blender
+      - OUTPUT_DIR=/app/output
     volumes:
       - ./output:/app/output
