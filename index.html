@@ -312,6 +312,7 @@ function toggleMic() {
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/RGBELoader.js">
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js">
 
 
 
@@ -454,7 +455,7 @@ const API_BASE = (()=>{
   // Auto-detect: if on GitHub Pages, use Render backend
   const origin = window.location.origin;
   if(origin.includes('github.io') || origin.includes('githubusercontent.com'))
-    return 'https://architect-zpif.onrender.com';
+    return 'https://architect-gateway.onrender.com';
   return origin;      // same-origin backend
 })();
 let _backendOk = null; // null = not checked yet
@@ -2012,12 +2013,17 @@ function loadHDRI(preset) {
 
 function applyProceduralEnv() {
   try {
+    if(typeof THREE.RoomEnvironment === 'undefined') {
+      // RoomEnvironment not loaded — set basic lighting fallback
+      scene.environment = null;
+      return;
+    }
     const pmrem = new THREE.PMREMGenerator(renderer);
     pmrem.compileEquirectangularShader();
     const env = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04);
     scene.environment = env.texture;
     pmrem.dispose();
-  } catch(e) {}
+  } catch(e) { console.warn('Procedural env failed:', e); }
 }
 
 // ═══════════════ STYLE PRESETS (Sprint 2) ═══════════════

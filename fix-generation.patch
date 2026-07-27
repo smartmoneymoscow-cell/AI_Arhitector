@@ -1,0 +1,92 @@
+diff --git a/frontend/index.html b/frontend/index.html
+index 8534acc..fa9ff84 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -312,6 +312,7 @@ function toggleMic() {
+ 
+ </script>
+ <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/RGBELoader.js">
++<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js">
+ 
+ 
+ 
+@@ -454,7 +455,7 @@ const API_BASE = (()=>{
+   // Auto-detect: if on GitHub Pages, use Render backend
+   const origin = window.location.origin;
+   if(origin.includes('github.io') || origin.includes('githubusercontent.com'))
+-    return 'https://architect-zpif.onrender.com';
++    return 'https://architect-gateway.onrender.com';
+   return origin;      // same-origin backend
+ })();
+ let _backendOk = null; // null = not checked yet
+@@ -2012,12 +2013,16 @@ function loadHDRI(preset) {
+ 
+ function applyProceduralEnv() {
+   try {
++    if(typeof THREE.RoomEnvironment === 'undefined') {
++      scene.environment = null;
++      return;
++    }
+     const pmrem = new THREE.PMREMGenerator(renderer);
+     pmrem.compileEquirectangularShader();
+     const env = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04);
+     scene.environment = env.texture;
+     pmrem.dispose();
+-  } catch(e) {}
++  } catch(e) { console.warn('Procedural env failed:', e); }
+ }
+ 
+ // ═══════════════ STYLE PRESETS (Sprint 2) ═══════════════
+diff --git a/gateway/app.py b/gateway/app.py
+index 0053e74..6c7d095 100644
+--- a/gateway/app.py
++++ b/gateway/app.py
+@@ -10,7 +10,7 @@ app = Flask(__name__)
+ CORS(app)
+ 
+ BLENDER_SVC = os.environ.get("BLENDER_SERVICE_URL", "http://localhost:8082")
+-LLM_SVC = os.environ.get("LLM_SERVICE_URL", "https://ai-arch-llmproxy.onrender.com")
++LLM_SVC = os.environ.get("LLM_SERVICE_URL", "https://architect-llm.onrender.com")
+ FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
+ # Docker: try /app/frontend if relative path doesn't work
+ if not os.path.isdir(FRONTEND_DIR):
+diff --git a/index.html b/index.html
+index 8534acc..c487c31 100644
+--- a/index.html
++++ b/index.html
+@@ -312,6 +312,7 @@ function toggleMic() {
+ 
+ </script>
+ <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/RGBELoader.js">
++<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js">
+ 
+ 
+ 
+@@ -454,7 +455,7 @@ const API_BASE = (()=>{
+   // Auto-detect: if on GitHub Pages, use Render backend
+   const origin = window.location.origin;
+   if(origin.includes('github.io') || origin.includes('githubusercontent.com'))
+-    return 'https://architect-zpif.onrender.com';
++    return 'https://architect-gateway.onrender.com';
+   return origin;      // same-origin backend
+ })();
+ let _backendOk = null; // null = not checked yet
+@@ -2012,12 +2013,17 @@ function loadHDRI(preset) {
+ 
+ function applyProceduralEnv() {
+   try {
++    if(typeof THREE.RoomEnvironment === 'undefined') {
++      // RoomEnvironment not loaded — set basic lighting fallback
++      scene.environment = null;
++      return;
++    }
+     const pmrem = new THREE.PMREMGenerator(renderer);
+     pmrem.compileEquirectangularShader();
+     const env = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04);
+     scene.environment = env.texture;
+     pmrem.dispose();
+-  } catch(e) {}
++  } catch(e) { console.warn('Procedural env failed:', e); }
+ }
+ 
+ // ═══════════════ STYLE PRESETS (Sprint 2) ═══════════════
