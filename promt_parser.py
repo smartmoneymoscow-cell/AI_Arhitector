@@ -322,6 +322,12 @@ def fallback_regex_parse(text: str) -> dict:
         "вилл": "villa",
         "таунхаус": "townhouse",
         "квартир": "apartment",
+        "база": "cottage",
+        "гостиниц": "cottage",
+        "отель": "cottage",
+        "хостел": "cottage",
+        "санаторий": "cottage",
+        "пансионат": "cottage",
     }
     for word, btype in type_map.items():
         if word in t:
@@ -401,6 +407,9 @@ def fallback_regex_parse(text: str) -> dict:
         "скандинав": "scandinavian",
         "современн": "modern",
         "модерн": "modern",
+        "премиальн": "classic",
+        "элитн": "classic",
+        "люкс": "classic",
     }
     for word, style in style_map.items():
         if word in t:

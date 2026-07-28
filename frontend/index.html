@@ -405,10 +405,11 @@ function parseLocal(text){
   if(/офис|office/.test(t))p.type='office';
   else if(/коттедж|cottage/.test(t))p.type='cottage';
   else if(/таунхаус|modern/.test(t))p.type='modern';
+  else if(/база|гостиниц|отель|хостел|санаторий|пансионат|resort|hotel/.test(t))p.type='cottage';
   else p.type='house';
   // Architectural style
   if(/хай-?тек|hi-?tech|hightech/.test(t)){p.style='hitech';p.facade_material=p.facade_material||'glass';p.roof_type=p.roof_type||'flat';}
-  else if(/классик|classic|неоклассик/.test(t)){p.style='classic';p.facade_material=p.facade_material||'stone';}
+  else if(/классик|classic|неоклассик|премиальн|элитн|люкс/.test(t)){p.style='classic';p.facade_material=p.facade_material||'stone';}
   else if(/скандинав|scandi/.test(t)){p.style='scandi';p.facade_material=p.facade_material||'wood';}
   else if(/камен|stone/.test(t)&&!p.facade_material)p.facade_material='stone';
   // Pond / water feature
@@ -1755,7 +1756,7 @@ function doFinish(bld,ov,gf){
 }
 
 // ═══════════════════ SEND ════════════════════════════════════
-const BUILD_RE=/дом|здани|офис|коттедж|вилл|склад|таунхаус|этаж|комнат|кирпич|фасад|кровля|строи|проект|гараж|терраса|мансарда|балкон|дерев|стекл|плоская|скатная|загородн|жилой/i;
+const BUILD_RE=/дом|здани|офис|коттедж|вилл|склад|таунхаус|этаж|комнат|кирпич|фасад|кровля|строи|проект|гараж|терраса|мансарда|балкон|дерев|стекл|плоская|скатная|загородн|жилой|база|гостиниц|отель|хостел|санаторий|пансионат/i;
 const INTERIOR_RE=/интерьер|спальн|гостин|кухн|ванн|мебел|диван|кроват|стул|шкаф|прихож|коридор|детск|кабинет|столов|гардероб|холл|салон|лoft|лофт/i;
 const LANDSCAPE_RE=/ландшафт|сад|газон|дорожк|забор|беседк|бассейн|пруд|деревья|клумб|цветник|патио|двор|участок|огород/i;
 const CONSTRUCT_RE=/конструкц|ферм|балк|перекрыт|колонн|армопояс|сваи|фундамент|несущ|стен.*несущ|каркас|модул|панел/i;
