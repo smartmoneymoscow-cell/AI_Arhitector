@@ -1,4 +1,8 @@
 services:
+  # ════════════════════════════════════════════════════════════
+  # CORE SERVICES
+  # ════════════════════════════════════════════════════════════
+
   # Gateway — маршрутизатор + фронтенд
   - type: web
     name: architect
@@ -13,6 +17,14 @@ services:
         value: https://ai-arch-llmproxy.onrender.com
       - key: BLENDER_SERVICE_URL
         value: https://ai-arch-blender3d.onrender.com
+      - key: GEOMETRY_SERVICE_URL
+        value: https://architect-geometry.onrender.com
+      - key: IFC_SERVICE_URL
+        value: https://architect-ifc.onrender.com
+      - key: ML_SERVICE_URL
+        value: https://architect-ml.onrender.com
+      - key: DATA_SERVICE_URL
+        value: https://architect-data.onrender.com
       - key: FRONTEND_DIR
         value: /app/frontend
       - key: PORT
@@ -50,3 +62,63 @@ services:
         value: /app/output
       - key: LLM_SERVICE_URL
         value: https://ai-arch-llmproxy.onrender.com
+
+  # ════════════════════════════════════════════════════════════
+  # NEW SERVICES — Phase 1-5
+  # ════════════════════════════════════════════════════════════
+
+  # Geometry Service — Shapely + NetworkX spatial analysis
+  - type: web
+    name: architect-geometry
+    runtime: docker
+    dockerfilePath: ./geometry-service/Dockerfile
+    rootDir: geometry-service
+    region: oregon
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8083"
+
+  # IFC Service — IfcOpenShell import/export
+  - type: web
+    name: architect-ifc
+    runtime: docker
+    dockerfilePath: ./ifc-service/Dockerfile
+    rootDir: ifc-service
+    region: oregon
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8084"
+      - key: OUTPUT_DIR
+        value: /app/output
+
+  # ML Service — ONNX inference + style/room classification
+  - type: web
+    name: architect-ml
+    runtime: docker
+    dockerfilePath: ./ml-service/Dockerfile
+    rootDir: ml-service
+    region: oregon
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8085"
+
+  # Data Service — project storage + vector search
+  - type: web
+    name: architect-data
+    runtime: docker
+    dockerfilePath: ./data-service/Dockerfile
+    rootDir: data-service
+    region: oregon
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8086"
+      - key: DATA_DIR
+        value: /app/data
