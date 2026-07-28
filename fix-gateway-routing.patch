@@ -1,0 +1,165 @@
+From 6c05d97b7ae114626401e134c8f04daa8d45324e Mon Sep 17 00:00:00 2001
+From: Architect Fix <architect@fix.local>
+Date: Wed, 29 Jul 2026 05:28:16 +0800
+Subject: [PATCH] fix: gateway routes /api/v1/generate to legacy blender
+ endpoints + increase cold start timeouts
+
+Root cause: blender-service on Render only has legacy endpoints
+(/api/v1/generate/building and /api/v1/render/interior), not the
+unified /api/v1/generate. Gateway was forwarding to non-existent
+endpoint, causing 404.
+
+Changes:
+- gateway: /api/v1/generate now detects type and routes to correct
+  legacy endpoint (/api/v1/generate/building or /api/v1/render/interior)
+- gateway: legacy endpoints forward to blender-service legacy endpoints
+  with retry (not to unified endpoint)
+- frontend: increase generate timeout 25s->60s for Render cold start
+- frontend: increase callAI proxy timeout 15s->30s
+---
+ gateway/app.py              | 59 ++++++++++++++++++++++++++++++++-----
+ gateway/frontend/index.html |  4 +--
+ index.html                  |  4 +--
+ 3 files changed, 56 insertions(+), 11 deletions(-)
+
+diff --git a/gateway/app.py b/gateway/app.py
+index 4a7e360..7b03a5d 100644
+--- a/gateway/app.py
++++ b/gateway/app.py
+@@ -11,6 +11,7 @@ Endpoints:
+   GET  /docs                     — OpenAPI documentation
+ """
+ import os
++import re
+ from typing import Optional
+ 
+ import httpx
+@@ -122,15 +123,39 @@ async def health():
+ 
+ 
+ # ═══════════════════════════════════════════════════════════════
+-# UNIFIED GENERATE
++# ROUTING HELPERS + UNIFIED GENERATE
+ # ═══════════════════════════════════════════════════════════════
+ 
++INTERIOR_KEYWORDS = [
++    "спальн", "детск", "кухн", "гостин", "ванн", "кабинет",
++    "салон", "столов", "интерьер", "дизайн интерьера", "комнат",
++]
++
++
++def _detect_gen_type(prompt: str, object_type: Optional[str] = None) -> str:
++    """Определить тип генерации: 'interior' или 'building'."""
++    if object_type in ("interior", "room"):
++        return "interior"
++    t = prompt.lower()
++    for kw in INTERIOR_KEYWORDS:
++        if kw in t:
++            return "interior"
++    return "building"
++
++
+ @app.post("/api/v1/generate")
+ async def generate(req: GenerateRequest):
+-    """Единый endpoint генерации с retry."""
++    """Единый endpoint: определяет тип → роутит на правильный legacy endpoint blender-service."""
++    gen_type = _detect_gen_type(req.prompt, req.object_type)
++
++    if gen_type == "interior":
++        target_url = f"{BLENDER_SVC}/api/v1/render/interior"
++    else:
++        target_url = f"{BLENDER_SVC}/api/v1/generate/building"
++
+     r = await request_with_retry(
+         "post",
+-        f"{BLENDER_SVC}/api/v1/generate",
++        target_url,
+         json=req.model_dump(),
+         timeout=180.0,
+         max_retries=2,
+@@ -185,14 +210,34 @@ async def proxy_claude(request: Request):
+ 
+ @app.post("/api/v1/generate/building")
+ async def generate_building_legacy(req: GenerateRequest):
+-    req.object_type = "building"
+-    return await generate(req)
++    """Legacy endpoint → blender /api/v1/generate/building."""
++    r = await request_with_retry(
++        "post",
++        f"{BLENDER_SVC}/api/v1/generate/building",
++        json=req.model_dump(),
++        timeout=180.0,
++        max_retries=2,
++    )
++    if r.status_code == 200:
++        content_type = r.headers.get("content-type", "application/octet-stream")
++        return Response(content=r.content, media_type=content_type)
++    raise HTTPException(r.status_code, detail=r.text)
+ 
+ 
+ @app.post("/api/v1/render/interior")
+ async def render_interior_legacy(req: GenerateRequest):
+-    req.object_type = "interior"
+-    return await generate(req)
++    """Legacy endpoint → blender /api/v1/render/interior."""
++    r = await request_with_retry(
++        "post",
++        f"{BLENDER_SVC}/api/v1/render/interior",
++        json=req.model_dump(),
++        timeout=180.0,
++        max_retries=2,
++    )
++    if r.status_code == 200:
++        content_type = r.headers.get("content-type", "application/octet-stream")
++        return Response(content=r.content, media_type=content_type)
++    raise HTTPException(r.status_code, detail=r.text)
+ 
+ 
+ # ═══════════════════════════════════════════════════════════════
+diff --git a/gateway/frontend/index.html b/gateway/frontend/index.html
+index 8534acc..04d8dc8 100644
+--- a/gateway/frontend/index.html
++++ b/gateway/frontend/index.html
+@@ -476,7 +476,7 @@ async function callAI(msg,sys,maxTok){
+   if(API_BASE && _backendOk){
+     try{
+       const ctrl=new AbortController();
+-      setTimeout(()=>ctrl.abort(),15000);
++      setTimeout(()=>ctrl.abort(),30000);
+       const r=await fetch(API_BASE+'/api/v1/proxy/claude',{
+         method:'POST',
+         headers:{'Content-Type':'application/json'},
+@@ -1661,7 +1661,7 @@ async function generateViaBlenderServer(prompt) {
+     addThink(['🖥 Запрос к Blender серверу…']);
+     
+     const ctrl = new AbortController();
+-    setTimeout(()=>ctrl.abort(), 15000); // 15s timeout - fall back to Three.js fast
++    setTimeout(()=>ctrl.abort(), 60000); // 60s timeout для Render cold start
+     
+     const r = await fetch(API_BASE + '/api/v1/generate/building', {
+       method: 'POST',
+diff --git a/index.html b/index.html
+index ab8a18f..5d79d01 100644
+--- a/index.html
++++ b/index.html
+@@ -346,7 +346,7 @@ async function callAI(msg,sys,maxTok){
+   if(API_BASE && _backendOk){
+     try{
+       const ctrl=new AbortController();
+-      setTimeout(()=>ctrl.abort(),15000);
++      setTimeout(()=>ctrl.abort(),30000);
+       const r=await fetch(API_BASE+'/api/v1/proxy/claude',{
+         method:'POST',
+         headers:{'Content-Type':'application/json'},
+@@ -1540,7 +1540,7 @@ async function generateWithFallback(prompt, params) {
+       try {
+         addThink(['🖥 Запрос к серверу рендеринга…']);
+         const ctrl = new AbortController();
+-        setTimeout(()=>ctrl.abort(), 25000); // 25s timeout для cold start
++        setTimeout(()=>ctrl.abort(), 60000); // 60s timeout для Render cold start
+ 
+         const r = await fetch(API_BASE + '/api/v1/generate', {
+           method: 'POST',
+-- 
+2.43.0
+

@@ -1,17 +1,18 @@
 services:
   # Gateway — маршрутизатор + фронтенд
   - type: web
-    name: architect-gateway
+    name: architect
     runtime: docker
     dockerfilePath: ./gateway/Dockerfile
+    rootDir: gateway
     region: oregon
     plan: free
     healthCheckPath: /health
     envVars:
       - key: LLM_SERVICE_URL
-        value: https://architect-llm.onrender.com
+        value: https://ai-arch-llmproxy.onrender.com
       - key: BLENDER_SERVICE_URL
-        value: https://architect-blender.onrender.com
+        value: https://ai-arch-blender3d.onrender.com
       - key: FRONTEND_DIR
         value: /app/frontend
       - key: PORT
@@ -19,7 +20,7 @@ services:
 
   # LLM Service — прокси к OpenRouter + парсинг
   - type: web
-    name: architect-llm
+    name: ai-arch-llmproxy
     runtime: docker
     dockerfilePath: ./llm-service/Dockerfile
     region: oregon
@@ -33,7 +34,7 @@ services:
 
   # Blender Service — генерация зданий + интерьеров
   - type: web
-    name: architect-blender
+    name: ai-arch-blender3d
     runtime: docker
     dockerfilePath: ./blender-service/Dockerfile
     rootDir: .
@@ -48,4 +49,4 @@ services:
       - key: OUTPUT_DIR
         value: /app/output
       - key: LLM_SERVICE_URL
-        value: https://architect-llm.onrender.com
+        value: https://ai-arch-llmproxy.onrender.com
