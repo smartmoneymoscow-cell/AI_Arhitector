@@ -57,6 +57,10 @@ GEOMETRY_SVC = os.environ.get("GEOMETRY_SERVICE_URL", "https://architect-geometr
 IFC_SVC = os.environ.get("IFC_SERVICE_URL", "https://architect-ifc.onrender.com")
 ML_SVC = os.environ.get("ML_SERVICE_URL", "https://architect-ml.onrender.com")
 DATA_SVC = os.environ.get("DATA_SERVICE_URL", "https://architect-data.onrender.com")
+CAD_SVC = os.environ.get("CAD_SERVICE_URL", "https://architect-cad.onrender.com")
+FREECAD_SVC = os.environ.get("FREECAD_SERVICE_URL", "https://architect-freecad.onrender.com")
+VECTORDB_SVC = os.environ.get("VECTORDB_SERVICE_URL", "https://architect-vectordb.onrender.com")
+GRAPHDB_SVC = os.environ.get("GRAPHDB_SERVICE_URL", "https://architect-graphdb.onrender.com")
 
 FRONTEND_DIR = os.environ.get("FRONTEND_DIR", os.path.join(os.path.dirname(__file__), "..", "frontend"))
 if not os.path.isdir(FRONTEND_DIR):
@@ -151,6 +155,10 @@ ALL_SERVICES = [
     ("ifc", IFC_SVC),
     ("ml", ML_SVC),
     ("data", DATA_SVC),
+    ("cad", CAD_SVC),
+    ("freecad", FREECAD_SVC),
+    ("vectordb", VECTORDB_SVC),
+    ("graphdb", GRAPHDB_SVC),
 ]
 
 
@@ -376,6 +384,105 @@ async def search_projects(request: Request):
 async def list_templates():
     async with httpx.AsyncClient() as client:
         r = await client.get(f"{DATA_SVC}/api/v1/templates", timeout=15.0)
+        if r.status_code == 200:
+            return r.json()
+        raise HTTPException(r.status_code, detail=r.text)
+
+
+# ═══════════════════════════════════════════════════════════════
+# CAD SERVICE PROXY
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/cad/primitive")
+async def cad_primitive(request: Request):
+    return await proxy_request(request, CAD_SVC, "/api/v1/cad/primitive")
+
+
+@app.post("/api/v1/cad/boolean")
+async def cad_boolean(request: Request):
+    return await proxy_request(request, CAD_SVC, "/api/v1/cad/boolean")
+
+
+@app.post("/api/v1/cad/fillet")
+async def cad_fillet(request: Request):
+    return await proxy_request(request, CAD_SVC, "/api/v1/cad/fillet")
+
+
+@app.post("/api/v1/cad/building")
+async def cad_building(request: Request):
+    return await proxy_request(request, CAD_SVC, "/api/v1/cad/building")
+
+
+@app.post("/api/v1/cad/export")
+async def cad_export(request: Request):
+    return await proxy_request(request, CAD_SVC, "/api/v1/cad/export")
+
+
+# ═══════════════════════════════════════════════════════════════
+# FREECAD SERVICE PROXY
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/freecad/building")
+async def freecad_building(request: Request):
+    return await proxy_request(request, FREECAD_SVC, "/api/v1/freecad/building")
+
+
+@app.post("/api/v1/freecad/execute")
+async def freecad_execute(request: Request):
+    return await proxy_request(request, FREECAD_SVC, "/api/v1/freecad/execute")
+
+
+# ═══════════════════════════════════════════════════════════════
+# VECTOR DB SERVICE PROXY
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/vectordb/collections")
+async def vectordb_create_collection(request: Request):
+    return await proxy_request(request, VECTORDB_SVC, "/api/v1/vectordb/collections")
+
+
+@app.get("/api/v1/vectordb/collections")
+async def vectordb_list_collections():
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{VECTORDB_SVC}/api/v1/vectordb/collections", timeout=15.0)
+        if r.status_code == 200:
+            return r.json()
+        raise HTTPException(r.status_code, detail=r.text)
+
+
+@app.post("/api/v1/vectordb/upsert")
+async def vectordb_upsert(request: Request):
+    return await proxy_request(request, VECTORDB_SVC, "/api/v1/vectordb/upsert")
+
+
+@app.post("/api/v1/vectordb/search")
+async def vectordb_search(request: Request):
+    return await proxy_request(request, VECTORDB_SVC, "/api/v1/vectordb/search")
+
+
+# ═══════════════════════════════════════════════════════════════
+# GRAPH DB SERVICE PROXY
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/graph/cypher")
+async def graph_cypher(request: Request):
+    return await proxy_request(request, GRAPHDB_SVC, "/api/v1/graph/cypher")
+
+
+@app.post("/api/v1/graph/building")
+async def graph_building(request: Request):
+    return await proxy_request(request, GRAPHDB_SVC, "/api/v1/graph/building")
+
+
+@app.post("/api/v1/graph/path")
+async def graph_path(request: Request):
+    return await proxy_request(request, GRAPHDB_SVC, "/api/v1/graph/path")
+
+
+@app.get("/api/v1/graph/building/{building_id}/rooms")
+async def graph_building_rooms(building_id: str):
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{GRAPHDB_SVC}/api/v1/graph/building/{building_id}/rooms", timeout=15.0)
         if r.status_code == 200:
             return r.json()
         raise HTTPException(r.status_code, detail=r.text)

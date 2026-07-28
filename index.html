@@ -251,6 +251,7 @@ body{display:flex;flex-direction:column}
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/RGBELoader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/web-ifc@0.0.57/web-ifc-api.js"></script>
 <script>
 'use strict';
 // ═══════════════════ VOICE INPUT ═══════════════════════════════
@@ -473,6 +474,177 @@ function applyParams(text,p){
 
 // ═══════════════════ STATE ════════════════════════════════════
 const ST={view:'ext',hasModel:false,bld:null,ann:true,wire:false,curFloor:0,lod:'exterior'};
+
+// ═══════════════════ WEB-IFC PARSER (browser-side IFC) ════════════════════
+let ifcApi = null;
+let ifcReady = false;
+
+async function initIFC() {
+  if (ifcReady) return true;
+  try {
+    ifcApi = new WebIFC.IfcAPI();
+    await ifcApi.Init();
+    ifcReady = true;
+    console.log('web-ifc initialized, version:', ifcApi.wasmModule?.version || 'unknown');
+    return true;
+  } catch(e) {
+    console.warn('web-ifc init failed:', e);
+    return false;
+  }
+}
+
+async function parseIFCFile(buffer) {
+  if (!ifcReady) await initIFC();
+  if (!ifcApi) throw new Error('web-ifc not available');
+
+  const modelID = ifcApi.OpenModel(new Uint8Array(buffer));
+  const result = {
+    modelID,
+    project: null,
+    sites: [],
+    buildings: [],
+    storeys: [],
+    spaces: [],
+    walls: [],
+    doors: [],
+    windows: [],
+    totalElements: 0,
+  };
+
+  // Extract project
+  const projects = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCPROJECT);
+  if (projects.size() > 0) {
+    const pid = projects.get(0);
+    result.project = { id: pid, type: 'IfcProject' };
+  }
+
+  // Extract storeys
+  const storeys = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCBUILDINGSTOREY);
+  for (let i = 0; i < storeys.size(); i++) {
+    const sid = storeys.get(i);
+    const storey = ifcApi.GetLine(modelID, sid);
+    result.storeys.push({
+      id: sid,
+      name: storey.Name?.value || `Storey ${i}`,
+      elevation: storey.Elevation?.value || 0,
+    });
+  }
+
+  // Extract walls
+  const walls = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCWALL);
+  for (let i = 0; i < walls.size(); i++) {
+    const wid = walls.get(i);
+    result.walls.push({ id: wid, type: 'IfcWall' });
+  }
+
+  // Extract doors
+  const doors = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCDOOR);
+  for (let i = 0; i < doors.size(); i++) {
+    const did = doors.get(i);
+    const door = ifcApi.GetLine(modelID, did);
+    result.doors.push({
+      id: did,
+      name: door.Name?.value || '',
+      width: door.OverallWidth?.value || 0,
+      height: door.OverallHeight?.value || 0,
+    });
+  }
+
+  // Extract windows
+  const windows = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCWINDOW);
+  for (let i = 0; i < windows.size(); i++) {
+    const wid = windows.get(i);
+    const win = ifcApi.GetLine(modelID, wid);
+    result.windows.push({
+      id: wid,
+      name: win.Name?.value || '',
+      width: win.OverallWidth?.value || 0,
+      height: win.OverallHeight?.value || 0,
+    });
+  }
+
+  // Extract spaces (rooms)
+  const spaces = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCSPACE);
+  for (let i = 0; i < spaces.size(); i++) {
+    const sid = spaces.get(i);
+    const space = ifcApi.GetLine(modelID, sid);
+    result.spaces.push({
+      id: sid,
+      name: space.Name?.value || '',
+      longName: space.LongName?.value || '',
+    });
+  }
+
+  result.totalElements = result.walls.length + result.doors.length + result.windows.length + result.spaces.length;
+
+  ifcApi.CloseModel(modelID);
+  return result;
+}
+
+async function loadIFCAsThreeJS(buffer) {
+  if (!ifcReady) await initIFC();
+  if (!ifcApi) throw new Error('web-ifc not available');
+
+  const modelID = ifcApi.OpenModel(new Uint8Array(buffer));
+  const group = new THREE.Group();
+  group.name = 'IFC_Model';
+
+  // Get all meshes
+  const flatMeshes = ifcApi.LoadAllGeometry(modelID);
+  for (let i = 0; i < flatMeshes.size(); i++) {
+    const flatMesh = flatMeshes.get(i);
+    const placedGeometries = flatMesh.geometries;
+
+    for (let j = 0; j < placedGeometries.size(); j++) {
+      const placed = placedGeometries.get(j);
+      const geometry = ifcApi.GetGeometry(modelID, placed.geometryExpressID);
+
+      // Get vertices
+      const verts = ifcApi.GetVertexArray(
+        geometry.GetVertexData(),
+        geometry.GetVertexDataSize()
+      );
+
+      // Get indices
+      const indices = ifcApi.GetIndexArray(
+        geometry.GetIndexData(),
+        geometry.GetIndexDataSize()
+      );
+
+      // Create Three.js geometry
+      const bufGeom = new THREE.BufferGeometry();
+      const posArr = new Float32Array(verts.length / 2);
+      for (let k = 0; k < verts.length; k += 6) {
+        posArr[k / 6 * 3] = verts[k];
+        posArr[k / 6 * 3 + 1] = verts[k + 1];
+        posArr[k / 6 * 3 + 2] = verts[k + 2];
+      }
+      bufGeom.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+      bufGeom.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
+      bufGeom.computeVertexNormals();
+
+      // Material
+      const color = placed.color;
+      const mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(color.x, color.y, color.z),
+        opacity: color.w,
+        transparent: color.w < 1,
+        side: THREE.DoubleSide,
+      });
+
+      const mesh = new THREE.Mesh(bufGeom, mat);
+
+      // Apply transformation matrix
+      const matrix = new THREE.Matrix4().fromArray(placed.flatTransformation);
+      mesh.applyMatrix4(matrix);
+
+      group.add(mesh);
+    }
+  }
+
+  ifcApi.CloseModel(modelID);
+  return group;
+}
 
 // ═══════════════════ THREE.JS ENGINE ════════════════════════
 let renderer,scene,camera,bG,iG,lblG,oc;

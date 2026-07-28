@@ -1,9 +1,8 @@
 services:
   # ════════════════════════════════════════════════════════════
-  # CORE SERVICES
+  # CORE SERVICES (existing)
   # ════════════════════════════════════════════════════════════
 
-  # Gateway — маршрутизатор + фронтенд
   - type: web
     name: architect
     runtime: docker
@@ -25,12 +24,19 @@ services:
         value: https://architect-ml.onrender.com
       - key: DATA_SERVICE_URL
         value: https://architect-data.onrender.com
+      - key: CAD_SERVICE_URL
+        value: https://architect-cad.onrender.com
+      - key: FREECAD_SERVICE_URL
+        value: https://architect-freecad.onrender.com
+      - key: VECTORDB_SERVICE_URL
+        value: https://architect-vectordb.onrender.com
+      - key: GRAPHDB_SERVICE_URL
+        value: https://architect-graphdb.onrender.com
       - key: FRONTEND_DIR
         value: /app/frontend
       - key: PORT
         value: "8080"
 
-  # LLM Service — прокси к OpenRouter + парсинг
   - type: web
     name: ai-arch-llmproxy
     runtime: docker
@@ -41,10 +47,11 @@ services:
     envVars:
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: OPENROUTER_API_KEY_2
+        sync: false
       - key: PORT
         value: "8081"
 
-  # Blender Service — генерация зданий + интерьеров
   - type: web
     name: ai-arch-blender3d
     runtime: docker
@@ -64,10 +71,9 @@ services:
         value: https://ai-arch-llmproxy.onrender.com
 
   # ════════════════════════════════════════════════════════════
-  # NEW SERVICES — Phase 1-5
+  # GEOMETRY & CAD SERVICES
   # ════════════════════════════════════════════════════════════
 
-  # Geometry Service — Shapely + NetworkX spatial analysis
   - type: web
     name: architect-geometry
     runtime: docker
@@ -80,7 +86,38 @@ services:
       - key: PORT
         value: "8083"
 
-  # IFC Service — IfcOpenShell import/export
+  - type: web
+    name: architect-cad
+    runtime: docker
+    dockerfilePath: ./cad-service/Dockerfile
+    rootDir: cad-service
+    region: oregon
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8087"
+      - key: OUTPUT_DIR
+        value: /app/output
+
+  - type: web
+    name: architect-freecad
+    runtime: docker
+    dockerfilePath: ./freecad-service/Dockerfile
+    rootDir: freecad-service
+    region: oregon
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8088"
+      - key: OUTPUT_DIR
+        value: /app/output
+
+  # ════════════════════════════════════════════════════════════
+  # IFC & ML SERVICES
+  # ════════════════════════════════════════════════════════════
+
   - type: web
     name: architect-ifc
     runtime: docker
@@ -95,7 +132,6 @@ services:
       - key: OUTPUT_DIR
         value: /app/output
 
-  # ML Service — ONNX inference + style/room classification
   - type: web
     name: architect-ml
     runtime: docker
@@ -108,7 +144,10 @@ services:
       - key: PORT
         value: "8085"
 
-  # Data Service — project storage + vector search
+  # ════════════════════════════════════════════════════════════
+  # DATA & SEARCH SERVICES
+  # ════════════════════════════════════════════════════════════
+
   - type: web
     name: architect-data
     runtime: docker
@@ -122,3 +161,35 @@ services:
         value: "8086"
       - key: DATA_DIR
         value: /app/data
+
+  - type: web
+    name: architect-vectordb
+    runtime: docker
+    dockerfilePath: ./vectordb-service/Dockerfile
+    rootDir: vectordb-service
+    region: oregon
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8089"
+      - key: QDRANT_URL
+        value: http://localhost:6333
+
+  - type: web
+    name: architect-graphdb
+    runtime: docker
+    dockerfilePath: ./graphdb-service/Dockerfile
+    rootDir: graphdb-service
+    region: oregon
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8090"
+      - key: NEO4J_URL
+        value: http://localhost:7474
+      - key: NEO4J_USER
+        value: neo4j
+      - key: NEO4J_PASSWORD
+        sync: false
