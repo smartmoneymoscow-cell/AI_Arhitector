@@ -346,7 +346,7 @@ async function callAI(msg,sys,maxTok){
   if(API_BASE && _backendOk){
     try{
       const ctrl=new AbortController();
-      setTimeout(()=>ctrl.abort(),15000);
+      setTimeout(()=>ctrl.abort(),30000);
       const r=await fetch(API_BASE+'/api/v1/proxy/claude',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -1540,7 +1540,7 @@ async function generateWithFallback(prompt, params) {
       try {
         addThink(['🖥 Запрос к серверу рендеринга…']);
         const ctrl = new AbortController();
-        setTimeout(()=>ctrl.abort(), 25000); // 25s timeout для cold start
+        setTimeout(()=>ctrl.abort(), 60000); // 60s timeout для Render cold start
 
         const r = await fetch(API_BASE + '/api/v1/generate', {
           method: 'POST',

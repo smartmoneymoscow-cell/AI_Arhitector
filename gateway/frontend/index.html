@@ -476,7 +476,7 @@ async function callAI(msg,sys,maxTok){
   if(API_BASE && _backendOk){
     try{
       const ctrl=new AbortController();
-      setTimeout(()=>ctrl.abort(),15000);
+      setTimeout(()=>ctrl.abort(),30000);
       const r=await fetch(API_BASE+'/api/v1/proxy/claude',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -1661,7 +1661,7 @@ async function generateViaBlenderServer(prompt) {
     addThink(['🖥 Запрос к Blender серверу…']);
     
     const ctrl = new AbortController();
-    setTimeout(()=>ctrl.abort(), 15000); // 15s timeout - fall back to Three.js fast
+    setTimeout(()=>ctrl.abort(), 60000); // 60s timeout для Render cold start
     
     const r = await fetch(API_BASE + '/api/v1/generate/building', {
       method: 'POST',

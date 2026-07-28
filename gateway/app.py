@@ -11,6 +11,7 @@ Endpoints:
   GET  /docs                     — OpenAPI documentation
 """
 import os
+import re
 from typing import Optional
 
 import httpx
@@ -122,15 +123,39 @@ async def health():
 
 
 # ═══════════════════════════════════════════════════════════════
-# UNIFIED GENERATE
+# ROUTING HELPERS + UNIFIED GENERATE
 # ═══════════════════════════════════════════════════════════════
+
+INTERIOR_KEYWORDS = [
+    "спальн", "детск", "кухн", "гостин", "ванн", "кабинет",
+    "салон", "столов", "интерьер", "дизайн интерьера", "комнат",
+]
+
+
+def _detect_gen_type(prompt: str, object_type: Optional[str] = None) -> str:
+    """Определить тип генерации: 'interior' или 'building'."""
+    if object_type in ("interior", "room"):
+        return "interior"
+    t = prompt.lower()
+    for kw in INTERIOR_KEYWORDS:
+        if kw in t:
+            return "interior"
+    return "building"
+
 
 @app.post("/api/v1/generate")
 async def generate(req: GenerateRequest):
-    """Единый endpoint генерации с retry."""
+    """Единый endpoint: определяет тип → роутит на правильный legacy endpoint blender-service."""
+    gen_type = _detect_gen_type(req.prompt, req.object_type)
+
+    if gen_type == "interior":
+        target_url = f"{BLENDER_SVC}/api/v1/render/interior"
+    else:
+        target_url = f"{BLENDER_SVC}/api/v1/generate/building"
+
     r = await request_with_retry(
         "post",
-        f"{BLENDER_SVC}/api/v1/generate",
+        target_url,
         json=req.model_dump(),
         timeout=180.0,
         max_retries=2,
@@ -185,14 +210,34 @@ async def proxy_claude(request: Request):
 
 @app.post("/api/v1/generate/building")
 async def generate_building_legacy(req: GenerateRequest):
-    req.object_type = "building"
-    return await generate(req)
+    """Legacy endpoint → blender /api/v1/generate/building."""
+    r = await request_with_retry(
+        "post",
+        f"{BLENDER_SVC}/api/v1/generate/building",
+        json=req.model_dump(),
+        timeout=180.0,
+        max_retries=2,
+    )
+    if r.status_code == 200:
+        content_type = r.headers.get("content-type", "application/octet-stream")
+        return Response(content=r.content, media_type=content_type)
+    raise HTTPException(r.status_code, detail=r.text)
 
 
 @app.post("/api/v1/render/interior")
 async def render_interior_legacy(req: GenerateRequest):
-    req.object_type = "interior"
-    return await generate(req)
+    """Legacy endpoint → blender /api/v1/render/interior."""
+    r = await request_with_retry(
+        "post",
+        f"{BLENDER_SVC}/api/v1/render/interior",
+        json=req.model_dump(),
+        timeout=180.0,
+        max_retries=2,
+    )
+    if r.status_code == 200:
+        content_type = r.headers.get("content-type", "application/octet-stream")
+        return Response(content=r.content, media_type=content_type)
+    raise HTTPException(r.status_code, detail=r.text)
 
 
 # ═══════════════════════════════════════════════════════════════
