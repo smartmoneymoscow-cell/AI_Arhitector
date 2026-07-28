@@ -247,201 +247,70 @@ body{display:flex;flex-direction:column}
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js">
-
-
-
-
-// ═══════════════════ VOICE INPUT ═══════════════════════════════
-let recognition = null;
-let isListening = false;
-
-function toggleMic() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    showNotif('Голосовой ввод не поддерживается', 'warn');
-    return;
-  }
-
-  const btn = document.getElementById('mic-btn');
-  const inp = document.getElementById('ci');
-
-  if (isListening && recognition) {
-    recognition.stop();
-    return;
-  }
-
-  recognition = new SpeechRecognition();
-  recognition.lang = 'ru-RU';
-  recognition.continuous = true;
-  recognition.interimResults = true;
-
-  recognition.onresult = (event) => {
-    let transcript = '';
-    for (let i = 0; i < event.results.length; i++) {
-      transcript += event.results[i][0].transcript;
-    }
-    if (inp) {
-      inp.value = transcript;
-      inp.style.height = 'auto';
-      inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
-    }
-  };
-
-  recognition.onstart = () => {
-    isListening = true;
-    if (btn) { btn.style.background = '#ef4444'; btn.textContent = '⏹'; }
-  };
-
-  recognition.onend = () => {
-    isListening = false;
-    recognition = null;
-    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
-  };
-
-  recognition.onerror = (e) => {
-    console.warn('Voice error:', e.error);
-    isListening = false;
-    recognition = null;
-    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
-    if (e.error === 'not-allowed') showNotif('Разрешите доступ к микрофону', 'warn');
-  };
-
-  recognition.start();
-}
-
-</script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/RGBELoader.js">
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js">
-
-
-
-
-// ═══════════════════ VOICE INPUT ═══════════════════════════════
-let recognition = null;
-let isListening = false;
-
-function toggleMic() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    showNotif('Голосовой ввод не поддерживается', 'warn');
-    return;
-  }
-
-  const btn = document.getElementById('mic-btn');
-  const inp = document.getElementById('ci');
-
-  if (isListening && recognition) {
-    recognition.stop();
-    return;
-  }
-
-  recognition = new SpeechRecognition();
-  recognition.lang = 'ru-RU';
-  recognition.continuous = true;
-  recognition.interimResults = true;
-
-  recognition.onresult = (event) => {
-    let transcript = '';
-    for (let i = 0; i < event.results.length; i++) {
-      transcript += event.results[i][0].transcript;
-    }
-    if (inp) {
-      inp.value = transcript;
-      inp.style.height = 'auto';
-      inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
-    }
-  };
-
-  recognition.onstart = () => {
-    isListening = true;
-    if (btn) { btn.style.background = '#ef4444'; btn.textContent = '⏹'; }
-  };
-
-  recognition.onend = () => {
-    isListening = false;
-    recognition = null;
-    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
-  };
-
-  recognition.onerror = (e) => {
-    console.warn('Voice error:', e.error);
-    isListening = false;
-    recognition = null;
-    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
-    if (e.error === 'not-allowed') showNotif('Разрешите доступ к микрофону', 'warn');
-  };
-
-  recognition.start();
-}
-
-</script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js">
-
-
-
-
-// ═══════════════════ VOICE INPUT ═══════════════════════════════
-let recognition = null;
-let isListening = false;
-
-function toggleMic() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    showNotif('Голосовой ввод не поддерживается', 'warn');
-    return;
-  }
-
-  const btn = document.getElementById('mic-btn');
-  const inp = document.getElementById('ci');
-
-  if (isListening && recognition) {
-    recognition.stop();
-    return;
-  }
-
-  recognition = new SpeechRecognition();
-  recognition.lang = 'ru-RU';
-  recognition.continuous = true;
-  recognition.interimResults = true;
-
-  recognition.onresult = (event) => {
-    let transcript = '';
-    for (let i = 0; i < event.results.length; i++) {
-      transcript += event.results[i][0].transcript;
-    }
-    if (inp) {
-      inp.value = transcript;
-      inp.style.height = 'auto';
-      inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
-    }
-  };
-
-  recognition.onstart = () => {
-    isListening = true;
-    if (btn) { btn.style.background = '#ef4444'; btn.textContent = '⏹'; }
-  };
-
-  recognition.onend = () => {
-    isListening = false;
-    recognition = null;
-    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
-  };
-
-  recognition.onerror = (e) => {
-    console.warn('Voice error:', e.error);
-    isListening = false;
-    recognition = null;
-    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
-    if (e.error === 'not-allowed') showNotif('Разрешите доступ к микрофону', 'warn');
-  };
-
-  recognition.start();
-}
-
-</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/RGBELoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
 <script>
 'use strict';
+// ═══════════════════ VOICE INPUT ═══════════════════════════════
+let recognition = null;
+let isListening = false;
+
+function toggleMic() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showNotif('Голосовой ввод не поддерживается', 'warn');
+    return;
+  }
+
+  const btn = document.getElementById('mic-btn');
+  const inp = document.getElementById('ci');
+
+  if (isListening && recognition) {
+    recognition.stop();
+    return;
+  }
+
+  recognition = new SpeechRecognition();
+  recognition.lang = 'ru-RU';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  recognition.onresult = (event) => {
+    let transcript = '';
+    for (let i = 0; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+    }
+    if (inp) {
+      inp.value = transcript;
+      inp.style.height = 'auto';
+      inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
+    }
+  };
+
+  recognition.onstart = () => {
+    isListening = true;
+    if (btn) { btn.style.background = '#ef4444'; btn.textContent = '⏹'; }
+  };
+
+  recognition.onend = () => {
+    isListening = false;
+    recognition = null;
+    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
+  };
+
+  recognition.onerror = (e) => {
+    console.warn('Voice error:', e.error);
+    isListening = false;
+    recognition = null;
+    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
+    if (e.error === 'not-allowed') showNotif('Разрешите доступ к микрофону', 'warn');
+  };
+
+  recognition.start();
+}
+
 // ═══════════════════ LLM API PROXY ════════════════════════════════
 // API_BASE: set to your backend URL in production
 // In standalone HTML mode (no backend), falls back to direct Anthropic call
@@ -1060,8 +929,12 @@ function addGlazing(axis, fixedCoord, center, yB, winY, winH, winW, glMat, trimM
 
 function buildModel(b){
   // Safety checks
-  if(!scene)throw new Error('scene is null');
-  if(!renderer)throw new Error('renderer is null');
+  if(!scene||!renderer){
+    // Try to re-initialize Three.js if not ready
+    try{initThree();}catch(e){throw new Error('3D-движок не инициализирован: '+e.message);}
+  }
+  if(!scene)throw new Error('scene is null — Three.js не загружен');
+  if(!renderer)throw new Error('renderer is null — Three.js не загружен');
   if(!b||!b.W||!b.L||!b.floors)throw new Error('Invalid building params: '+JSON.stringify(b));
   // Clear old groups
   if(bG&&scene){try{scene.remove(bG);}catch(e){}bG=null;}
