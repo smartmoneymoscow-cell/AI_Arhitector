@@ -2032,24 +2032,48 @@ async function send(){
   if(BUILD_RE.test(text)||text.length>6){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🧠 Извлекаю параметры…']);
     
-    // Try Blender server first
-    const serverOk = await generateViaBlenderServer(text);
-    if(serverOk) return;
-    
-    // Parse locally first (guaranteed, instant, no API needed)
-    let parsed=parseLocal(text);
-    
-    // Try LLM for better accuracy (non-blocking, optional)
+    // Step 1: LLM parsing FIRST (understands any natural language)
+    let parsed=null;
     const hasKey=getOpenRouterKey();
     if(hasKey||_backendOk){
       try{
+        addThink(['🧠 AI анализирует описание…']);
         const raw=await callAI(text,
-          'Извлеки параметры здания. ТОЛЬКО JSON без markdown: {"type":"house|office|cottage|modern","floors":null,"width":null,"length":null,"roof_type":null,"facade_material":null} null=не упомянуто.',
+          'Ты — парсер архитектурных описаний для 3D-генератора. Отвечай ТОЛЬКО валидным JSON, без markdown. '+
+          'Формат: {"type":"house|office|cottage|modern","floors":2,"width":10,"length":12,"roof_type":"gabled|flat|hip","facade_material":"brick|wood|glass|plaster|stone","facade_color":null,"has_balcony":false,"has_terrace":false,"has_garage":false} '+
+          'Правила: null = не упомянуто. «база отдыха», «гостиница», «отель» → type="cottage". «премиальный», "элитный" → facade_material="stone". '+
+          '"64 кв метра" → width=8, length=8. Только JSON, ничего больше.',
           300);
         const j=JSON.parse(raw.replace(/```json|```/g,'').trim());
-        Object.entries(j).forEach(([k,v])=>{if(v!==null&&v!==undefined)parsed[k]=v;});
-      }catch(e){console.warn('LLM fallback, using local parse:',e.message);}
+        if(j&&j.type){
+          parsed={
+            type: j.type||'house',
+            floors: j.floors||2,
+            width: j.width||10,
+            length: j.length||12,
+            roof_type: j.roof_type||'gabled',
+            facade_material: j.facade_material||'plaster',
+            facade_color: j.facade_color||null,
+            has_balcony: !!j.has_balcony,
+            has_terrace: !!j.has_terrace,
+            has_garage: !!j.has_garage
+          };
+          addThink(['✅ AI распознал: '+parsed.type+(parsed.floors?', '+parsed.floors+' эт.':'')+(parsed.width?', '+parsed.width+'×'+parsed.length+'м':'')]);
+        }
+      }catch(e){console.warn('LLM parse failed:',e.message);}
     }
+    
+    // Step 2: Fallback to regex if LLM unavailable
+    if(!parsed){
+      parsed=parseLocal(text);
+      addThink(['📝 Локальный анализ (regex)']);
+    }
+    
+    // Step 3: Try Blender server
+    const serverOk = await generateViaBlenderServer(text);
+    if(serverOk) return;
+    
+    // Step 4: Generate locally with Three.js
     const bld=applyParams(text,parsed);
     addThink(['✅ '+bld.label,'📐 '+bld.W+'×'+bld.L+'м | '+bld.floors+' эт. | '+bld.mat,'🚀 Генерирую 3D…']);
     setTimeout(()=>startGen(bld),300);
