@@ -38,6 +38,7 @@ app.add_middleware(
 
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/app/output")
 BLENDER = os.environ.get("BLENDER_PATH", "blender")
+LLM_SVC = os.environ.get("LLM_SERVICE_URL", "http://localhost:8081")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
@@ -386,7 +387,25 @@ async def health():
 @app.post("/api/v1/generate")
 async def generate(req: GenerateRequest):
     """Единый endpoint: промт → парсинг → роутинг → генерация."""
-    params = fallback_regex_parse(req.prompt)
+    # Попытка LLM-парсинга через llm-service
+    params = None
+    try:
+        import httpx as _httpx
+        async with _httpx.AsyncClient() as _client:
+            _r = await _client.post(
+                f"{LLM_SVC}/api/v1/parse",
+                json={"text": req.prompt},
+                timeout=15.0,
+            )
+            if _r.status_code == 200:
+                params = _r.json()
+    except Exception as _e:
+        print(f"[blender-service] LLM parse unavailable: {_e}, using regex fallback")
+
+    # Fallback на regex
+    if params is None:
+        params = fallback_regex_parse(req.prompt)
+
     gen_type = get_generation_type(params)
 
     if gen_type == "interior":

@@ -36,6 +36,7 @@ services:
     name: architect-blender
     runtime: docker
     dockerfilePath: ./blender-service/Dockerfile
+    rootDir: .
     region: oregon
     plan: free
     healthCheckPath: /health
@@ -46,3 +47,5 @@ services:
         value: blender
       - key: OUTPUT_DIR
         value: /app/output
+      - key: LLM_SERVICE_URL
+        value: https://architect-llm.onrender.com

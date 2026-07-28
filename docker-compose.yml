@@ -18,10 +18,13 @@ services:
       - PORT=8081
 
   blender-service:
-    build: ./blender-service
+    build:
+      context: .
+      dockerfile: blender-service/Dockerfile
     environment:
       - PORT=8082
       - BLENDER_PATH=blender
       - OUTPUT_DIR=/app/output
+      - LLM_SERVICE_URL=http://llm-service:8081
     volumes:
       - ./output:/app/output
