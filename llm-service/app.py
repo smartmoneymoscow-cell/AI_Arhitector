@@ -34,7 +34,7 @@ app.add_middleware(
 # CONFIG
 # ═══════════════════════════════════════════════════════════════
 
-OR_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OR_KEY = os.environ.get("OPENROUTER_API_KEY", "") or os.environ.get("OPENROUTER_API_KEY_2", "")
 OR_BASE = "https://openrouter.ai/api/v1"
 MODEL = os.environ.get("LLM_MODEL", "nvidia/nemotron-3-nano-30b-a3b:free")
 
