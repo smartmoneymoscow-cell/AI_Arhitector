@@ -33,8 +33,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-BLENDER_SVC = os.environ.get("BLENDER_SERVICE_URL", "http://localhost:8082")
-LLM_SVC = os.environ.get("LLM_SERVICE_URL", "http://localhost:8081")
+BLENDER_SVC = os.environ.get("BLENDER_SERVICE_URL", "https://ai-arch-blender3d.onrender.com")
+LLM_SVC = os.environ.get("LLM_SERVICE_URL", "https://ai-arch-llmproxy.onrender.com")
 FRONTEND_DIR = os.environ.get("FRONTEND_DIR", os.path.join(os.path.dirname(__file__), "..", "frontend"))
 if not os.path.isdir(FRONTEND_DIR):
     FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend")
