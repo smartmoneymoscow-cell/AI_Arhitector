@@ -230,7 +230,7 @@ class TestOrchestrator:
 
     def test_full_interior_execution(self):
         orch = Orchestrator()
-        result = orch.execute("спальня в стиле минимализм")
+        result = orch.execute("спальня в стиле минимализм", skip_clarification=True)
         assert result["status"] == "done"
         assert result["result"]["gen_type"] == "interior"
 
@@ -242,7 +242,7 @@ class TestOrchestrator:
 
     def test_progress_tracking(self):
         orch = Orchestrator()
-        result = orch.execute("дом2 этажа")
+        result = orch.execute("дом2 этажа", skip_clarification=True)
         progress = orch.get_progress(result["job_id"])
         assert progress["status"] == "done"
         assert progress["progress"] == 100
@@ -263,6 +263,11 @@ class TestOrchestrator:
         """Orchestrator не падает на нестандартных промтах."""
         orch = Orchestrator()
         result = orch.execute("🤖💀")
+        assert result["status"] in ("done", "clarification_needed")
+
+    def test_error_handling_with_skip(self):
+        orch = Orchestrator()
+        result = orch.execute("🤖💀", skip_clarification=True)
         assert result["status"] == "done"  # regex fallback handles it
 
     def test_params_passed_to_geometry(self):
@@ -292,16 +297,21 @@ class TestEdgeCases:
     def test_empty_prompt(self):
         orch = Orchestrator()
         result = orch.execute("")
-        assert result["status"] == "done"
+        assert result["status"] in ("done", "clarification_needed")
 
     def test_very_long_prompt(self):
         orch = Orchestrator()
         result = orch.execute("дом " * 1000)
-        assert result["status"] == "done"
+        assert result["status"] in ("done", "clarification_needed")
 
     def test_special_characters(self):
         orch = Orchestrator()
         result = orch.execute("<script>alert(1)</script>")
+        assert result["status"] in ("done", "clarification_needed")
+
+    def test_skip_clarification(self):
+        orch = Orchestrator()
+        result = orch.execute("построй дом", skip_clarification=True)
         assert result["status"] == "done"
 
     def test_mixed_language(self):

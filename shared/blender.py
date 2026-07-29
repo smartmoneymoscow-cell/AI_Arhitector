@@ -51,21 +51,21 @@ if bsdf_{name}:
 
 def _window_code(x: str, z: str, floor: str, idx: str,
                  wall_y: str, thick: str) -> str:
-    """Генерирует окно с рамой, стеклом и подоконником."""
+    """Генерирует окно с рамой, стеклом и подоконником (8-space indent для вставки в цикл)."""
     return f"""
-# Window {floor}_{idx}
-bpy.ops.mesh.primitive_cube_add(size=1,location=({x},{wall_y},{z}))
-wf=bpy.context.active_object;wf.name=f"WindowFrame_{{floor}}_{{idx}}"
-wf.scale=(1.3,0.06,1.6);bpy.ops.object.transform_apply(scale=True)
-wf.data.materials.append(mat_frame)
-bpy.ops.mesh.primitive_cube_add(size=1,location=({x},{wall_y},{z}))
-wg=bpy.context.active_object;wg.name=f"WindowGlass_{{floor}}_{{idx}}"
-wg.scale=(1.1,0.02,1.4);bpy.ops.object.transform_apply(scale=True)
-wg.data.materials.append(mat_glass)
-bpy.ops.mesh.primitive_cube_add(size=1,location=({x},{wall_y},{z}-0.85))
-ws=bpy.context.active_object;ws.name=f"WindowSill_{{floor}}_{{idx}}"
-ws.scale=(1.4,0.12,0.05);bpy.ops.object.transform_apply(scale=True)
-ws.data.materials.append(mat_concrete)
+        # Window {{floor}}_{{idx}}
+        bpy.ops.mesh.primitive_cube_add(size=1,location=({x},{wall_y},{z}))
+        wf=bpy.context.active_object;wf.name=f"WindowFrame_{{floor}}_{{idx}}"
+        wf.scale=(1.3,0.06,1.6);bpy.ops.object.transform_apply(scale=True)
+        wf.data.materials.append(mat_frame)
+        bpy.ops.mesh.primitive_cube_add(size=1,location=({x},{wall_y},{z}))
+        wg=bpy.context.active_object;wg.name=f"WindowGlass_{{floor}}_{{idx}}"
+        wg.scale=(1.1,0.02,1.4);bpy.ops.object.transform_apply(scale=True)
+        wg.data.materials.append(mat_glass)
+        bpy.ops.mesh.primitive_cube_add(size=1,location=({x},{wall_y},{z}-0.85))
+        ws=bpy.context.active_object;ws.name=f"WindowSill_{{floor}}_{{idx}}"
+        ws.scale=(1.4,0.12,0.05);bpy.ops.object.transform_apply(scale=True)
+        ws.data.materials.append(mat_concrete)
 """
 
 
@@ -230,6 +230,63 @@ elif "{roof_type}"=="hip":
     mesh=bpy.data.meshes.new("RoofMesh");mesh.from_pydata(verts,[],faces);mesh.update()
     roof=bpy.data.objects.new("Roof",mesh);bpy.context.collection.objects.link(roof)
     roof.data.materials.append(mat_roof)
+"""
+
+    # === Dormer windows (мансардные окна), Bay window, Cornices, Quoins ===
+    script += f"""
+# Dormer windows for gabled roof
+if "{roof_type}"=="gabled" and floors >= 2:
+    n_dormers = max(1, W // 4)
+    for di in range(n_dormers):
+        dx = -W/2 + (di+1)*W/(n_dormers+1)
+        for dz,side in [(-L/2-0.1,"F"),(L/2+0.1,"B")]:
+            bpy.ops.mesh.primitive_cube_add(size=1,location=(dx,dz,total_h+0.8))
+            dormer=bpy.context.active_object;dormer.name=f"Dormer_{{side}}_{{di}}"
+            dormer.scale=(0.6,0.4,0.5);bpy.ops.object.transform_apply(scale=True)
+            dormer.data.materials.append(mat_wall)
+            bpy.ops.mesh.primitive_cube_add(size=1,location=(dx,dz,total_h+1.15))
+            droof=bpy.context.active_object;droof.name=f"DRoof_{{side}}_{{di}}"
+            droof.scale=(0.7,0.5,0.05);bpy.ops.object.transform_apply(scale=True)
+            droof.data.materials.append(mat_roof)
+            bpy.ops.mesh.primitive_cube_add(size=1,location=(dx,dz-0.2,total_h+0.7))
+            dw=bpy.context.active_object;dw.name=f"DWin_{{side}}_{{di}}"
+            dw.scale=(0.4,0.02,0.35);bpy.ops.object.transform_apply(scale=True)
+            dw.data.materials.append(mat_glass)
+
+# Bay window on front wall
+if floors >= 2:
+    bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2-0.6,fH*0.45))
+    bay=bpy.context.active_object;bay.name="BayWindow"
+    bay.scale=(2.2,0.6,0.9);bpy.ops.object.transform_apply(scale=True)
+    bay.data.materials.append(mat_wall)
+    bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2-0.6,fH*0.95))
+    bayroof=bpy.context.active_object;bayroof.name="BayRoof"
+    bayroof.scale=(2.4,0.7,0.04);bpy.ops.object.transform_apply(scale=True)
+    bayroof.data.materials.append(mat_roof)
+    for pi,px in enumerate([-0.7,0,0.7]):
+        bpy.ops.mesh.primitive_cube_add(size=1,location=(px,-L/2-0.85,fH*0.45))
+        bg=bpy.context.active_object;bg.name=f"BayGlass_{{pi}}"
+        bg.scale=(0.5,0.02,0.7);bpy.ops.object.transform_apply(scale=True)
+        bg.data.materials.append(mat_glass)
+
+# Detailed cornice at roof line
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,0,total_h+0.05))
+cornice_top=bpy.context.active_object;cornice_top.name="CorniceTop"
+cornice_top.scale=(W/2+0.5,L/2+0.5,0.08);bpy.ops.object.transform_apply(scale=True)
+cornice_top.data.materials.append(mat_concrete)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,0,total_h-0.15))
+cornice_bot=bpy.context.active_object;cornice_bot.name="CorniceBot"
+cornice_bot.scale=(W/2+0.45,L/2+0.45,0.04);bpy.ops.object.transform_apply(scale=True)
+cornice_bot.data.materials.append(mat_concrete)
+
+# Quoins at corners
+for cx,cy in [(-W/2,-L/2),(W/2,-L/2),(-W/2,L/2),(W/2,L/2)]:
+    for qi in range(floors):
+        qz=qi*fH+fH/2
+        bpy.ops.mesh.primitive_cube_add(size=1,location=(cx,cy,qz))
+        quo=bpy.context.active_object;quo.name=f"Quoin_{{qi}}"
+        quo.scale=(0.25,0.25,fH/2-0.05);bpy.ops.object.transform_apply(scale=True)
+        quo.data.materials.append(mat_concrete)
 """
 
     # === Door ===

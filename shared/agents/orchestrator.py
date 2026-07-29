@@ -28,6 +28,8 @@ from shared.agents.texture_agent import TextureAgent
 from shared.agents.render_agent import RenderAgent
 from shared.agents.export_agent import ExportAgent
 from shared.router import route_generation
+from shared.clarification import ClarificationEngine, ClarificationResult
+from shared.streaming import ProgressStreamer, create_streamer
 
 
 class Orchestrator:
@@ -46,9 +48,10 @@ class Orchestrator:
             "render": RenderAgent(),
             "export": ExportAgent(),
         }
+        self.clarification = ClarificationEngine()
         self.jobs: dict[str, dict] = {}
 
-    def execute(self, prompt: str, llm_params: dict | None = None) -> dict:
+    def execute(self, prompt: str, llm_params: dict | None = None, skip_clarification: bool = False) -> dict:
         """
         Полный цикл генерации от промта до результата.
 
@@ -62,6 +65,9 @@ class Orchestrator:
         job_id = uuid.uuid4().hex[:8]
         start = time.time()
 
+        # Create streamer for SSE progress
+        streamer = create_streamer(job_id)
+
         job = {
             "job_id": job_id,
             "prompt": prompt,
@@ -70,11 +76,13 @@ class Orchestrator:
             "result": None,
             "error": None,
             "started_at": start,
+            "streamer": streamer,
         }
         self.jobs[job_id] = job
 
         try:
             # Step1: Parse
+            streamer.emit("parse", "running", progress=5, message="Parsing prompt...")
             parse_result = self._run_step(
                 job, "parse",
                 Task(name="parse", agent="parser", params={"prompt": prompt, "use_llm": True})
@@ -83,16 +91,41 @@ class Orchestrator:
             if parse_result.status == TaskStatus.FAILED:
                 job["status"] = "failed"
                 job["error"] = parse_result.error
+                streamer.emit("parse", "failed", progress=0, message=parse_result.error)
                 return job
 
             parsed = parse_result.data
             params = parsed["params"]
             gen_type = parsed["gen_type"]
+            confidence = parsed.get("confidence", 0.5)
+
+            streamer.emit("parse", "done", progress=20,
+                          message=f"Parsed: {gen_type}, confidence={confidence:.0%}")
+
+            # Step1.5: Check if clarification needed
+            clar = self.clarification.analyze(prompt, params, confidence)
+            if clar.needs_clarification and not skip_clarification:
+                job["status"] = "clarification_needed"
+                job["clarification"] = {
+                    "questions": [
+                        {"field": q.field, "text": q.text, "options": q.options, "priority": q.priority}
+                        for q in clar.questions
+                    ],
+                    "partial_params": params,
+                    "confidence": confidence,
+                }
+                streamer.emit("clarification", "waiting", progress=20,
+                              message="Need clarification", data=job["clarification"])
+                return job
 
             # Step2: Route (determines full plan)
+            streamer.emit("route", "running", progress=25, message="Planning generation...")
             plan = route_generation(prompt, llm_params)
 
             # Step3: Geometry generation
+            streamer.emit("route", "done", progress=30, message=f"Plan: {len(plan.steps)} steps")
+            streamer.emit("geometry", "running", progress=35, message="Generating3D geometry...")
+
             geometry_params = {
                 "gen_type": gen_type,
                 "building_params": plan.params.get("building", {}),
@@ -110,7 +143,13 @@ class Orchestrator:
                 Task(name="geometry", agent="geometry", params=geometry_params)
             )
 
+            if geom_result.status == TaskStatus.DONE:
+                streamer.emit("geometry", "done", progress=60, message="Geometry generated")
+            else:
+                streamer.emit("geometry", "failed", progress=35, message=geom_result.error or "Geometry failed")
+
             # Step4: Texture application
+            streamer.emit("texture", "running", progress=65, message="Applying textures...")
             texture_result = self._run_step(
                 job, "texture",
                 Task(name="texture", agent="texture", params={
@@ -118,8 +157,10 @@ class Orchestrator:
                     "resolution": 2048,
                 })
             )
+            streamer.emit("texture", "done", progress=75, message="Textures applied")
 
             # Step5: Export
+            streamer.emit("export", "running", progress=80, message="Exporting GLB...")
             export_result = self._run_step(
                 job, "export_glb",
                 Task(name="export", agent="export", params={
@@ -127,6 +168,7 @@ class Orchestrator:
                     "job_id": job_id,
                 })
             )
+            streamer.emit("export", "done", progress=95, message="Export complete")
 
             # Compile result
             job["status"] = "done"
@@ -139,6 +181,7 @@ class Orchestrator:
                 "export": export_result.data if export_result.status == TaskStatus.DONE else None,
                 "confidence": parsed.get("confidence", 0.5),
             }
+            streamer.emit("done", "done", progress=100, message="Generation complete!")
 
         except Exception as e:
             job["status"] = "failed"

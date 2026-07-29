@@ -661,6 +661,59 @@ async def orchestrator_job_progress(job_id: str):
     return progress
 
 
+@app.get("/api/v1/orchestrator/jobs/{job_id}/stream")
+async def orchestrator_stream(job_id: str):
+    """SSE stream прогресса генерации (real-time)."""
+    from shared.streaming import get_streamer
+    from fastapi.responses import StreamingResponse
+
+    streamer = get_streamer(job_id)
+    if not streamer:
+        raise HTTPException(404, "Job not found or stream expired")
+
+    async def event_generator():
+        async for event in streamer.subscribe():
+            yield event.to_sse()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/v1/orchestrator/clarify")
+async def orchestrator_clarify(req: dict):
+    """Применить ответы на уточняющие вопросы и продолжить генерацию."""
+    from shared.agents import Orchestrator
+    from shared.clarification import ClarificationEngine
+
+    job_id = req.get("job_id", "")
+    answers = req.get("answers", {})
+
+    job = _orchestrator_jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.get("status") != "clarification_needed":
+        raise HTTPException(400, "Job is not waiting for clarification")
+
+    # Apply answers to partial params
+    engine = ClarificationEngine()
+    partial = job.get("clarification", {}).get("partial_params", {})
+    updated_params = engine.apply_answers(partial, answers)
+
+    # Re-run orchestrator with updated params
+    prompt = job.get("prompt", "")
+    orch = Orchestrator()
+    result = orch.execute(prompt, llm_params=updated_params, skip_clarification=True)
+
+    # Update job in-place
+    _orchestrator_jobs[job_id].update(result)
+    _orchestrator_jobs[job_id]["job_id"] = job_id  # preserve original ID
+
+    return _orchestrator_jobs[job_id]
+
+
 @app.post("/api/v1/parse-local")
 async def parse_local(req: GenerateRequest):
     """Локальный парсинг промта (без LLM, только regex)."""
