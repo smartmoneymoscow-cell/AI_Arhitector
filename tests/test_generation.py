@@ -21,10 +21,12 @@ import pytest
 # Добавить корень проекта в path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from promt_parser import (
+from shared.parser import (
     fallback_regex_parse,
-    validate_params,
     get_generation_type,
+)
+from shared.validation import (
+    validate_params,
     DEFAULT_FURNITURE,
     VALID_OBJECT_TYPES,
     VALID_BUILDING_TYPES,
@@ -158,10 +160,10 @@ class TestBpyCompilation:
         path = os.path.join(os.path.dirname(__file__), "..", "blender-service", "app.py")
         py_compile.compile(path, doraise=True)
 
-    def test_promt_parser_compiles(self):
-        """promt_parser.py компилируется."""
+    def test_shared_parser_compiles(self):
+        """shared/parser.py компилируется."""
         import py_compile
-        path = os.path.join(os.path.dirname(__file__), "..", "promt_parser.py")
+        path = os.path.join(os.path.dirname(__file__), "..", "shared", "parser.py")
         py_compile.compile(path, doraise=True)
 
     def test_llm_service_compiles(self):

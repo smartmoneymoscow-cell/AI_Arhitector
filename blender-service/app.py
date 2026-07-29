@@ -172,8 +172,8 @@ async def _generate_interior(params: dict):
         "\nimport bpy"
         f"\nbpy.context.scene.render.filepath = r'{output_file}'"
         "\nbpy.context.scene.render.engine = 'BLENDER_EEVEE'"
-        "\nbpy.context.scene.render.resolution_x = 640"
-        "\nbpy.context.scene.render.resolution_y = 480"
+        "\nbpy.context.scene.render.resolution_x = 3840"
+        "\nbpy.context.scene.render.resolution_y = 2160"
         "\nbpy.ops.render.render(write_still=True)"
     )
 
