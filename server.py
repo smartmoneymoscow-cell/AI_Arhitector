@@ -317,6 +317,56 @@ async def task_status(task_id: str):
 
 
 # ═══════════════════════════════════════════════════════════════
+# ORCHESTRATOR (multi-agent pipeline)
+# ═══════════════════════════════════════════════════════════════
+
+_orchestrator_jobs: dict = {}
+
+
+@app.post("/api/v1/orchestrator/execute")
+async def orchestrator_execute(req: GenerateRequest):
+    """Полный цикл генерации через multi-agent оркестратор."""
+    from shared.agents import Orchestrator
+    orch = Orchestrator()
+    result = orch.execute(req.prompt)
+    job_id = result["job_id"]
+    _orchestrator_jobs[job_id] = result
+    return {
+        "job_id": job_id,
+        "status": result["status"],
+        "gen_type": result.get("result", {}).get("gen_type"),
+        "params": result.get("result", {}).get("params"),
+        "steps": [
+            {"name": s["name"], "status": s["status"], "duration_ms": s.get("duration_ms", 0)}
+            for s in result.get("steps", [])
+        ],
+        "duration_ms": result.get("duration_ms", 0),
+    }
+
+
+@app.get("/api/v1/orchestrator/jobs/{job_id}")
+async def orchestrator_job_status(job_id: str):
+    job = _orchestrator_jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return job
+
+
+@app.post("/api/v1/parse-local")
+async def parse_local(req: GenerateRequest):
+    """Локальный парсинг промта (regex, без LLM)."""
+    from shared.parser import fallback_regex_parse
+    from shared.router import route_generation
+    params = fallback_regex_parse(req.prompt)
+    plan = route_generation(req.prompt, params)
+    return {
+        "params": params,
+        "gen_type": plan.gen_type,
+        "building_params": plan.params.get("building", {}),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
 # STATIC FILES
 # ═══════════════════════════════════════════════════════════════
 

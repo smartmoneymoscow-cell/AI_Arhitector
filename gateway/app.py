@@ -605,6 +605,130 @@ async def task_status(task_id: str):
 
 
 # ═══════════════════════════════════════════════════════════════
+# ORCHESTRATOR (multi-agent pipeline)
+# ═══════════════════════════════════════════════════════════════
+
+# In-memory job store (для single-instance; в production → Redis)
+_orchestrator_jobs: dict = {}
+
+
+@app.post("/api/v1/orchestrator/execute")
+async def orchestrator_execute(req: GenerateRequest):
+    """Полный цикл генерации через multi-agent оркестратор."""
+    import asyncio
+    from shared.agents import Orchestrator
+
+    orch = Orchestrator()
+
+    # Run in thread pool (orchestrator is sync)
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, orch.execute, req.prompt)
+
+    job_id = result["job_id"]
+    _orchestrator_jobs[job_id] = result
+
+    return {
+        "job_id": job_id,
+        "status": result["status"],
+        "gen_type": result.get("result", {}).get("gen_type"),
+        "params": result.get("result", {}).get("params"),
+        "steps": [
+            {"name": s["name"], "status": s["status"], "duration_ms": s.get("duration_ms", 0)}
+            for s in result.get("steps", [])
+        ],
+        "duration_ms": result.get("duration_ms", 0),
+    }
+
+
+@app.get("/api/v1/orchestrator/jobs/{job_id}")
+async def orchestrator_job_status(job_id: str):
+    """Статус задачи оркестратора."""
+    job = _orchestrator_jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return job
+
+
+@app.get("/api/v1/orchestrator/jobs/{job_id}/progress")
+async def orchestrator_job_progress(job_id: str):
+    """Прогресс задачи оркестратора (для polling)."""
+    from shared.agents import Orchestrator
+    orch = Orchestrator()
+    orch.jobs = _orchestrator_jobs
+    progress = orch.get_progress(job_id)
+    if "error" in progress:
+        raise HTTPException(404, progress["error"])
+    return progress
+
+
+@app.post("/api/v1/parse-local")
+async def parse_local(req: GenerateRequest):
+    """Локальный парсинг промта (без LLM, только regex)."""
+    from shared.parser import fallback_regex_parse
+    from shared.router import route_generation
+
+    params = fallback_regex_parse(req.prompt)
+    plan = route_generation(req.prompt, params)
+
+    return {
+        "params": params,
+        "gen_type": plan.gen_type,
+        "building_params": plan.params.get("building", {}),
+        "steps": [{"name": s.name, "service": s.service} for s in plan.steps],
+    }
+
+
+@app.post("/api/v1/generate-orchestrated")
+async def generate_orchestrated(req: GenerateRequest):
+    """Генерация через оркестратор с возвратом GLB."""
+    import asyncio
+    from shared.agents import Orchestrator
+    from shared.blender import generate_bpy_script, run_blender
+    from shared.router import route_generation
+
+    # Parse
+    plan = route_generation(req.prompt)
+    params = plan.params.get("parsed", {})
+    building_params = plan.params.get("building", {})
+
+    if plan.gen_type == "interior":
+        from shared.blender import generate_interior_script
+        from shared.validation import DEFAULT_FURNITURE
+        room_type = params.get("room_type", "living")
+        furniture = params.get("furniture") or DEFAULT_FURNITURE.get(room_type, ["sofa", "table", "chandelier"])
+        interior_params = {
+            "width": params.get("width_m", 6),
+            "length": params.get("length_m", 8),
+            "height": params.get("height_m", 3),
+            "style": params.get("style", "modern"),
+            "furniture": furniture,
+        }
+        script = generate_interior_script(interior_params)
+    else:
+        script = generate_bpy_script(building_params)
+
+    # Execute
+    import uuid
+    job_id = uuid.uuid4().hex[:8]
+    output_file = os.path.join("/app/output", f"{job_id}.glb")
+    export_cmd = f"\nimport bpy\nbpy.ops.export_scene.gltf(filepath=r'{output_file}', export_format='GLB')"
+
+    try:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, run_blender, script + export_cmd, output_file)
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))
+
+    if os.path.exists(output_file):
+        return FileResponse(
+            output_file,
+            media_type="model/gltf-binary",
+            filename=f"archai_{job_id}.glb",
+        )
+    raise HTTPException(500, "Generation failed")
+
+
+# ═══════════════════════════════════════════════════════════════
 # STATIC FILES
 # ═══════════════════════════════════════════════════════════════
 
