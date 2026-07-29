@@ -43,6 +43,11 @@ while ((m = scriptRe.exec(htmlSrc)) !== null) {
 // Remove 'use strict'
 appCode = appCode.replace(/'use strict';?\s*/g, '');
 
+// Remove duplicate Voice Input code (was duplicated in broken CDN script tags, now in main block)
+// The VM context can't handle `let` re-declarations
+appCode = appCode.replace(/let recognition = null;\s*/g, '');
+appCode = appCode.replace(/let isListening = false;\s*/g, '');
+
 // ═══════════════════════════════════════════════════════════════
 // BUILD TEST ENVIRONMENT
 // ═══════════════════════════════════════════════════════════════
