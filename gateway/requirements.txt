@@ -2,3 +2,13 @@ fastapi>=0.104.0
 uvicorn>=0.24.0
 httpx>=0.25.0
 pydantic>=2.5.0
+# BIM
+ifcopenshell>=0.7.0
+# Geometry
+shapely>=2.0.0
+networkx>=3.0
+# Image processing
+Pillow>=10.0.0
+# Task queue (optional — Celery worker отдельно)
+# celery>=5.3.0
+# redis>=5.0.0
