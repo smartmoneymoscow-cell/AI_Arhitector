@@ -27,7 +27,7 @@ body{display:flex;flex-direction:column}
 .stabs{display:flex;border-bottom:1px solid var(--bdr);padding:0 8px}
 .stab{flex:1;padding:10px 4px;text-align:center;font-size:11px;font-weight:600;color:var(--txt2);cursor:pointer;border-bottom:2px solid transparent;text-transform:uppercase;transition:all .15s}
 .stab.on{color:#6366f1;border-color:#6366f1}
-.chat{flex:1;overflow-y:auto;min-height:0;padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}
+.chat{flex:1;overflow-y:auto;min-height:0;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}
 .chat::-webkit-scrollbar{width:3px}
 .chat::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px}
 .msg{max-width:88%;display:flex;flex-direction:column}
@@ -45,14 +45,14 @@ body{display:flex;flex-direction:column}
 .d{width:5px;height:5px;border-radius:50%;background:#6366f1;animation:bop .9s infinite}
 .d:nth-child(2){animation-delay:.17s}.d:nth-child(3){animation-delay:.34s}
 @keyframes bop{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-5px)}}
-.qpbar{padding:12px 16px;display:flex;gap:8px;background:transparent;overflow-x:auto;flex-wrap:nowrap}
+.qpbar{padding:8px 16px;display:flex;gap:6px;background:transparent;overflow-x:auto;flex-wrap:nowrap}
 .qp{padding:8px 14px;border-radius:20px;border:1px solid var(--bdr);background:var(--bg2);color:var(--txt2);font-size:12px;cursor:pointer;transition:all .15s;font-weight:500}
 .qp:hover{border-color:#6366f1;color:#6366f1;background:#f5f3ff}
 
-.ci{padding:16px;background:transparent;flex-shrink:0}
-.ibox{display:flex;gap:10px;align-items:flex-end;background:var(--bg2);border:1px solid var(--bdr);border-radius:16px;padding:12px 12px 12px 16px;transition:all .15s;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.ci{padding:10px 16px 12px;background:transparent;flex-shrink:0}
+.ibox{display:flex;gap:10px;align-items:flex-end;background:var(--bg2);border:1px solid var(--bdr);border-radius:14px;padding:10px 10px 10px 14px;transition:all .15s;box-shadow:0 1px 4px rgba(0,0,0,.04)}
 .ibox:focus-within{border-color:#6366f1;background:#fff;box-shadow:0 0 0 2px rgba(99,102,241,.1)}
-.ita{flex:1;background:transparent;border:none;outline:none;color:var(--txt);font-family:Inter,sans-serif;font-size:14px;resize:none;min-height:80px;max-height:200px;line-height:1.6}
+.ita{flex:1;background:transparent;border:none;outline:none;color:var(--txt);font-family:Inter,sans-serif;font-size:14px;resize:none;min-height:44px;max-height:200px;line-height:1.6}
 .ita::placeholder{color:var(--txt2);opacity:.7}
 .sbtn{width:36px;height:36px;border-radius:50%;border:none;background:#6366f1;color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s}
 .sbtn:hover{background:#4f46e5}
@@ -130,7 +130,7 @@ body{display:flex;flex-direction:column}
   <div class="sb" id="sb">
     <!-- CHAT TAB -->
     <div id="tab-chat" class="chat">
-      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:40px 20px;text-align:center">
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px 20px 10px;text-align:center;min-height:0;overflow:hidden">
         <div style="font-size:22px;font-weight:700;color:var(--txt);line-height:1.3">Что вы хотите<br>построить?</div>
         <div style="font-size:13px;color:var(--txt2);max-width:280px;line-height:1.5">Опишите здание или интерьер — я сгенерирую 3D-модель</div>
       </div>
@@ -254,6 +254,64 @@ body{display:flex;flex-direction:column}
 <script src="https://cdn.jsdelivr.net/npm/web-ifc@0.0.57/web-ifc-api.js"></script>
 <script>
 'use strict';
+// ═══════════════════ VOICE INPUT ═══════════════════════════════
+let recognition = null;
+let isListening = false;
+
+function toggleMic() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showNotif('Голосовой ввод не поддерживается', 'warn');
+    return;
+  }
+
+  const btn = document.getElementById('mic-btn');
+  const inp = document.getElementById('ci');
+
+  if (isListening && recognition) {
+    recognition.stop();
+    return;
+  }
+
+  recognition = new SpeechRecognition();
+  recognition.lang = 'ru-RU';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  recognition.onresult = (event) => {
+    let transcript = '';
+    for (let i = 0; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+    }
+    if (inp) {
+      inp.value = transcript;
+      inp.style.height = 'auto';
+      inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
+    }
+  };
+
+  recognition.onstart = () => {
+    isListening = true;
+    if (btn) { btn.style.background = '#ef4444'; btn.textContent = '⏹'; }
+  };
+
+  recognition.onend = () => {
+    isListening = false;
+    recognition = null;
+    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
+  };
+
+  recognition.onerror = (e) => {
+    console.warn('Voice error:', e.error);
+    isListening = false;
+    recognition = null;
+    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
+    if (e.error === 'not-allowed') showNotif('Разрешите доступ к микрофону', 'warn');
+  };
+
+  recognition.start();
+}
+
 // ═══════════════════ LLM API PROXY ════════════════════════════════
 // API_BASE: set to your backend URL in production
 // In standalone HTML mode (no backend), falls back to direct Anthropic call
@@ -267,7 +325,7 @@ const API_BASE = (()=>{
   // Auto-detect: if on GitHub Pages, use Render backend
   const origin = window.location.origin;
   if(origin.includes('github.io') || origin.includes('githubusercontent.com'))
-    return 'https://architect-zpif.onrender.com';
+    return 'https://architect-gateway.onrender.com';
   return origin;      // same-origin backend
 })();
 let _backendOk = null; // null = not checked yet
@@ -276,10 +334,14 @@ async function checkBackend(){
   if(!API_BASE){_backendOk=false;return;}
   try{
     const ctrl=new AbortController();
-    setTimeout(()=>ctrl.abort(),4000);
+    const tid=setTimeout(()=>ctrl.abort(),5000);
     const r=await fetch(API_BASE+'/api/v1/health',{signal:ctrl.signal});
+    clearTimeout(tid);
     _backendOk=r.ok;
-  }catch(e){_backendOk=false;}
+  }catch(e){
+    _backendOk=false;
+    console.warn('Backend check failed:',e.message);
+  }
   console.log('Backend proxy:',_backendOk?'available':'unavailable (direct API mode)');
 }
 
@@ -348,10 +410,11 @@ function parseLocal(text){
   if(/офис|office/.test(t))p.type='office';
   else if(/коттедж|cottage/.test(t))p.type='cottage';
   else if(/таунхаус|modern/.test(t))p.type='modern';
+  else if(/база|гостиниц|отель|хостел|санаторий|пансионат|resort|hotel/.test(t))p.type='cottage';
   else p.type='house';
   // Architectural style
   if(/хай-?тек|hi-?tech|hightech/.test(t)){p.style='hitech';p.facade_material=p.facade_material||'glass';p.roof_type=p.roof_type||'flat';}
-  else if(/классик|classic|неоклассик/.test(t)){p.style='classic';p.facade_material=p.facade_material||'stone';}
+  else if(/классик|classic|неоклассик|премиальн|элитн|люкс/.test(t)){p.style='classic';p.facade_material=p.facade_material||'stone';}
   else if(/скандинав|scandi/.test(t)){p.style='scandi';p.facade_material=p.facade_material||'wood';}
   else if(/камен|stone/.test(t)&&!p.facade_material)p.facade_material='stone';
   // Pond / water feature
@@ -415,6 +478,177 @@ function applyParams(text,p){
 
 // ═══════════════════ STATE ════════════════════════════════════
 const ST={view:'ext',hasModel:false,bld:null,ann:true,wire:false,curFloor:0,lod:'exterior'};
+
+// ═══════════════════ WEB-IFC PARSER (browser-side IFC) ════════════════════
+let ifcApi = null;
+let ifcReady = false;
+
+async function initIFC() {
+  if (ifcReady) return true;
+  try {
+    ifcApi = new WebIFC.IfcAPI();
+    await ifcApi.Init();
+    ifcReady = true;
+    console.log('web-ifc initialized, version:', ifcApi.wasmModule?.version || 'unknown');
+    return true;
+  } catch(e) {
+    console.warn('web-ifc init failed:', e);
+    return false;
+  }
+}
+
+async function parseIFCFile(buffer) {
+  if (!ifcReady) await initIFC();
+  if (!ifcApi) throw new Error('web-ifc not available');
+
+  const modelID = ifcApi.OpenModel(new Uint8Array(buffer));
+  const result = {
+    modelID,
+    project: null,
+    sites: [],
+    buildings: [],
+    storeys: [],
+    spaces: [],
+    walls: [],
+    doors: [],
+    windows: [],
+    totalElements: 0,
+  };
+
+  // Extract project
+  const projects = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCPROJECT);
+  if (projects.size() > 0) {
+    const pid = projects.get(0);
+    result.project = { id: pid, type: 'IfcProject' };
+  }
+
+  // Extract storeys
+  const storeys = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCBUILDINGSTOREY);
+  for (let i = 0; i < storeys.size(); i++) {
+    const sid = storeys.get(i);
+    const storey = ifcApi.GetLine(modelID, sid);
+    result.storeys.push({
+      id: sid,
+      name: storey.Name?.value || `Storey ${i}`,
+      elevation: storey.Elevation?.value || 0,
+    });
+  }
+
+  // Extract walls
+  const walls = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCWALL);
+  for (let i = 0; i < walls.size(); i++) {
+    const wid = walls.get(i);
+    result.walls.push({ id: wid, type: 'IfcWall' });
+  }
+
+  // Extract doors
+  const doors = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCDOOR);
+  for (let i = 0; i < doors.size(); i++) {
+    const did = doors.get(i);
+    const door = ifcApi.GetLine(modelID, did);
+    result.doors.push({
+      id: did,
+      name: door.Name?.value || '',
+      width: door.OverallWidth?.value || 0,
+      height: door.OverallHeight?.value || 0,
+    });
+  }
+
+  // Extract windows
+  const windows = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCWINDOW);
+  for (let i = 0; i < windows.size(); i++) {
+    const wid = windows.get(i);
+    const win = ifcApi.GetLine(modelID, wid);
+    result.windows.push({
+      id: wid,
+      name: win.Name?.value || '',
+      width: win.OverallWidth?.value || 0,
+      height: win.OverallHeight?.value || 0,
+    });
+  }
+
+  // Extract spaces (rooms)
+  const spaces = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCSPACE);
+  for (let i = 0; i < spaces.size(); i++) {
+    const sid = spaces.get(i);
+    const space = ifcApi.GetLine(modelID, sid);
+    result.spaces.push({
+      id: sid,
+      name: space.Name?.value || '',
+      longName: space.LongName?.value || '',
+    });
+  }
+
+  result.totalElements = result.walls.length + result.doors.length + result.windows.length + result.spaces.length;
+
+  ifcApi.CloseModel(modelID);
+  return result;
+}
+
+async function loadIFCAsThreeJS(buffer) {
+  if (!ifcReady) await initIFC();
+  if (!ifcApi) throw new Error('web-ifc not available');
+
+  const modelID = ifcApi.OpenModel(new Uint8Array(buffer));
+  const group = new THREE.Group();
+  group.name = 'IFC_Model';
+
+  // Get all meshes
+  const flatMeshes = ifcApi.LoadAllGeometry(modelID);
+  for (let i = 0; i < flatMeshes.size(); i++) {
+    const flatMesh = flatMeshes.get(i);
+    const placedGeometries = flatMesh.geometries;
+
+    for (let j = 0; j < placedGeometries.size(); j++) {
+      const placed = placedGeometries.get(j);
+      const geometry = ifcApi.GetGeometry(modelID, placed.geometryExpressID);
+
+      // Get vertices
+      const verts = ifcApi.GetVertexArray(
+        geometry.GetVertexData(),
+        geometry.GetVertexDataSize()
+      );
+
+      // Get indices
+      const indices = ifcApi.GetIndexArray(
+        geometry.GetIndexData(),
+        geometry.GetIndexDataSize()
+      );
+
+      // Create Three.js geometry
+      const bufGeom = new THREE.BufferGeometry();
+      const posArr = new Float32Array(verts.length / 2);
+      for (let k = 0; k < verts.length; k += 6) {
+        posArr[k / 6 * 3] = verts[k];
+        posArr[k / 6 * 3 + 1] = verts[k + 1];
+        posArr[k / 6 * 3 + 2] = verts[k + 2];
+      }
+      bufGeom.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+      bufGeom.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
+      bufGeom.computeVertexNormals();
+
+      // Material
+      const color = placed.color;
+      const mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(color.x, color.y, color.z),
+        opacity: color.w,
+        transparent: color.w < 1,
+        side: THREE.DoubleSide,
+      });
+
+      const mesh = new THREE.Mesh(bufGeom, mat);
+
+      // Apply transformation matrix
+      const matrix = new THREE.Matrix4().fromArray(placed.flatTransformation);
+      mesh.applyMatrix4(matrix);
+
+      group.add(mesh);
+    }
+  }
+
+  ifcApi.CloseModel(modelID);
+  return group;
+}
 
 // ═══════════════════ THREE.JS ENGINE ════════════════════════
 let renderer,scene,camera,bG,iG,lblG,oc;
@@ -872,8 +1106,12 @@ function addGlazing(axis, fixedCoord, center, yB, winY, winH, winW, glMat, trimM
 
 function buildModel(b){
   // Safety checks
-  if(!scene)throw new Error('scene is null');
-  if(!renderer)throw new Error('renderer is null');
+  if(!scene||!renderer){
+    // Try to re-initialize Three.js if not ready
+    try{initThree();}catch(e){throw new Error('3D-движок не инициализирован: '+e.message);}
+  }
+  if(!scene)throw new Error('scene is null — Three.js не загружен');
+  if(!renderer)throw new Error('renderer is null — Three.js не загружен');
   if(!b||!b.W||!b.L||!b.floors)throw new Error('Invalid building params: '+JSON.stringify(b));
   // Clear old groups
   if(bG&&scene){try{scene.remove(bG);}catch(e){}bG=null;}
@@ -1460,138 +1698,145 @@ function renderGS(ai){
   el.innerHTML=GSTEPS.map((s,i)=>`<div class="gs ${i<ai?'done':i===ai?'active':''}">${i<ai?'✅':i===ai?'⟳':'○'} ${s.l}</div>`).join('');
 }
 
-// ═══════════════════ BLENDER SERVER INTEGRATION ═══════════════════
-async function generateViaBlenderServer(prompt) {
+// ═══════════════════ UNIFIED GENERATE WITH FALLBACK (Step 1.4) ═══════════════════
+async function generateWithFallback(prompt, params) {
   /*
-   * Try to generate building via Blender server.
-   * Returns true if successful (GLB loaded), false to fall back to local.
+   * Единая функция генерации.
+   * 1. Пытается /api/v1/generate (unified endpoint)
+   * 2. Fallback на Three.js при недоступности
+   * Возвращает true если сервер сгенерировал, false если использован fallback.
    */
-  if(!API_BASE) return false;
-  if(_backendOk===null) await checkBackend();
-  if(!_backendOk) return false;
-  
-  try {
-    addThink(['🖥 Запрос к Blender серверу…']);
-    
-    const ctrl = new AbortController();
-    setTimeout(()=>ctrl.abort(), 60000); // 60s timeout для Render cold start
-    
-    const r = await fetch(API_BASE + '/api/v1/generate/building', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      signal: ctrl.signal,
-      body: JSON.stringify({prompt: prompt, export_format: 'glb'})
-    });
-    
-    if(!r.ok) return false;
-    
-    const blob = await r.blob();
-    if(blob.size < 100) return false;
-    
-    addThink(['📦 Модель получена: ' + (blob.size/1024).toFixed(1) + ' KB', '🔄 Загружаю в 3D viewer…']);
-    
-    // Load GLB into Three.js
-    const url = URL.createObjectURL(blob);
-    const loader = new THREE.GLTFLoader();
-    
-    return new Promise((resolve) => {
-      loader.load(url, (gltf) => {
-        // Clear existing model
-        if(scene) {
-          const toRemove = [];
-          scene.traverse(child => {
-            if(child.isMesh && child.name !== 'Ground') toRemove.push(child);
-          });
-          toRemove.forEach(obj => {
-            if(obj.geometry) obj.geometry.dispose();
-            if(obj.material) {
-              if(Array.isArray(obj.material)) obj.material.forEach(m=>m.dispose());
-              else obj.material.dispose();
+  const objType = (params && params.object_type) || 'building';
+  const isInterior = objType === 'interior' || objType === 'room';
+
+  // Шаг 1: Попробовать сервер
+  if(API_BASE) {
+    if(_backendOk===null) {
+      try { await checkBackend(); } catch(e) { _backendOk = false; }
+    }
+    if(_backendOk) {
+      try {
+        addThink(['🖥 Запрос к серверу рендеринга…']);
+        const ctrl = new AbortController();
+        const tid = setTimeout(()=>ctrl.abort(), 90000); // 90s timeout для Render cold start
+
+        const r = await fetch(API_BASE + '/api/v1/generate', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          signal: ctrl.signal,
+          body: JSON.stringify({prompt: prompt, ...params})
+        });
+        clearTimeout(tid);
+
+        if(r.ok) {
+          const ct = r.headers.get('content-type') || '';
+          const blob = await r.blob();
+          if(blob.size > 100) {
+            if(ct.includes('gltf') || ct.includes('octet') || blob.size > 5000) {
+              return await _loadGLBBlob(blob);
+            } else if(ct.includes('image')) {
+              return _showInteriorImage(blob);
             }
-            scene.remove(obj);
-          });
+          }
+          console.warn('Server returned empty or invalid response');
+        } else {
+          console.warn('Server returned status:', r.status);
         }
-        
-        // Add new model
-        const model = gltf.scene;
-        scene.add(model);
-        
-        // Fit camera
-        const box = new THREE.Box3().setFromObject(model);
-        const center = box.getCenter(new THREE.Vector3());
-        const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z);
-        panX = center.x;
-        panY = center.z;
-        radius = maxDim * 1.8;
-        resetCam();
-        
-        ST.hasModel = true;
-        const c3dEl = document.getElementById('c3d');
-        if(c3dEl) c3dEl.style.display = 'block';
-        document.getElementById('empt').style.display='none';
-        URL.revokeObjectURL(url);
-        
-        addMsg('a', '✅ <b>Модель сгенерирована в Blender</b><br>' +
-          '📦 ' + (blob.size/1024).toFixed(1) + ' KB | ' +
-          '🏠 ' + size.x.toFixed(1) + '×' + size.y.toFixed(1) + '×' + size.z.toFixed(1) + ' м');
-        showNotif('✅ Blender модель загружена');
-        resolve(true);
-      }, null, (err) => {
-        console.warn('GLB load failed:', err);
-        URL.revokeObjectURL(url);
-        resolve(false);
-      });
-    });
-  } catch(e) {
-    console.warn('Blender server unavailable:', e.message);
-    return false;
+      } catch(e) {
+        if(e.name === 'AbortError') {
+          console.warn('Server request timed out');
+          addMsg('a', '⚠️ Сервер не ответил за 90 секунд. Использую локальный рендер…');
+        } else {
+          console.warn('Server generate failed:', e.message);
+        }
+      }
+    }
   }
+
+  // Шаг 2: Fallback на Three.js
+  addThink(['⚠️ Сервер недоступен, рендерю локально…']);
+  return false;
+}
+
+async function _loadGLBBlob(blob) {
+  addThink(['📦 Модель получана: ' + (blob.size/1024).toFixed(1) + ' KB', '🔄 Загружаю в 3D viewer…']);
+  const url = URL.createObjectURL(blob);
+  const loader = new THREE.GLTFLoader();
+
+  return new Promise((resolve) => {
+    loader.load(url, (gltf) => {
+      if(scene) {
+        const toRemove = [];
+        scene.traverse(child => {
+          if(child.isMesh && child.name !== 'Ground') toRemove.push(child);
+        });
+        toRemove.forEach(obj => {
+          if(obj.geometry) obj.geometry.dispose();
+          if(obj.material) {
+            if(Array.isArray(obj.material)) obj.material.forEach(m=>m.dispose());
+            else obj.material.dispose();
+          }
+          scene.remove(obj);
+        });
+      }
+      const model = gltf.scene;
+      scene.add(model);
+      const box = new THREE.Box3().setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+      panX = center.x;
+      panY = center.z;
+      radius = maxDim * 1.8;
+      resetCam();
+      ST.hasModel = true;
+      document.getElementById('c3d').style.display = 'block';
+      document.getElementById('empt').style.display='none';
+      URL.revokeObjectURL(url);
+      addMsg('a', '✅ <b>Модель сгенерирована</b><br>📦 ' + (blob.size/1024).toFixed(1) + ' KB');
+      showNotif('✅ Модель загружена');
+      resolve(true);
+    }, null, (err) => {
+      console.warn('GLB load failed:', err);
+      URL.revokeObjectURL(url);
+      resolve(false);
+    });
+  });
+}
+
+function _showInteriorImage(blob) {
+  const url = URL.createObjectURL(blob);
+  const cwrap = document.getElementById('cwrap');
+  document.getElementById('empt').style.display='none';
+  let imgEl = document.getElementById('interior-img');
+  if(!imgEl) {
+    imgEl = document.createElement('img');
+    imgEl.id = 'interior-img';
+    imgEl.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#1a1a2e;z-index:5';
+    cwrap.appendChild(imgEl);
+  }
+  imgEl.src = url;
+  imgEl.style.display = 'block';
+  const c3d = document.getElementById('c3d');
+  if(c3d) c3d.style.display = 'none';
+  ST.hasModel = true;
+  ST.isInterior = true;
+  addMsg('a', '✅ <b>Интерьер сгенерирован</b>');
+  showNotif('✅ Интерьер готов');
+  return true;
+}
+
+// Legacy wrappers (обратная совместимость)
+async function generateViaBlenderServer(prompt) {
+  return generateWithFallback(prompt, {object_type: 'building'});
 }
 
 async function renderInteriorViaServer(prompt, style, furniture) {
-  if(!API_BASE) return null;
-  // Trigger health check if not done yet
-  if(_backendOk===null) await checkBackend();
-  if(!_backendOk) return null;
-  try {
-    addThink(['🖥 Запрос к Blender серверу (интерьер)…']);
-    const ctrl = new AbortController();
-    setTimeout(()=>ctrl.abort(), 15000); // 15s timeout
-    const r = await fetch(API_BASE + '/api/v1/render/interior', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      signal: ctrl.signal,
-      body: JSON.stringify({width:6, length:8, height:3, style:style||'modern', furniture:furniture||['sofa','table','chandelier']})
-    });
-    if(!r.ok) return null;
-    const blob = await r.blob();
-    if(blob.size < 1000) return null;
-    // Display rendered interior PNG in viewer
-    const url = URL.createObjectURL(blob);
-    const c3d = document.getElementById('c3d');
-    const cwrap = document.getElementById('cwrap');
-    document.getElementById('empt').style.display='none';
-    // Create img overlay for interior render
-    let imgEl = document.getElementById('interior-img');
-    if(!imgEl) {
-      imgEl = document.createElement('img');
-      imgEl.id = 'interior-img';
-      imgEl.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#1a1a2e;z-index:5';
-      cwrap.appendChild(imgEl);
-    }
-    imgEl.src = url;
-    imgEl.style.display = 'block';
-    if(c3d) c3d.style.display = 'none';
-    ST.hasModel = true;
-    ST.isInterior = true;
-    addMsg('a', '✅ <b>Интерьер сгенерирован</b><br>🎨 Стиль: ' + (style||'modern') + '<br>🛋 Мебель: ' + (furniture||[]).join(', '));
-    showNotif('✅ Интерьер готов');
-    return true;
-  } catch(e) {
-    console.warn('Interior render failed:', e.message);
-    return null;
-  }
+  return generateWithFallback(prompt, {
+    object_type: 'interior',
+    style: style || 'modern',
+    furniture: furniture || ['sofa','table','chandelier']
+  });
 }
 
 function parseInteriorParams(text) {
@@ -1620,7 +1865,14 @@ function parseInteriorParams(text) {
 }
 
 function startGen(bld){
-  if(ST.generating)return;ST.generating=true;
+  if(ST.generating)return;
+  // Check THREE.js availability
+  if(typeof THREE === 'undefined' || typeof buildModel !== 'function') {
+    addMsg('a', '❌ 3D-движок не загружен. Проверьте подключение к интернету (Three.js CDN) и обновите страницу.');
+    showNotif('Ошибка 3D-движка','warn');
+    return;
+  }
+  ST.generating=true;
   const ov=document.getElementById('genov'),gf=document.getElementById('gf');
   ov.style.display='flex';
   document.getElementById('empt').style.display='none';
@@ -1696,7 +1948,7 @@ function doFinish(bld,ov,gf){
 }
 
 // ═══════════════════ SEND ════════════════════════════════════
-const BUILD_RE=/дом|здани|офис|коттедж|вилл|склад|таунхаус|этаж|комнат|кирпич|фасад|кровля|строи|проект|гараж|терраса|мансарда|балкон|дерев|стекл|плоская|скатная|загородн|жилой/i;
+const BUILD_RE=/дом|здани|офис|коттедж|вилл|склад|таунхаус|этаж|комнат|кирпич|фасад|кровля|строи|проект|гараж|терраса|мансарда|балкон|дерев|стекл|плоская|скатная|загородн|жилой|база|гостиниц|отель|хостел|санаторий|пансионат/i;
 const INTERIOR_RE=/интерьер|спальн|гостин|кухн|ванн|мебел|диван|кроват|стул|шкаф|прихож|коридор|детск|кабинет|столов|гардероб|холл|салон|лoft|лофт/i;
 const LANDSCAPE_RE=/ландшафт|сад|газон|дорожк|забор|беседк|бассейн|пруд|деревья|клумб|цветник|патио|двор|участок|огород/i;
 const CONSTRUCT_RE=/конструкц|ферм|балк|перекрыт|колонн|армопояс|сваи|фундамент|несущ|стен.*несущ|каркас|модул|панел/i;
@@ -1825,12 +2077,16 @@ function loadHDRI(preset) {
 
 function applyProceduralEnv() {
   try {
+    if(typeof THREE.RoomEnvironment === 'undefined') {
+      scene.environment = null;
+      return;
+    }
     const pmrem = new THREE.PMREMGenerator(renderer);
     pmrem.compileEquirectangularShader();
     const env = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04);
     scene.environment = env.texture;
     pmrem.dispose();
-  } catch(e) {}
+  } catch(e) { console.warn('Procedural env failed:', e); }
 }
 
 // ═══════════════ STYLE PRESETS (Sprint 2) ═══════════════
@@ -1858,6 +2114,18 @@ function applyStylePreset(key){
   }
 }
 async function send(){
+  try {
+  await _sendInner();
+  } catch(e) {
+    console.error('send() unhandled error:', e);
+    ST.generating = false;
+    const ov=document.getElementById('genov');
+    if(ov) ov.style.display='none';
+    addMsg('a', '❌ Произошла ошибка: ' + (e.message || e) + '<br>Попробуйте ещё раз или обновите страницу.');
+    showNotif('Ошибка генерации', 'warn');
+  }
+}
+async function _sendInner(){
   const inp=document.getElementById('ci');
   const text=(inp&&inp.value||'').trim();
   if(ST.generating){showNotif('Генерация идёт…','warn');return;}
@@ -1968,24 +2236,48 @@ async function send(){
   if(BUILD_RE.test(text)||text.length>6){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🧠 Извлекаю параметры…']);
     
-    // Try Blender server first
-    const serverOk = await generateViaBlenderServer(text);
-    if(serverOk) return;
-    
-    // Parse locally first (guaranteed, instant, no API needed)
-    let parsed=parseLocal(text);
-    
-    // Try LLM for better accuracy (non-blocking, optional)
+    // Step 1: LLM parsing FIRST (understands any natural language)
+    let parsed=null;
     const hasKey=getOpenRouterKey();
     if(hasKey||_backendOk){
       try{
+        addThink(['🧠 AI анализирует описание…']);
         const raw=await callAI(text,
-          'Извлеки параметры здания. ТОЛЬКО JSON без markdown: {"type":"house|office|cottage|modern","floors":null,"width":null,"length":null,"roof_type":null,"facade_material":null} null=не упомянуто.',
+          'Ты — парсер архитектурных описаний для 3D-генератора. Отвечай ТОЛЬКО валидным JSON, без markdown. '+
+          'Формат: {"type":"house|office|cottage|modern","floors":2,"width":10,"length":12,"roof_type":"gabled|flat|hip","facade_material":"brick|wood|glass|plaster|stone","facade_color":null,"has_balcony":false,"has_terrace":false,"has_garage":false} '+
+          'Правила: null = не упомянуто. «база отдыха», «гостиница», «отель» → type="cottage". «премиальный», "элитный" → facade_material="stone". '+
+          '"64 кв метра" → width=8, length=8. Только JSON, ничего больше.',
           300);
         const j=JSON.parse(raw.replace(/```json|```/g,'').trim());
-        Object.entries(j).forEach(([k,v])=>{if(v!==null&&v!==undefined)parsed[k]=v;});
-      }catch(e){console.warn('LLM fallback, using local parse:',e.message);}
+        if(j&&j.type){
+          parsed={
+            type: j.type||'house',
+            floors: j.floors||2,
+            width: j.width||10,
+            length: j.length||12,
+            roof_type: j.roof_type||'gabled',
+            facade_material: j.facade_material||'plaster',
+            facade_color: j.facade_color||null,
+            has_balcony: !!j.has_balcony,
+            has_terrace: !!j.has_terrace,
+            has_garage: !!j.has_garage
+          };
+          addThink(['✅ AI распознал: '+parsed.type+(parsed.floors?', '+parsed.floors+' эт.':'')+(parsed.width?', '+parsed.width+'×'+parsed.length+'м':'')]);
+        }
+      }catch(e){console.warn('LLM parse failed:',e.message);}
     }
+    
+    // Step 2: Fallback to regex if LLM unavailable
+    if(!parsed){
+      parsed=parseLocal(text);
+      addThink(['📝 Локальный анализ (regex)']);
+    }
+    
+    // Step 3: Try Blender server
+    const serverOk = await generateViaBlenderServer(text);
+    if(serverOk) return;
+    
+    // Step 4: Generate locally with Three.js
     const bld=applyParams(text,parsed);
     addThink(['✅ '+bld.label,'📐 '+bld.W+'×'+bld.L+'м | '+bld.floors+' эт. | '+bld.mat,'🚀 Генерирую 3D…']);
     setTimeout(()=>startGen(bld),300);
