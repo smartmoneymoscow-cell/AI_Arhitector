@@ -222,6 +222,101 @@ async def _generate_interior(params: dict):
 
 
 # ═══════════════════════════════════════════════════════════════
+# IFC GENERATION
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/ifc/generate-local")
+async def ifc_generate_local(req: GenerateRequest):
+    """Генерация IFC-файла из параметров."""
+    try:
+        from shared.ifc_generator import generate_ifc_building
+        from shared.parser import parse_prompt_sync
+        params = parse_prompt_sync(req.prompt)
+        job_id = uuid.uuid4().hex[:8]
+        output_file = os.path.join(OUTPUT_DIR, f"{job_id}.ifc")
+        generate_ifc_building(params, output_file)
+        if os.path.exists(output_file):
+            return FileResponse(output_file, media_type="application/x-step", filename=f"archai_{job_id}.ifc")
+        raise HTTPException(500, "IFC generation failed")
+    except ImportError as e:
+        raise HTTPException(503, f"ifcopenshell not installed: {e}")
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ═══════════════════════════════════════════════════════════════
+# FLOOR PLAN
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/floorplan/svg-local")
+async def floorplan_svg_local(req: dict):
+    """Генерация SVG плана этажа."""
+    try:
+        from shared.floorplan import generate_floorplan_svg
+        floor = req.pop("floor", 1)
+        svg = generate_floorplan_svg(req, floor)
+        return Response(content=svg, media_type="image/svg+xml")
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ═══════════════════════════════════════════════════════════════
+# BUILDING GRAPH
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/graph/building-local")
+async def graph_building_local(req: dict):
+    """Анализ графа здания."""
+    try:
+        from shared.graph import BuildingGraph
+        bg = BuildingGraph.from_params(req)
+        return {
+            "rooms": bg.rooms,
+            "edges": bg.edges,
+            "adjacency": bg.get_adjacency_list(),
+            "stats": bg.get_room_stats(),
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ═══════════════════════════════════════════════════════════════
+# TASK QUEUE (Celery)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/tasks/generate")
+async def task_generate(req: GenerateRequest):
+    """Запуск async генерации через Celery."""
+    try:
+        from shared.celery_app import generate_building_task
+        params = fallback_regex_parse(req.prompt)
+        result = generate_building_task.delay(params)
+        return {"task_id": result.id, "status": "queued"}
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+
+
+@app.get("/api/v1/tasks/{task_id}")
+async def task_status(task_id: str):
+    """Проверка статуса async задачи."""
+    try:
+        from shared.celery_app import celery_app
+        if celery_app is None:
+            raise HTTPException(503, "Celery not available")
+        result = celery_app.AsyncResult(task_id)
+        response = {"task_id": task_id, "status": result.status}
+        if result.status == "PROGRESS":
+            response["progress"] = result.info
+        elif result.status == "SUCCESS":
+            response["result"] = result.result
+        elif result.status == "FAILURE":
+            response["error"] = str(result.result)
+        return response
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ═══════════════════════════════════════════════════════════════
 # STATIC FILES
 # ═══════════════════════════════════════════════════════════════
 

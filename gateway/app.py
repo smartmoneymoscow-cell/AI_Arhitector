@@ -495,6 +495,116 @@ async def graph_building_rooms(building_id: str):
 
 
 # ═══════════════════════════════════════════════════════════════
+# IFC GENERATION (shared)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/ifc/generate-local")
+async def ifc_generate_local(request: Request):
+    """Генерация IFC через shared.ifc_generator (локально, без микросервиса)."""
+    data = await request.json()
+    try:
+        import uuid
+        from shared.ifc_generator import generate_ifc_building
+        job_id = uuid.uuid4().hex[:8]
+        output_file = os.path.join("/app/output", f"{job_id}.ifc")
+        generate_ifc_building(data, output_file)
+        if os.path.exists(output_file):
+            return FileResponse(output_file, media_type="application/x-step", filename=f"archai_{job_id}.ifc")
+        raise HTTPException(500, "IFC generation failed")
+    except ImportError as e:
+        raise HTTPException(503, f"ifcopenshell not installed: {e}")
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ═══════════════════════════════════════════════════════════════
+# FLOOR PLAN (shared)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/floorplan/svg-local")
+async def floorplan_svg_local(request: Request):
+    """Генерация SVG плана через shared.floorplan (локально)."""
+    data = await request.json()
+    floor = data.pop("floor", 1)
+    try:
+        from shared.floorplan import generate_floorplan_svg
+        svg = generate_floorplan_svg(data, floor)
+        return Response(content=svg, media_type="image/svg+xml")
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ═══════════════════════════════════════════════════════════════
+# BUILDING GRAPH (shared)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/graph/building-local")
+async def graph_building_local(request: Request):
+    """Анализ графа здания через shared.graph (локально)."""
+    data = await request.json()
+    try:
+        from shared.graph import BuildingGraph
+        bg = BuildingGraph.from_params(data)
+        return {
+            "rooms": bg.rooms,
+            "edges": bg.edges,
+            "adjacency": bg.get_adjacency_list(),
+            "stats": bg.get_room_stats(),
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.post("/api/v1/graph/building-local/svg")
+async def graph_building_svg_local(request: Request):
+    """Визуализация графа здания в SVG."""
+    data = await request.json()
+    try:
+        from shared.graph import BuildingGraph
+        bg = BuildingGraph.from_params(data)
+        svg = bg.to_svg_graph()
+        return Response(content=svg, media_type="image/svg+xml")
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ═══════════════════════════════════════════════════════════════
+# TASK QUEUE (Celery)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/tasks/generate")
+async def task_generate(request: Request):
+    """Запуск async генерации через Celery."""
+    data = await request.json()
+    try:
+        from shared.celery_app import generate_building_task
+        result = generate_building_task.delay(data)
+        return {"task_id": result.id, "status": "queued"}
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+
+
+@app.get("/api/v1/tasks/{task_id}")
+async def task_status(task_id: str):
+    """Проверка статуса async задачи."""
+    try:
+        from shared.celery_app import celery_app
+        if celery_app is None:
+            raise HTTPException(503, "Celery not available")
+        result = celery_app.AsyncResult(task_id)
+        response = {"task_id": task_id, "status": result.status}
+        if result.status == "PROGRESS":
+            response["progress"] = result.info
+        elif result.status == "SUCCESS":
+            response["result"] = result.result
+        elif result.status == "FAILURE":
+            response["error"] = str(result.result)
+        return response
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ═══════════════════════════════════════════════════════════════
 # STATIC FILES
 # ═══════════════════════════════════════════════════════════════
 

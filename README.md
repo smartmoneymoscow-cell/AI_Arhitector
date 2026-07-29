@@ -1,130 +1,141 @@
-# Architect v11.0 🏗️
+# Architect v12.0 🏗️
 
 AI-архитектор — генерация 3D-моделей зданий и интерьеров по текстовому описанию на русском языке.
 
-## Что нового в v11.0
+## Что нового в v12.0
 
-### Архитектурные изменения
-- **Единый `shared/` пакет** — парсер, валидация, конфигурация и генерация bpy-скриптов в одном месте. Ноль дублирования.
-- **Улучшенные bpy-скрипты** — PBR-материалы, окна с рамами и подоконниками, лестницы, водосточные трубы, карнизы, fill-освещение.
-- **Исправленный фронтенд** — обработка ошибок Three.js, таймауты, graceful fallback при недоступности сервера.
-- **Единая конфигурация** — `.env.example`, один `Settings` объект для всех сервисов.
-- **Удалён мёртвый код** — патчи, дублированные парсеры, неиспользуемые тестовые файлы.
+### 🆕 BIM / IFC
+- **IfcOpenShell интеграция** — генерация настоящих IFC-файлов с BIM-объектами (IfcWall, IfcWindow, IfcDoor, IfcSlab, IfcRoof, IfcSpace)
+- Параметры стен, площади помещений, свойства BIM
 
-### Структура проекта
+### 🆕 Floor Plans
+- **Shapely + SVG** — генерация 2D-планов этажей с помещениями, мебелью, размерными линиями
+- Компас, масштабная лейка, легенда
+
+### 🆕 Async Task Queue
+- **Celery + Redis** — длинные задачи (Blender, IFC, апскейл) выполняются асинхронно
+- Статус задач через REST API (`/api/v1/tasks/{id}`)
+- Progress tracking
+
+### 🆕 Building Graph
+- **NetworkX** — граф связей помещений (смежность, маршруты)
+- Статистика по этажам и типам помещений
+- SVG-визуализация графа
+
+### 🆕 Image Upscaling
+- **Real-ESRGAN** — апскейл рендеров интерьеров (640×480 → 1920×1080+)
+- PIL fallback если GPU недоступен
+
+### 🆕 Voice Input
+- **Whisper** — голосовой ввод промтов (русский/английский)
+- OpenAI API + локальный fallback
+
+### Архитектурные изменения (v11.0)
+- Единый `shared/` пакет — ноль дублирования кода
+- Улучшенные bpy-скрипты (PBR, окна с рамами, лестницы, водостоки)
+- Исправленный фронтенд (Three.js error handling, таймауты)
+
+## Структура проекта
 
 ```
 AI_Arhitector/
-├── shared/                    # 🆕 Единая библиотека
-│   ├── __init__.py
+├── shared/                    # Единая библиотека
 │   ├── config.py              # Настройки из env
 │   ├── models.py              # Pydantic-модели
 │   ├── validation.py          # Валидация параметров
 │   ├── parser.py              # LLM + regex парсер
-│   └── blender.py             # Генерация bpy-скриптов
-├── gateway/                   # API Gateway (маршрутизация)
-├── llm-service/               # LLM прокси + парсинг
-├── blender-service/           # Генерация 3D через Blender CLI
-├── frontend/                  # Веб-интерфейс
-├── server.py                  # Монолит для локальной разработки
-├── index.html                 # Фронтенд (GitHub Pages)
-├── docker-compose.yml         # Docker Compose
-├── render.yaml                # Деплой на Render
-├── .env.example               # 🆕 Шаблон переменных окружения
-└── tests/                     # Тесты
+│   ├── blender.py             # bpy-скрипты (PBR, лестницы)
+│   ├── ifc_generator.py       # 🆕 IFC через IfcOpenShell
+│   ├── floorplan.py           # 🆕 SVG планы через Shapely
+│   ├── celery_app.py          # 🆕 Async очередь (Celery)
+│   ├── upscaler.py            # 🆕 Real-ESRGAN апскейл
+│   ├── graph.py               # 🆕 Граф здания (NetworkX)
+│   └── voice.py               # 🆕 Whisper голосовой ввод
+├── gateway/                   # API Gateway
+├── llm-service/               # LLM прокси
+├── blender-service/           # Blender CLI
+├── server.py                  # Монолит (локальная разработка)
+├── docker-compose.yml         # Docker Compose + Redis
+└── .env.example               # Шаблон переменных
 ```
 
 ## Быстрый старт
 
-### Онлайн (GitHub Pages)
-
-1. Откройте сайт
-2. Нажмите ⚙️ Настройки → введите OpenRouter API ключ от [openrouter.ai/keys](https://openrouter.ai/keys)
-3. Опишите здание или интерьер
-
-> ⚠️ На GitHub Pages работает только Three.js рендер (без Blender). Для полного функционала нужен бэкенд.
-
-### Локальный сервер (полный функционал)
+### Локально
 
 ```bash
 # Установить зависимости
-pip install fastapi uvicorn httpx pydantic
+pip install fastapi uvicorn httpx pydantic ifcopenshell shapely networkx celery redis Pillow
 
-# Установить Blender (Ubuntu/Debian)
-sudo apt install blender
+# Запустить Redis (для Celery)
+docker run -d -p 6379:6379 redis:alpine
 
-# Скопировать .env.example и заполнить
+# Скопировать .env
 cp .env.example .env
-# Редактировать .env → ввести OPENROUTER_API_KEY
 
-# Запустить
+# Запустить сервер
 python server.py
 # → http://localhost:8080
+
+# Запустить Celery worker (в отдельном терминале)
+celery -A shared.celery_app worker --loglevel=info
 ```
 
 ### Docker Compose
 
 ```bash
-export OPENROUTER_API_KEY="sk-or-v1-..."
+export OPENROUTER_API_KEY="***"
 docker-compose up --build
-# → http://localhost:8080
+# → http://localhost:8080 (включает Redis + Celery worker)
 ```
 
-### Render.com (деплой)
+## API Endpoints
 
-1. Зайдите на [render.com](https://render.com) → New → Blueprint
-2. Подключите репозиторий
-3. Render автоматически создаст сервисы из `render.yaml`
-4. В сервисе `ai-arch-llmproxy` добавьте `OPENROUTER_API_KEY`
-5. Нажмите Apply (~5-10 мин)
-
-## Архитектура
-
-### Микросервисы
-
-| Сервис | Порт | Описание |
-|--------|------|----------|
-| `gateway` | 8080 | API Gateway — маршрутизация, статика |
-| `llm-service` | 8081 | LLM прокси (OpenRouter) + парсинг промтов |
-| `blender-service` | 8082 | Генерация 3D через Blender CLI |
-
-### Shared пакет
-
-Все сервисы используют `shared/` — единый источник правды:
-- `shared.config.settings` — конфигурация из env
-- `shared.models` — Pydantic-модели запросов/ответов
-- `shared.validation` — валидация и нормализация параметров
-- `shared.parser` — LLM + regex парсинг промтов
-- `shared.blender` — генерация улучшенных bpy-скриптов
-
-### Pipeline генерации
-
-```
-Промт → LLM Парсинг → Валидация → Роутинг → bpy-скрипт → Blender CLI → GLB/PNG
-         ↓ (fallback)
-       Regex → Валидация → Three.js (локально)
-```
-
-## API
+### Генерация
 
 | Endpoint | Метод | Описание |
 |----------|-------|----------|
-| `/api/v1/generate` | POST | Единый: текст → GLB/PNG |
-| `/api/v1/parse` | POST | Текст → структурированные параметры |
-| `/api/v1/generate/building` | POST | Текст → GLB (legacy) |
-| `/api/v1/render/interior` | POST | Текст → PNG (legacy) |
-| `/health` | GET | Health check |
+| `/api/v1/generate` | POST | Текст → GLB/PNG (синхронно) |
+| `/api/v1/tasks/generate` | POST | Текст → GLB (async через Celery) |
+| `/api/v1/tasks/{id}` | GET | Статус async задачи |
+| `/api/v1/ifc/generate-local` | POST | Текст → IFC-файл |
+| `/api/v1/floorplan/svg-local` | POST | Параметры → SVG план |
+| `/api/v1/graph/building-local` | POST | Параметры → граф здания |
+| `/api/v1/graph/building-local/svg` | POST | Параметры → SVG графа |
+
+### Анализ
+
+| Endpoint | Метод | Описание |
+|----------|-------|----------|
+| `/api/v1/parse` | POST | Текст → параметры |
+| `/api/v1/health` | GET | Health check всех сервисов |
+
+## Технологический стек
+
+| Компонент | Технология | Статус |
+|-----------|-----------|--------|
+| BIM/IFC | IfcOpenShell | ✅ |
+| Floor Plans | Shapely + SVG | ✅ |
+| 3D Viewer | Three.js | ✅ |
+| Rendering | Blender CLI | ✅ |
+| Async Queue | Celery + Redis | ✅ |
+| Graph | NetworkX | ✅ |
+| Upscaling | Real-ESRGAN / PIL | ✅ |
+| Voice | Whisper | ✅ |
+| API | FastAPI | ✅ |
+| LLM | OpenRouter | ✅ |
 
 ## Переменные окружения
 
-См. [`.env.example`](.env.example) для полного списка.
+См. [`.env.example`](.env.example).
 
 | Переменная | Обязательна | Описание |
 |-----------|-------------|----------|
 | `OPENROUTER_API_KEY` | Да | Ключ от openrouter.ai |
-| `LLM_MODEL` | Нет | Модель (по умолчанию: бесплатная) |
+| `REDIS_URL` | Нет | Redis для Celery (default: localhost:6379) |
+| `OPENAI_API_KEY` | Нет | Для Whisper (fallback на локальный) |
+| `LLM_MODEL` | Нет | Модель LLM |
 | `BLENDER_PATH` | Нет | Путь к Blender |
-| `PORT` | Нет | Порт сервера (8080) |
 
 ## Лицензия
 

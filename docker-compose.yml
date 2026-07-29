@@ -8,10 +8,12 @@ services:
     environment:
       - LLM_SERVICE_URL=http://llm-service:8081
       - BLENDER_SERVICE_URL=http://blender-service:8082
+      - REDIS_URL=redis://redis:6379/0
       - PORT=8080
     depends_on:
       - llm-service
       - blender-service
+      - redis
 
   llm-service:
     build:
@@ -30,5 +32,37 @@ services:
       - BLENDER_PATH=blender
       - OUTPUT_DIR=/app/output
       - LLM_SERVICE_URL=http://llm-service:8081
+      - REDIS_URL=redis://redis:6379/0
     volumes:
       - ./output:/app/output
+    depends_on:
+      - redis
+
+  # Celery Worker для async задач генерации
+  celery-worker:
+    build:
+      context: .
+      dockerfile: blender-service/Dockerfile
+    command: celery -A shared.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - BLENDER_PATH=blender
+      - OUTPUT_DIR=/app/output
+      - LLM_SERVICE_URL=http://llm-service:8081
+    volumes:
+      - ./output:/app/output
+    depends_on:
+      - redis
+      - blender-service
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  redis-data:
