@@ -627,11 +627,13 @@ async def orchestrator_execute(req: GenerateRequest):
     job_id = result["job_id"]
     _orchestrator_jobs[job_id] = result
 
+    r = result.get("result") or {}
     return {
         "job_id": job_id,
         "status": result["status"],
-        "gen_type": result.get("result", {}).get("gen_type"),
-        "params": result.get("result", {}).get("params"),
+        "gen_type": r.get("gen_type"),
+        "params": r.get("params"),
+        "clarification": result.get("clarification"),
         "steps": [
             {"name": s["name"], "status": s["status"], "duration_ms": s.get("duration_ms", 0)}
             for s in result.get("steps", [])
