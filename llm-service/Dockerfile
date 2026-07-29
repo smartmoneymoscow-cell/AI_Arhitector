@@ -9,8 +9,15 @@ ENV LC_ALL=en_US.UTF-8
 ENV PYTHONIOENCODING=utf-8
 
 WORKDIR /app
-COPY requirements.txt .
+
+# Copy shared package first
+COPY shared/ ./shared/
+
+# Copy service files
+COPY llm-service/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
+
+COPY llm-service/ .
+
 EXPOSE 8081
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8081"]

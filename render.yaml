@@ -1,13 +1,13 @@
 services:
   # ════════════════════════════════════════════════════════════
-  # CORE SERVICES (existing)
+  # CORE SERVICES
   # ════════════════════════════════════════════════════════════
 
   - type: web
     name: architect
     runtime: docker
     dockerfilePath: ./gateway/Dockerfile
-    rootDir: gateway
+    rootDir: .
     region: oregon
     plan: free
     healthCheckPath: /health
@@ -41,6 +41,7 @@ services:
     name: ai-arch-llmproxy
     runtime: docker
     dockerfilePath: ./llm-service/Dockerfile
+    rootDir: .
     region: oregon
     plan: free
     healthCheckPath: /health

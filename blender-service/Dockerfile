@@ -16,10 +16,20 @@ ENV LC_ALL=en_US.UTF-8
 ENV PYTHONIOENCODING=utf-8
 
 WORKDIR /app
-COPY requirements.txt .
+
+# Copy shared package (build context = project root)
+COPY shared/ ./shared/
+
+# Copy service requirements and install
+COPY blender-service/requirements.txt ./requirements.txt
 RUN pip3 install --no-cache-dir -r requirements.txt
-COPY app.py .
+
+# Copy service code
+COPY blender-service/app.py .
+
+# Legacy: keep promt_parser.py for backward compatibility
 COPY promt_parser.py /app/promt_parser.py
+
 RUN mkdir -p /app/output
 
 EXPOSE 8082

@@ -9,8 +9,19 @@ ENV LC_ALL=en_US.UTF-8
 ENV PYTHONIOENCODING=utf-8
 
 WORKDIR /app
-COPY requirements.txt .
+
+# Copy shared package (build context = project root)
+COPY shared/ ./shared/
+
+# Copy gateway requirements and install
+COPY gateway/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
+
+# Copy gateway code
+COPY gateway/ .
+
+# Copy frontend
+COPY frontend/ ./frontend/
+
 EXPOSE 8080
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]

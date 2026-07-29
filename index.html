@@ -334,10 +334,14 @@ async function checkBackend(){
   if(!API_BASE){_backendOk=false;return;}
   try{
     const ctrl=new AbortController();
-    setTimeout(()=>ctrl.abort(),4000);
+    const tid=setTimeout(()=>ctrl.abort(),5000);
     const r=await fetch(API_BASE+'/api/v1/health',{signal:ctrl.signal});
+    clearTimeout(tid);
     _backendOk=r.ok;
-  }catch(e){_backendOk=false;}
+  }catch(e){
+    _backendOk=false;
+    console.warn('Backend check failed:',e.message);
+  }
   console.log('Backend proxy:',_backendOk?'available':'unavailable (direct API mode)');
 }
 
@@ -1707,12 +1711,14 @@ async function generateWithFallback(prompt, params) {
 
   // Шаг 1: Попробовать сервер
   if(API_BASE) {
-    if(_backendOk===null) await checkBackend();
+    if(_backendOk===null) {
+      try { await checkBackend(); } catch(e) { _backendOk = false; }
+    }
     if(_backendOk) {
       try {
         addThink(['🖥 Запрос к серверу рендеринга…']);
         const ctrl = new AbortController();
-        setTimeout(()=>ctrl.abort(), 60000); // 60s timeout для Render cold start
+        const tid = setTimeout(()=>ctrl.abort(), 90000); // 90s timeout для Render cold start
 
         const r = await fetch(API_BASE + '/api/v1/generate', {
           method: 'POST',
@@ -1720,29 +1726,36 @@ async function generateWithFallback(prompt, params) {
           signal: ctrl.signal,
           body: JSON.stringify({prompt: prompt, ...params})
         });
+        clearTimeout(tid);
 
         if(r.ok) {
           const ct = r.headers.get('content-type') || '';
           const blob = await r.blob();
           if(blob.size > 100) {
             if(ct.includes('gltf') || ct.includes('octet') || blob.size > 5000) {
-              // GLB файл — загрузить в 3D viewer
               return await _loadGLBBlob(blob);
             } else if(ct.includes('image')) {
-              // PNG рендер интерьера
               return _showInteriorImage(blob);
             }
           }
+          console.warn('Server returned empty or invalid response');
+        } else {
+          console.warn('Server returned status:', r.status);
         }
       } catch(e) {
-        console.warn('Server generate failed:', e.message);
+        if(e.name === 'AbortError') {
+          console.warn('Server request timed out');
+          addMsg('a', '⚠️ Сервер не ответил за 90 секунд. Использую локальный рендер…');
+        } else {
+          console.warn('Server generate failed:', e.message);
+        }
       }
     }
   }
 
   // Шаг 2: Fallback на Three.js
   addThink(['⚠️ Сервер недоступен, рендерю локально…']);
-  return false; // вызывающий код использует Three.js fallback
+  return false;
 }
 
 async function _loadGLBBlob(blob) {
@@ -1852,7 +1865,14 @@ function parseInteriorParams(text) {
 }
 
 function startGen(bld){
-  if(ST.generating)return;ST.generating=true;
+  if(ST.generating)return;
+  // Check THREE.js availability
+  if(typeof THREE === 'undefined' || typeof buildModel !== 'function') {
+    addMsg('a', '❌ 3D-движок не загружен. Проверьте подключение к интернету (Three.js CDN) и обновите страницу.');
+    showNotif('Ошибка 3D-движка','warn');
+    return;
+  }
+  ST.generating=true;
   const ov=document.getElementById('genov'),gf=document.getElementById('gf');
   ov.style.display='flex';
   document.getElementById('empt').style.display='none';
@@ -2094,6 +2114,18 @@ function applyStylePreset(key){
   }
 }
 async function send(){
+  try {
+  await _sendInner();
+  } catch(e) {
+    console.error('send() unhandled error:', e);
+    ST.generating = false;
+    const ov=document.getElementById('genov');
+    if(ov) ov.style.display='none';
+    addMsg('a', '❌ Произошла ошибка: ' + (e.message || e) + '<br>Попробуйте ещё раз или обновите страницу.');
+    showNotif('Ошибка генерации', 'warn');
+  }
+}
+async function _sendInner(){
   const inp=document.getElementById('ci');
   const text=(inp&&inp.value||'').trim();
   if(ST.generating){showNotif('Генерация идёт…','warn');return;}
