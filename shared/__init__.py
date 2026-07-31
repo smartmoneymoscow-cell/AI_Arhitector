@@ -29,4 +29,4 @@ shared — общая библиотека для всех микросерви�
     from shared.agents import Orchestrator
 """
 
-__version__ = "3.0.0"
+__version__ = "5.0.0"

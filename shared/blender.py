@@ -347,6 +347,11 @@ bpy.context.scene.collection.objects.link(cam_obj);bpy.context.scene.camera=cam_
 cam_obj.location=(W*1.5,-L*1.5,total_h*1.2)
 cam_obj.rotation_euler=(math.radians(60),0,math.radians(45))
 
+# Camera clip
+for c in bpy.data.cameras:
+    c.clip_start=0.1
+    c.clip_end=1000
+
 sun=bpy.data.lights.new("Sun","SUN");sun.energy=4;sun.color=(1.0,0.95,0.9)
 sun_obj=bpy.data.objects.new("Sun",sun)
 bpy.context.collection.objects.link(sun_obj)

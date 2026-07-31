@@ -1,57 +1,45 @@
 """
 Architect — Monolith Server (FastAPI)
-Serves frontend + proxies LLM API + generates Blender scripts.
+Serves frontend + LLM parsing + Blender execution + Orchestrator.
 
 Use for LOCAL DEVELOPMENT. For production, use docker-compose with microservices.
 
-Uses shared-пакет — нет дублирования кода.
-
 Endpoints:
-    GET  /                           — Web interface
-    GET  /health                     — Health check
-    POST /api/v1/generate            — Unified: text → GLB/PNG (with routing)
-    POST /api/v1/generate/building   — Text → GLB (legacy)
-    POST /api/v1/render/interior     — Interior → PNG (legacy)
-    POST /api/v1/proxy/claude        — Chat proxy
-    GET  /docs                       — OpenAPI documentation
+    GET  /                              — Web interface
+    GET  /health                        — Health check
+    POST /api/v1/generate               — Quick: text → GLB/PNG
+    POST /api/v1/orchestrator/execute   — Full pipeline via orchestrator
+    POST /api/v1/preview                — Fast preview (1920×1080)
+    POST /api/v1/parse                  — Parse prompt
+    GET  /api/v1/orchestrator/jobs/{id} — Job status
+    GET  /api/v1/orchestrator/jobs/{id}/stream — SSE progress
 """
 
 import os
 import uuid
 import sys
 
-# Добавить корень проекта в path для импорта shared
 sys.path.insert(0, os.path.dirname(__file__))
 
+import asyncio
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from shared.config import settings
 from shared.models import GenerateRequest, HealthResponse
-from shared.parser import (
-    parse_prompt_sync,
-    fallback_regex_parse,
-    get_generation_type,
-)
+from shared.parser import parse_prompt_sync, fallback_regex_parse, get_generation_type
 from shared.validation import DEFAULT_FURNITURE
 from shared.blender import generate_bpy_script, generate_interior_script, run_blender
 
-# ═══════════════════════════════════════════════════════════════
-# CONFIG
-# ═══════════════════════════════════════════════════════════════
-FRONTEND_DIR = os.path.dirname(__file__)
 OUTPUT_DIR = settings.OUTPUT_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# ═══════════════════════════════════════════════════════════════
-# APP
-# ═══════════════════════════════════════════════════════════════
 app = FastAPI(
     title="Architect Server",
-    description="Монолитный сервер для локальной разработки (shared)",
-    version="3.0.0",
+    description="Монолитный сервер для локальной разработки",
+    version="5.0.0",
 )
 app.add_middleware(
     CORSMiddleware,
@@ -62,22 +50,27 @@ app.add_middleware(
 
 
 # ═══════════════════════════════════════════════════════════════
-# ROUTES
+# HEALTH
 # ═══════════════════════════════════════════════════════════════
+
 @app.get("/health")
 @app.get("/api/v1/health")
 async def health():
     return HealthResponse(
         status="ok",
         service="archai-server",
-        version="3.0.0",
+        version="5.0.0",
         model=settings.LLM_MODEL,
     )
 
 
+# ═══════════════════════════════════════════════════════════════
+# QUICK GENERATE (legacy, fast)
+# ═══════════════════════════════════════════════════════════════
+
 @app.post("/api/v1/generate")
 async def generate(req: GenerateRequest):
-    """Единый endpoint: промт → парсинг (LLM + fallback) → роутинг → генерация."""
+    """Быстрая генерация: промт → парсинг → Blender → GLB/PNG."""
     try:
         params = parse_prompt_sync(req.prompt)
     except Exception:
@@ -91,57 +84,227 @@ async def generate(req: GenerateRequest):
         return await _generate_building(params)
 
 
-@app.post("/api/v1/generate/building")
-async def generate_building_legacy(req: GenerateRequest):
-    params = fallback_regex_parse(req.prompt)
-    return await _generate_building(params)
+# ═══════════════════════════════════════════════════════════════
+# ORCHESTRATOR (full pipeline)
+# ═══════════════════════════════════════════════════════════════
+
+_orchestrator_jobs: dict = {}
 
 
-@app.post("/api/v1/render/interior")
-async def render_interior_legacy(req: GenerateRequest):
-    params = fallback_regex_parse(req.prompt)
-    return await _generate_interior(params)
+@app.post("/api/v1/orchestrator/execute")
+async def orchestrator_execute(req: dict):
+    """
+    Полный pipeline через multi-agent оркестратор.
+
+    Body: { "prompt": "...", "quality": "standard", "export_formats": ["glb"] }
+    """
+    from shared.agents import Orchestrator
+
+    prompt = req.get("prompt", "")
+    if not prompt:
+        raise HTTPException(400, "No prompt provided")
+
+    quality = req.get("quality", "standard")
+    export_formats = req.get("export_formats", ["glb"])
+    skip_clarification = req.get("skip_clarification", False)
+
+    orch = Orchestrator(
+        blender_service_url="",  # пусто = локальный вызов
+        output_dir=OUTPUT_DIR,
+    )
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None,
+        lambda: orch.execute(
+            prompt,
+            quality=quality,
+            export_formats=export_formats,
+            skip_clarification=skip_clarification,
+        ),
+    )
+
+    job_id = result["job_id"]
+    _orchestrator_jobs[job_id] = result
+
+    r = result.get("result") or {}
+    return {
+        "job_id": job_id,
+        "status": result["status"],
+        "gen_type": r.get("gen_type"),
+        "quality": quality,
+        "params": r.get("params"),
+        "render": r.get("render"),
+        "exports": r.get("exports", {}),
+        "clarification": result.get("clarification"),
+        "steps": [
+            {"name": s["name"], "status": s["status"], "duration_ms": s.get("duration_ms", 0)}
+            for s in result.get("steps", [])
+        ],
+        "duration_ms": result.get("duration_ms", 0),
+    }
 
 
-@app.post("/api/v1/proxy/claude")
-async def proxy_claude(req: dict):
-    """Chat proxy — forward to OpenRouter."""
-    messages = req.get("messages", [])
-    max_tokens = req.get("max_tokens", 400)
+@app.get("/api/v1/orchestrator/jobs/{job_id}")
+async def orchestrator_job_status(job_id: str):
+    job = _orchestrator_jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return job
 
-    headers = {"Content-Type": "application/json"}
-    if settings.OPENROUTER_API_KEY:
-        headers["Authorization"] = f"Bearer {settings.OPENROUTER_API_KEY}"
 
-    try:
-        async with httpx.AsyncClient() as client:
-            r = await client.post(
-                f"{settings.OPENROUTER_BASE}/chat/completions",
-                headers=headers,
-                json={
-                    "model": settings.LLM_MODEL,
-                    "messages": messages,
-                    "max_tokens": max_tokens,
-                },
-                timeout=60.0,
-            )
-        if r.status_code == 200:
-            result = r.json()
-            text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-            return {"content": [{"type": "text", "text": text or ""}]}
-        raise HTTPException(r.status_code, detail=r.text)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(502, str(e))
+@app.get("/api/v1/orchestrator/jobs/{job_id}/progress")
+async def orchestrator_job_progress(job_id: str):
+    from shared.agents import Orchestrator
+    orch = Orchestrator()
+    orch.jobs = _orchestrator_jobs
+    progress = orch.get_progress(job_id)
+    if "error" in progress:
+        raise HTTPException(404, progress["error"])
+    return progress
+
+
+@app.get("/api/v1/orchestrator/jobs/{job_id}/stream")
+async def orchestrator_stream(job_id: str):
+    """SSE stream прогресса."""
+    from shared.streaming import get_streamer
+
+    streamer = get_streamer(job_id)
+    if not streamer:
+        raise HTTPException(404, "Job not found or stream expired")
+
+    async def event_generator():
+        async for event in streamer.subscribe():
+            yield event.to_sse()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/v1/orchestrator/clarify")
+async def orchestrator_clarify(req: dict):
+    """Применить ответы на уточняющие вопросы."""
+    from shared.agents import Orchestrator
+    from shared.clarification import ClarificationEngine
+
+    job_id = req.get("job_id", "")
+    answers = req.get("answers", {})
+    quality = req.get("quality", "standard")
+
+    job = _orchestrator_jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.get("status") != "clarification_needed":
+        raise HTTPException(400, "Job is not waiting for clarification")
+
+    engine = ClarificationEngine()
+    partial = job.get("clarification", {}).get("partial_params", {})
+    updated_params = engine.apply_answers(partial, answers)
+
+    prompt = job.get("prompt", "")
+    orch = Orchestrator(output_dir=OUTPUT_DIR)
+    result = orch.execute(prompt, llm_params=updated_params, skip_clarification=True, quality=quality)
+
+    _orchestrator_jobs[job_id].update(result)
+    _orchestrator_jobs[job_id]["job_id"] = job_id
+
+    return _orchestrator_jobs[job_id]
 
 
 # ═══════════════════════════════════════════════════════════════
-# GENERATION HELPERS
+# PREVIEW (fast, low quality)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/preview")
+async def preview(req: dict):
+    """Быстрое превью (1920×1080, EEVEE, 32 samples)."""
+    prompt = req.get("prompt", "")
+    if not prompt:
+        raise HTTPException(400, "No prompt provided")
+
+    params = fallback_regex_parse(prompt)
+    gen_type = get_generation_type(params)
+
+    if gen_type == "interior":
+        room_type = params.get("room_type", "living")
+        furniture = params.get("furniture") or DEFAULT_FURNITURE.get(room_type, ["sofa", "table", "chandelier"])
+        interior_params = {
+            "width": params.get("width_m", 6),
+            "length": params.get("length_m", 8),
+            "height": params.get("height_m", 3),
+            "style": params.get("style", "modern"),
+            "furniture": furniture,
+        }
+        script = generate_interior_script(interior_params)
+    else:
+        building_params = {
+            "width": params.get("width_m", 10),
+            "length": params.get("length_m", 12),
+            "floors": params.get("floors", 2),
+            "roof_type": params.get("roof_type", "gabled"),
+            "facade_material": params.get("material", "plaster"),
+            "has_balcony": "balcony" in params.get("features", []),
+        }
+        script = generate_bpy_script(building_params)
+
+    job_id = uuid.uuid4().hex[:8]
+    output_file = os.path.join(OUTPUT_DIR, f"{job_id}_preview.png")
+
+    script += f"""
+import bpy
+bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
+bpy.context.scene.render.resolution_x = 1920
+bpy.context.scene.render.resolution_y = 1080
+try:
+    bpy.context.scene.eevee.taa_render_samples = 32
+except:
+    pass
+bpy.context.scene.render.image_settings.file_format = 'PNG'
+bpy.context.scene.render.filepath = r'{output_file}'
+bpy.ops.render.render(write_still=True)
+"""
+
+    try:
+        result = run_blender(script, output_file, timeout=60)
+    except TimeoutError as e:
+        raise HTTPException(504, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(500, detail=str(e))
+
+    if os.path.exists(output_file):
+        return FileResponse(output_file, media_type="image/png", filename=f"preview_{job_id}.png")
+    raise HTTPException(500, "Preview failed")
+
+
+# ═══════════════════════════════════════════════════════════════
+# PARSE
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/parse")
+async def parse_endpoint(req: dict):
+    """Парсинг промта."""
+    from shared.router import route_generation
+    text = req.get("text", req.get("prompt", ""))
+    try:
+        params = parse_prompt_sync(text)
+    except Exception:
+        params = fallback_regex_parse(text)
+    plan = route_generation(text, params)
+    return {
+        "params": params,
+        "gen_type": plan.gen_type,
+        "building_params": plan.params.get("building", {}),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# HELPERS
 # ═══════════════════════════════════════════════════════════════
 
 async def _generate_building(params: dict):
-    """Генерация здания → GLB файл."""
     building_params = {
         "width": params.get("width_m", 10),
         "length": params.get("length_m", 12),
@@ -159,27 +322,18 @@ async def _generate_building(params: dict):
     export_cmd = f"\nimport bpy\nbpy.ops.export_scene.gltf(filepath=r'{output_file}', export_format='GLB')"
 
     try:
-        result = run_blender(script + export_cmd, output_file)
+        run_blender(script + export_cmd, output_file)
     except TimeoutError as e:
         raise HTTPException(504, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(500, detail={"error": str(e)})
 
     if os.path.exists(output_file):
-        return FileResponse(
-            output_file,
-            media_type="model/gltf-binary",
-            filename=f"archai_{job_id}.glb",
-        )
-
-    raise HTTPException(
-        500,
-        detail={"error": "Export failed", "stderr": (result.stderr or "")[-500:]},
-    )
+        return FileResponse(output_file, media_type="model/gltf-binary", filename=f"archai_{job_id}.glb")
+    raise HTTPException(500, detail="Export failed")
 
 
 async def _generate_interior(params: dict):
-    """Генерация интерьера → PNG файл."""
     room_type = params.get("room_type", "living")
     furniture = params.get("furniture") or DEFAULT_FURNITURE.get(room_type, ["sofa", "table", "chandelier"])
 
@@ -198,7 +352,7 @@ async def _generate_interior(params: dict):
     render_cmd = (
         "\nimport bpy"
         f"\nbpy.context.scene.render.filepath = r'{output_file}'"
-        "\nbpy.context.scene.render.engine = 'BLENDER_EEVEE'"
+        "\nbpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'"
         "\nbpy.context.scene.render.resolution_x = 3840"
         "\nbpy.context.scene.render.resolution_y = 2160"
         "\nbpy.ops.render.render(write_still=True)"
@@ -212,165 +366,16 @@ async def _generate_interior(params: dict):
         raise HTTPException(500, detail=str(e))
 
     if os.path.exists(output_file):
-        return FileResponse(
-            output_file,
-            media_type="image/png",
-            filename=f"archai_interior_{job_id}.png",
-        )
-
+        return FileResponse(output_file, media_type="image/png", filename=f"archai_interior_{job_id}.png")
     raise HTTPException(500, detail="Render failed")
-
-
-# ═══════════════════════════════════════════════════════════════
-# IFC GENERATION
-# ═══════════════════════════════════════════════════════════════
-
-@app.post("/api/v1/ifc/generate-local")
-async def ifc_generate_local(req: GenerateRequest):
-    """Генерация IFC-файла из параметров."""
-    try:
-        from shared.ifc_generator import generate_ifc_building
-        from shared.parser import parse_prompt_sync
-        params = parse_prompt_sync(req.prompt)
-        job_id = uuid.uuid4().hex[:8]
-        output_file = os.path.join(OUTPUT_DIR, f"{job_id}.ifc")
-        generate_ifc_building(params, output_file)
-        if os.path.exists(output_file):
-            return FileResponse(output_file, media_type="application/x-step", filename=f"archai_{job_id}.ifc")
-        raise HTTPException(500, "IFC generation failed")
-    except ImportError as e:
-        raise HTTPException(503, f"ifcopenshell not installed: {e}")
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-# ═══════════════════════════════════════════════════════════════
-# FLOOR PLAN
-# ═══════════════════════════════════════════════════════════════
-
-@app.post("/api/v1/floorplan/svg-local")
-async def floorplan_svg_local(req: dict):
-    """Генерация SVG плана этажа."""
-    try:
-        from shared.floorplan import generate_floorplan_svg
-        floor = req.pop("floor", 1)
-        svg = generate_floorplan_svg(req, floor)
-        return Response(content=svg, media_type="image/svg+xml")
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-# ═══════════════════════════════════════════════════════════════
-# BUILDING GRAPH
-# ═══════════════════════════════════════════════════════════════
-
-@app.post("/api/v1/graph/building-local")
-async def graph_building_local(req: dict):
-    """Анализ графа здания."""
-    try:
-        from shared.graph import BuildingGraph
-        bg = BuildingGraph.from_params(req)
-        return {
-            "rooms": bg.rooms,
-            "edges": bg.edges,
-            "adjacency": bg.get_adjacency_list(),
-            "stats": bg.get_room_stats(),
-        }
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-# ═══════════════════════════════════════════════════════════════
-# TASK QUEUE (Celery)
-# ═══════════════════════════════════════════════════════════════
-
-@app.post("/api/v1/tasks/generate")
-async def task_generate(req: GenerateRequest):
-    """Запуск async генерации через Celery."""
-    try:
-        from shared.celery_app import generate_building_task
-        params = fallback_regex_parse(req.prompt)
-        result = generate_building_task.delay(params)
-        return {"task_id": result.id, "status": "queued"}
-    except RuntimeError as e:
-        raise HTTPException(503, str(e))
-
-
-@app.get("/api/v1/tasks/{task_id}")
-async def task_status(task_id: str):
-    """Проверка статуса async задачи."""
-    try:
-        from shared.celery_app import celery_app
-        if celery_app is None:
-            raise HTTPException(503, "Celery not available")
-        result = celery_app.AsyncResult(task_id)
-        response = {"task_id": task_id, "status": result.status}
-        if result.status == "PROGRESS":
-            response["progress"] = result.info
-        elif result.status == "SUCCESS":
-            response["result"] = result.result
-        elif result.status == "FAILURE":
-            response["error"] = str(result.result)
-        return response
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-# ═══════════════════════════════════════════════════════════════
-# ORCHESTRATOR (multi-agent pipeline)
-# ═══════════════════════════════════════════════════════════════
-
-_orchestrator_jobs: dict = {}
-
-
-@app.post("/api/v1/orchestrator/execute")
-async def orchestrator_execute(req: GenerateRequest):
-    """Полный цикл генерации через multi-agent оркестратор."""
-    from shared.agents import Orchestrator
-    orch = Orchestrator()
-    result = orch.execute(req.prompt)
-    job_id = result["job_id"]
-    _orchestrator_jobs[job_id] = result
-    r = result.get("result") or {}
-    return {
-        "job_id": job_id,
-        "status": result["status"],
-        "gen_type": r.get("gen_type"),
-        "params": r.get("params"),
-        "clarification": result.get("clarification"),
-        "steps": [
-            {"name": s["name"], "status": s["status"], "duration_ms": s.get("duration_ms", 0)}
-            for s in result.get("steps", [])
-        ],
-        "duration_ms": result.get("duration_ms", 0),
-    }
-
-
-@app.get("/api/v1/orchestrator/jobs/{job_id}")
-async def orchestrator_job_status(job_id: str):
-    job = _orchestrator_jobs.get(job_id)
-    if not job:
-        raise HTTPException(404, "Job not found")
-    return job
-
-
-@app.post("/api/v1/parse-local")
-async def parse_local(req: GenerateRequest):
-    """Локальный парсинг промта (regex, без LLM)."""
-    from shared.parser import fallback_regex_parse
-    from shared.router import route_generation
-    params = fallback_regex_parse(req.prompt)
-    plan = route_generation(req.prompt, params)
-    return {
-        "params": params,
-        "gen_type": plan.gen_type,
-        "building_params": plan.params.get("building", {}),
-    }
 
 
 # ═══════════════════════════════════════════════════════════════
 # STATIC FILES
 # ═══════════════════════════════════════════════════════════════
+
+FRONTEND_DIR = os.path.dirname(__file__)
+
 
 @app.get("/")
 async def serve_index():
@@ -379,8 +384,8 @@ async def serve_index():
 
 if __name__ == "__main__":
     import uvicorn
-    port = settings.PORT
-    print(f"Architect Server starting on port {port}")
+    print(f"Architect Server starting on port {settings.PORT}")
     print(f"Model: {settings.LLM_MODEL}")
     print(f"Blender: {settings.BLENDER_PATH}")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    print(f"Output: {OUTPUT_DIR}")
+    uvicorn.run(app, host="0.0.0.0", port=settings.PORT)

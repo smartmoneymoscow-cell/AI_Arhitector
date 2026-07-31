@@ -30,8 +30,8 @@ from shared.parser import parse_prompt_async, fallback_regex_parse
 
 app = FastAPI(
     title="Architect LLM Service",
-    description="Прокси к OpenRouter + парсинг архитектурных промтов (shared)",
-    version="3.0.0",
+    description="Прокси к OpenRouter + парсинг архитектурных промтов",
+    version="4.0.0",
 )
 
 app.add_middleware(
@@ -51,7 +51,7 @@ async def health():
     return HealthResponse(
         status="ok",
         service="llm-service",
-        version="3.0.0",
+        version="4.0.0",
         model=settings.LLM_MODEL,
     )
 

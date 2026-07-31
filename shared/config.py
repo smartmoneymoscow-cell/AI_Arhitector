@@ -11,7 +11,7 @@ class Settings:
     # OpenRouter
     OPENROUTER_API_KEY: str = os.environ.get("OPENROUTER_API_KEY", "")
     OPENROUTER_BASE: str = "https://openrouter.ai/api/v1"
-    LLM_MODEL: str = os.environ.get("LLM_MODEL", "nvidia/nemotron-3-nano-30b-a3b:free")
+    LLM_MODEL: str = os.environ.get("LLM_MODEL", "google/gemini-2.5-flash")
 
     # Blender
     BLENDER_PATH: str = os.environ.get("BLENDER_PATH", "blender")
@@ -30,6 +30,9 @@ class Settings:
     FREECAD_SERVICE_URL: str = os.environ.get("FREECAD_SERVICE_URL", "")
     VECTORDB_SERVICE_URL: str = os.environ.get("VECTORDB_SERVICE_URL", "")
     GRAPHDB_SERVICE_URL: str = os.environ.get("GRAPHDB_SERVICE_URL", "")
+
+    # Output
+    OUTPUT_DIR: str = os.environ.get("OUTPUT_DIR", "/app/output")
 
     # Server
     PORT: int = int(os.environ.get("PORT", "8080"))
