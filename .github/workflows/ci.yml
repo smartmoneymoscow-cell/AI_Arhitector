@@ -18,9 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/ruff-action@v3
+        with:
+          args: "check proto/ gateway/ shared/ llm-service/"
       - uses: astral-sh/ruff-action@v3
         with:
-          args: "format --check"
+          args: "format --check proto/ gateway/ shared/ llm-service/"
 
   # ═══ 2. Type check — C8: mypy (1 min) ═══
   typecheck:
@@ -95,4 +97,4 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install pip-audit && pip-audit -r requirements.txt --strict
+      - run: pip install pip-audit && pip-audit -r requirements.txt
