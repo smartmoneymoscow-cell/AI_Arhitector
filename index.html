@@ -1854,11 +1854,16 @@ function parseInteriorParams(text) {
   if(/ванн|bath/.test(t)) furniture.push('bath');
   if(/шкаф|wardrobe/.test(t)) furniture.push('wardrobe');
   if(/стул|chair/.test(t)) furniture.push('chair');
+  if(/стол|desk|table/.test(t)) furniture.push('table');
+  if(/книжн|bookshelf/.test(t)) furniture.push('bookshelf');
   // Default furniture if none specified
   if(furniture.length === 0) {
     if(/кухн|kitchen/.test(t)) { furniture.push('table','chair'); }
     else if(/ванн|bath/.test(t)) { furniture.push('bath'); }
     else if(/спальн|bedroom/.test(t)) { furniture.push('bed'); }
+    else if(/детск|children/.test(t)) { furniture.push('bed','desk','bookshelf'); }
+    else if(/кабинет|study/.test(t)) { furniture.push('desk','bookshelf','chair'); }
+    else if(/гостин|living/.test(t)) { furniture.push('sofa','table','chandelier'); }
     else { furniture.push('sofa','table','chandelier'); }
   }
   return { style, furniture };
@@ -1948,7 +1953,7 @@ function doFinish(bld,ov,gf){
 }
 
 // ═══════════════════ SEND ════════════════════════════════════
-const BUILD_RE=/дом|здани|офис|коттедж|вилл|склад|таунхаус|этаж|комнат|кирпич|фасад|кровля|строи|проект|гараж|терраса|мансарда|балкон|дерев|стекл|плоская|скатная|загородн|жилой|база|гостиниц|отель|хостел|санаторий|пансионат/i;
+const BUILD_RE=/дом|здани|офис|коттедж|вилл|склад|таунхаус|этаж|комнат|кирпич|фасад|кровля|строи|проект|гараж|терраса|мансарда|балкон|дерев|стекл|плоская|скатная|загородн|жилой|база|гостиниц|отель|хостел|санаторий|пансионат|туристическ|курорт|мастер.план|инвестиц|комплекс|баня|саун|бани/i;
 const INTERIOR_RE=/интерьер|спальн|гостин|кухн|ванн|мебел|диван|кроват|стул|шкаф|прихож|коридор|детск|кабинет|столов|гардероб|холл|салон|лoft|лофт/i;
 const LANDSCAPE_RE=/ландшафт|сад|газон|дорожк|забор|беседк|бассейн|пруд|деревья|клумб|цветник|патио|двор|участок|огород/i;
 const CONSTRUCT_RE=/конструкц|ферм|балк|перекрыт|колонн|армопояс|сваи|фундамент|несущ|стен.*несущ|каркас|модул|панел/i;
@@ -2119,8 +2124,11 @@ async function send(){
   } catch(e) {
     console.error('send() unhandled error:', e);
     ST.generating = false;
+    ST.hasModel = false;
     const ov=document.getElementById('genov');
     if(ov) ov.style.display='none';
+    const c3d=document.getElementById('c3d');
+    if(c3d) c3d.style.display='none';
     addMsg('a', '❌ Произошла ошибка: ' + (e.message || e) + '<br>Попробуйте ещё раз или обновите страницу.');
     showNotif('Ошибка генерации', 'warn');
   }
@@ -2128,7 +2136,19 @@ async function send(){
 async function _sendInner(){
   const inp=document.getElementById('ci');
   const text=(inp&&inp.value||'').trim();
-  if(ST.generating){showNotif('Генерация идёт…','warn');return;}
+  if(ST.generating){
+    // Auto-reset if stuck for >60 seconds
+    if(ST._genStart && (Date.now()-ST._genStart > 60000)){
+      console.warn('Generating stuck for >60s, auto-resetting');
+      ST.generating=false;
+      const ov=document.getElementById('genov');
+      if(ov) ov.style.display='none';
+    } else {
+      showNotif('Генерация идёт…','warn');
+      return;
+    }
+  }
+  ST._genStart = Date.now();
 
   // ── PHOTO / BLUEPRINT PATH ──────────────────────────────
   if(pendingFileB64){
@@ -2199,10 +2219,16 @@ async function _sendInner(){
     if(ok) return;
     // Fallback: generate room via Three.js
     addThink(['⚠️ Blender недоступен, генерирую интерьер в браузере…']);
-    let parsed=parseLocal('дом 1 этаж 6x8');
-    parsed.type='house';
+    let parsed=parseLocal('комната 1 этаж 6x8');
+    parsed.type='room';
+    parsed.room_type = /детск|children/.test(text.toLowerCase()) ? 'children' :
+                        /спальн|bedroom/.test(text.toLowerCase()) ? 'bedroom' :
+                        /кухн|kitchen/.test(text.toLowerCase()) ? 'kitchen' :
+                        /ванн|bath/.test(text.toLowerCase()) ? 'bathroom' : 'living';
     const bld=applyParams(text,parsed);
-    bld.label='Интерьер: '+ip.style;
+    bld.label='Интерьер: '+ip.style+' ('+parsed.room_type+')';
+    bld.isInterior = true;
+    bld.furniture = ip.furniture;
     setTimeout(()=>startGen(bld),300);
     return;
   }
@@ -2245,13 +2271,17 @@ async function _sendInner(){
         const raw=await callAI(text,
           'Ты — парсер архитектурных описаний для 3D-генератора. Отвечай ТОЛЬКО валидным JSON, без markdown. '+
           'Формат: {"type":"house|office|cottage|modern","floors":2,"width":10,"length":12,"roof_type":"gabled|flat|hip","facade_material":"brick|wood|glass|plaster|stone","facade_color":null,"has_balcony":false,"has_terrace":false,"has_garage":false} '+
-          'Правила: null = не упомянуто. «база отдыха», «гостиница», «отель» → type="cottage". «премиальный», "элитный" → facade_material="stone". '+
+          'Правила: null = не упомянуто. «база отдыха», «гостиница», «отель», «курорт» → type="hotel". «туристический комплекс», «мастер-план» → type="tourism_complex". «премиальный", "элитный" → facade_material="stone". '+
           '"64 кв метра" → width=8, length=8. Только JSON, ничего больше.',
           300);
         const j=JSON.parse(raw.replace(/```json|```/g,'').trim());
         if(j&&j.type){
+          // Map hotel/tourism types
+          let mappedType = j.type;
+          if(j.type==='hotel'||j.type==='tourism_complex'||j.type==='resort') mappedType = j.type;
+          if(j.type==='cottage' && /отель|гостиниц|курорт|туристическ/i.test(text)) mappedType = 'hotel';
           parsed={
-            type: j.type||'house',
+            type: mappedType||'house',
             floors: j.floors||2,
             width: j.width||10,
             length: j.length||12,
