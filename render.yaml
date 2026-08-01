@@ -31,7 +31,7 @@ services:
   - type: web
     name: ai-arch-llmproxy
     runtime: docker
-    dockerfilePath: ./llm.Dockerfile
+    dockerfilePath: ./llm-service.Dockerfile
     rootDir: .
     region: oregon
     plan: starter
