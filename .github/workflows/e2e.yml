@@ -41,8 +41,8 @@ jobs:
 
       - name: Run E2E tests (random prompts)
         env:
-          E2E_BASE_URL: *** secrets.STAGING_URL }}
-          E2E_API_KEY: *** secrets.STAGING_API_KEY }}
+          E2E_BASE_URL: ${{ secrets.STAGING_URL }}
+          E2E_API_KEY: ${{ secrets.STAGING_API_KEY }}
         run: |
           pytest tests/e2e/test_chat_e2e.py \
             -v \
