@@ -59,7 +59,7 @@ async def health():
     return HealthResponse(
         status="ok",
         service="llm-service",
-        version="6.0.0",
+        version="7.1.0",
         model=settings.LLM_MODEL,
         services={
             "redis": "connected" if cache["redis_connected"] else "disconnected",
