@@ -120,7 +120,6 @@ body{display:flex;flex-direction:column}
     </div>
   </div>
   <div style="display:flex;gap:6px;align-items:center">
-    <button class="btn" onclick="openSettings()" style="font-size:13px;padding:6px 10px;border-radius:8px" title="Настройки">⚙️</button>
     <button class="btn" onclick="newProj()" style="font-size:12px;padding:6px 12px;border-radius:8px">+ Новый</button>
     <button class="btn btn-p" onclick="showExp()" style="font-size:12px;padding:6px 12px;border-radius:8px">↓ Экспорт</button>
   </div>
@@ -223,29 +222,7 @@ body{display:flex;flex-direction:column}
 </div>
 <div class="notif" id="notif"></div>
 
-<!-- SETTINGS MODAL -->
-<div id="settings-modal" style="display:none;position:fixed;inset:0;z-index:300;background:rgba(15,23,42,.5);backdrop-filter:blur(4px);">
-  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg2);border-radius:16px;padding:28px;width:420px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.2);border:1px solid var(--bdr)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <div style="font-size:16px;font-weight:700">⚙️ Настройки</div>
-      <button onclick="closeSettings()" style="width:28px;height:28px;border-radius:50%;border:none;background:var(--bg3);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">✕</button>
-    </div>
-    <div style="margin-bottom:16px">
-      <label style="font-size:12px;font-weight:600;color:var(--txt2);display:block;margin-bottom:6px">OpenRouter API Key</label>
-      <input id="settings-key" type="password" placeholder="sk-or-v1-..." style="width:100%;padding:10px 14px;border:1px solid var(--bdr);border-radius:10px;font-size:13px;font-family:monospace;background:var(--bg);color:var(--txt);outline:none;transition:border .15s" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='var(--bdr)'"/>
-      <div style="font-size:11px;color:var(--txt2);margin-top:6px;line-height:1.5">Ключ от <a href="https://openrouter.ai/keys" target="_blank" style="color:#6366f1">openrouter.ai/keys</a>. Бесплатные модели работают без баланса, но ключ обязателен.</div>
-    </div>
-    <div style="margin-bottom:20px">
-      <label style="font-size:12px;font-weight:600;color:var(--txt2);display:block;margin-bottom:6px">Backend URL <span style="font-weight:400;color:var(--txt2)">(опционально)</span></label>
-      <input id="settings-backend" type="text" placeholder="http://localhost:8080" style="width:100%;padding:10px 14px;border:1px solid var(--bdr);border-radius:10px;font-size:13px;font-family:monospace;background:var(--bg);color:var(--txt);outline:none;transition:border .15s" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='var(--bdr)'"/>
-      <div style="font-size:11px;color:var(--txt2);margin-top:6px">Если запущен server.py — укажите адрес для Blender-рендеринга.</div>
-    </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn" onclick="closeSettings()" style="padding:8px 16px;font-size:12px">Отмена</button>
-      <button class="btn btn-p" onclick="saveSettings()" style="padding:8px 16px;font-size:12px">💾 Сохранить</button>
-    </div>
-  </div>
-</div>
+
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/RGBELoader.js"></script>
@@ -319,7 +296,7 @@ function toggleMic() {
 const API_BASE = (()=>{
   const proto = window.location.protocol;
   if(proto === 'file:') return null;  // standalone mode
-  // Check localStorage for custom backend URL
+  // Check localStorage for custom backend URL (API key is server-side only)
   const stored = localStorage.getItem('archai_backend_url');
   if(stored) return stored.replace(/\/+$/,'');
   // Auto-detect: if on GitHub Pages, use Render backend
@@ -346,45 +323,26 @@ async function checkBackend(){
 }
 
 async function callAI(msg,sys,maxTok){
-  // ── Prefer backend proxy (key stays server-side) ──────
+  // ── Backend proxy only (key stays server-side) ──────
   if(API_BASE && _backendOk===null) await checkBackend();
   if(API_BASE && _backendOk){
-    try{
-      const ctrl=new AbortController();
-      setTimeout(()=>ctrl.abort(),30000);
-      const r=await fetch(API_BASE+'/api/v1/proxy/claude',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        signal:ctrl.signal,
-        body:JSON.stringify({
-          model:'auto',
-          max_tokens:maxTok||400,
-          system:sys||'Отвечай по-русски.',
-          messages:[{role:'user',content:[{type:'text',text:msg}]}]
-        })
-      });
-      if(r.ok) return (await r.json()).content?.[0]?.text||'';
-    }catch(e){console.warn('Proxy failed, trying direct API:',e.message);}
+    const ctrl=new AbortController();
+    setTimeout(()=>ctrl.abort(),30000);
+    const r=await fetch(API_BASE+'/api/v1/proxy/claude',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      signal:ctrl.signal,
+      body:JSON.stringify({
+        model:'auto',
+        max_tokens:maxTok||400,
+        system:sys||'Отвечай по-русски.',
+        messages:[{role:'user',content:[{type:'text',text:msg}]}]
+      })
+    });
+    if(r.ok) return (await r.json()).content?.[0]?.text||'';
+    throw new Error('Сервис временно недоступен. Попробуйте позже.');
   }
-  // ── Standalone fallback: OpenRouter free models ─────────
-  const key=getOpenRouterKey();
-  if(!key) throw new Error('Нет API ключа. Откройте ⚙️ Настройки и введите OpenRouter API key.');
-  const orHeaders={'Content-Type':'application/json','HTTP-Referer':'https://archai.app','X-Title':'Architect','Authorization':'Bearer '+key};
-  const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
-    method:'POST',
-    headers:orHeaders,
-    body:JSON.stringify({
-      model:'nvidia/nemotron-nano-9b-v2:free',
-      max_tokens:maxTok||400,
-      temperature:0.7,
-      messages:[
-        {role:'system',content:sys||'Отвечай по-русски.'},
-        {role:'user',content:msg}
-      ]
-    })
-  });
-  if(!r.ok) throw new Error('OpenRouter '+r.status);
-  return (await r.json()).choices?.[0]?.message?.content||'';
+  throw new Error('Сервис временно недоступен. Попробуйте позже.');
 }
 
 // ═══════════════════ LOCAL PARSER ════════════════════════════
@@ -1695,7 +1653,9 @@ function addAnns(b,W,L,H){
 }
 
 // ═══════════════════ GENERATION PIPELINE ════════════════════
-const GSTEPS=[{l:'Читаю описание'},{l:'Извлекаю параметры'},{l:'Планировка'},{l:'Фундамент и стены'},{l:'Фасад и материалы'},{l:'Кровля'},{l:'Окна и двери'},{l:'Интерьер + мебель'},{l:'Ландшафт'},{l:'Аннотации'}];
+const GSTEPS_BUILDING=[{l:'Читаю описание'},{l:'Извлекаю параметры'},{l:'Планировка'},{l:'Фундамент и стены'},{l:'Фасад и материалы'},{l:'Кровля'},{l:'Окна и двери'},{l:'Интерьер + мебель'},{l:'Ландшафт'},{l:'Аннотации'}];
+const GSTEPS_INTERIOR=[{l:'Читаю описание'},{l:'Анализирую стиль'},{l:'Планировка помещения'},{l:'Стены и пол'},{l:'Мебель и расстановка'},{l:'Материалы и текстуры'},{l:'Освещение'},{l:'Декор и детали'},{l:'Финальная сборка'},{l:'Рендер'}];
+let GSTEPS=GSTEPS_BUILDING;
 function renderGS(ai){
   const el=document.getElementById('gsteps');if(!el)return;
   el.innerHTML=GSTEPS.map((s,i)=>`<div class="gs ${i<ai?'done':i===ai?'active':''}">${i<ai?'✅':i===ai?'⟳':'○'} ${s.l}</div>`).join('');
@@ -1874,6 +1834,8 @@ function parseInteriorParams(text) {
 
 function startGen(bld){
   if(ST.generating)return;
+  // Switch progress steps based on type
+  GSTEPS = (bld.isInterior || bld.type === 'room') ? GSTEPS_INTERIOR : GSTEPS_BUILDING;
   // Check THREE.js availability
   if(typeof THREE === 'undefined' || typeof buildModel !== 'function') {
     addMsg('a', '❌ 3D-движок не загружен. Проверьте подключение к интернету (Three.js CDN) и обновите страницу.');
@@ -2018,27 +1980,7 @@ async function analyzeImage(b64,mediaType,userText){
     }
     }catch(e){console.warn('Vision proxy failed:',e.message);}
   }
-  // Standalone fallback — OpenRouter free model
-  const key=getOpenRouterKey();
-  if(!key) throw new Error('Нет API ключа для анализа изображений. Откройте ⚙️ Настройки.');
-  const orHeaders={'Content-Type':'application/json','HTTP-Referer':'https://archai.app','X-Title':'Architect','Authorization':'Bearer '+key};
-  const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
-    method:'POST',
-    headers:orHeaders,
-    body:JSON.stringify({
-      model:'nvidia/nemotron-nano-12b-v2-vl:free',
-      max_tokens:500,
-      temperature:0.3,
-      messages:[{role:'user',content:[
-        {type:'image_url',image_url:{url:`data:${mediaType};base64,${b64}`}},
-        {type:'text',text:prompt}
-      ]}]
-    })
-  });
-  if(r.ok){
-    const raw=(await r.json()).choices?.[0]?.message?.content||'{}';
-    return JSON.parse(raw.replace(/```json|```/g,'').trim());
-  }
+  throw new Error('Сервис временно недоступен. Попробуйте позже.');
 }
 
 
@@ -2267,20 +2209,22 @@ async function _sendInner(){
     
     // Step 1: LLM parsing FIRST (understands any natural language)
     let parsed=null;
-    const hasKey=getOpenRouterKey();
-    if(hasKey||_backendOk){
+    if(_backendOk){
       try{
         addThink(['🧠 AI анализирует описание…']);
         const raw=await callAI(text,
           'Ты — парсер архитектурных описаний для 3D-генератора. Отвечай ТОЛЬКО валидным JSON, без markdown. '+
-          'Формат: {"type":"house|office|cottage|villa|hotel|tourism_complex|bathhouse|warehouse|school|apartment|townhouse","floors":2,"width":10,"length":12,"roof_type":"gabled|flat|hip","facade_material":"brick|wood|glass|plaster|stone","facade_color":null,"has_balcony":false,"has_terrace":false,"has_garage":false} '+
+          'Формат: {"type":"house|office|cottage|villa|hotel|tourism_complex|bathhouse|warehouse|school|apartment|townhouse|interior|room","object_type":"building|interior|room","room_type":"children|bedroom|living|kitchen|bathroom|study|dining|null","style":"classic|modern|minimalist|loft|scandinavian|provence|null","floors":2,"width":10,"length":12,"roof_type":"gabled|flat|hip","facade_material":"brick|wood|glass|plaster|stone","facade_color":null,"has_balcony":false,"has_terrace":false,"has_garage":false} '+
           'Правила: null = не упомянуто. «база отдыха», «гостиница», «отель», «курорт» → type="hotel". «туристический комплекс», «мастер-план» → type="tourism_complex". «премиальный", "элитный" → facade_material="stone". '+
-          '"64 кв метра" → width=8, length=8. Только JSON, ничего больше.',
+          '"64 кв метра" → width=8, length=8. Если пользователь описывает комнату/интерьер (детская, спальня, кухня и т.д.) → type="room", object_type="interior". Только JSON, ничего больше.',
           300);
         const j=JSON.parse(raw.replace(/```json|```/g,'').trim());
         if(j&&j.type){
           parsed={
             type: j.type||'house',
+            object_type: j.object_type||'building',
+            room_type: j.room_type||null,
+            style: j.style||null,
             floors: j.floors||2,
             width: j.width||10,
             length: j.length||12,
@@ -2301,7 +2245,28 @@ async function _sendInner(){
       parsed=parseLocal(text);
       addThink(['📝 Локальный анализ (regex)']);
     }
-    
+
+    // Step 2.5: If LLM detected interior — route to interior path
+    if(parsed.object_type === 'interior' || parsed.object_type === 'room'){
+      const roomType = parsed.room_type || 'living';
+      const style = parsed.style || 'modern';
+      const furnitureMap = {children:['bed','desk','wardrobe','bookshelf'],bedroom:['bed','nightstand','wardrobe','dresser'],living:['sofa','tv','coffee_table','bookshelf'],kitchen:['fridge','stove','table','chairs'],bathroom:['bathtub','sink','toilet','mirror'],study:['desk','chair','bookshelf','lamp'],dining:['table','chairs','sideboard','chandelier']};
+      const furniture = furnitureMap[roomType] || furnitureMap.living;
+      addThink(['✅ Комната: '+roomType+' | Стиль: '+style,'🖥 Генерирую интерьер…']);
+      const ok = await renderInteriorViaServer(text, style, furniture);
+      if(ok) return;
+      addThink(['⚠️ Сервер недоступен, генерирую интерьер в браузере…']);
+      let rParsed=parseLocal('комната 1 этаж 6x8');
+      rParsed.type='room';
+      rParsed.room_type=roomType;
+      const bld=applyParams(text,rParsed);
+      bld.label='Интерьер: '+style+' ('+roomType+')';
+      bld.isInterior=true;
+      bld.furniture=furniture;
+      setTimeout(()=>startGen(bld),300);
+      return;
+    }
+
     // Step 3: Try Blender server
     const serverOk = await generateViaBlenderServer(text);
     if(serverOk) return;
@@ -2312,10 +2277,9 @@ async function _sendInner(){
     setTimeout(()=>startGen(bld),300);
     return;
   }
-  // General chat — needs API key
-  const hasKey=getOpenRouterKey();
-  if(!hasKey&&!_backendOk){
-    addMsg('a','Опишите здание (например «дом 2 этажа кирпич 10×12») — сгенерирую 3D без API ключа. Для AI-диалога нажмите ⚙️ и введите ключ.');
+  // General chat — needs backend
+  if(!_backendOk){
+    addMsg('a','Опишите здание (например «дом 2 этажа кирпич 10×12») — сразу сгенерирую 3D.');
     return;
   }
   showTyping();
@@ -2910,33 +2874,7 @@ function toggleMic() {
 }
 
 // ═══════════════════ SETTINGS ═══════════════════════════════
-function openSettings(){
-  const m=document.getElementById('settings-modal');
-  if(!m) return;
-  document.getElementById('settings-key').value=localStorage.getItem('archai_openrouter_key')||'';
-  document.getElementById('settings-backend').value=localStorage.getItem('archai_backend_url')||'';
-  m.style.display='block';
-}
-function closeSettings(){
-  const m=document.getElementById('settings-modal');
-  if(m) m.style.display='none';
-}
-function saveSettings(){
-  const key=document.getElementById('settings-key').value.trim();
-  const backend=document.getElementById('settings-backend').value.trim();
-  if(key) localStorage.setItem('archai_openrouter_key',key);
-  else localStorage.removeItem('archai_openrouter_key');
-  if(backend) localStorage.setItem('archai_backend_url',backend.replace(/\/+$/,''));
-  else localStorage.removeItem('archai_backend_url');
-  _backendOk=null;
-  closeSettings();
-  showNotif('✅ Настройки сохранены');
-}
-function getOpenRouterKey(){
-  return localStorage.getItem('archai_openrouter_key')||'';
-}
-function getBackendUrl(){
-  return localStorage.getItem('archai_backend_url')||'';
+
 }
 
 </script>
