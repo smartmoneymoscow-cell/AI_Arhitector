@@ -9,6 +9,7 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 # Force fresh copy of shared (no Docker cache)
 ARG CACHEBUST=1
+RUN echo "Cache bust $CACHEBUST"
 COPY shared/ /app/shared/
 COPY llm-service/ /app/llm-service/
 EXPOSE 8081
