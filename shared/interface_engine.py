@@ -42,14 +42,8 @@ class InterfaceDefinition:
         return {
             "project_name": self.project_name,
             "boundary": self.boundary,
-            "our_scope": [
-                {"name": i.name, "description": i.description, "owner": i.owner}
-                for i in self.our_scope
-            ],
-            "their_scope": [
-                {"name": i.name, "description": i.description, "owner": i.owner}
-                for i in self.their_scope
-            ],
+            "our_scope": [{"name": i.name, "description": i.description, "owner": i.owner} for i in self.our_scope],
+            "their_scope": [{"name": i.name, "description": i.description, "owner": i.owner} for i in self.their_scope],
             "handover_to_them": self.handover_to_them,
             "required_from_them": self.required_from_them,
         }
@@ -100,7 +94,9 @@ class InterfaceEngine:
         "apartment_mep": {
             "boundary": "Ввод инженерных коммуникаций в квартиру",
             "our_scope": [
-                InterfaceItem("Внутренние системы", "Электрика, водоснабжение, канализация, отопление, вентиляция", "us"),
+                InterfaceItem(
+                    "Внутренние системы", "Электрика, водоснабжение, канализация, отопление, вентиляция", "us"
+                ),
                 InterfaceItem("Отделка", "Все отделочные работы", "us"),
             ],
             "their_scope": [

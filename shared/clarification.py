@@ -267,135 +267,298 @@ class ClarificationEngine:
 
     def _options_material(self, ctx: dict) -> list[ClarificationOption]:
         return [
-            ClarificationOption(id="A", title="Кирпич", description="Классический материал",
-                                pros=["Прочность", "Долговечность", "Экологичность"],
-                                cons=["Дорого", "Долго строить", "Тяжёлый"], price_range="4500 ₽/м²"),
-            ClarificationOption(id="B", title="Газобетон", description="Лёгкие блоки",
-                                pros=["Тепло", "Лёгкий", "Быстрый монтаж"],
-                                cons=["Впитывает влагу", "Требует отделки"], price_range="2800 ₽/м²", recommended=True),
-            ClarificationOption(id="C", title="Дерево (брус)", description="Экологичный",
-                                pros=["Экология", "Тепло", "Красиво"],
-                                cons=["Усадка", "Пожароопасность", "Биозащита"], price_range="3800 ₽/м²"),
+            ClarificationOption(
+                id="A",
+                title="Кирпич",
+                description="Классический материал",
+                pros=["Прочность", "Долговечность", "Экологичность"],
+                cons=["Дорого", "Долго строить", "Тяжёлый"],
+                price_range="4500 ₽/м²",
+            ),
+            ClarificationOption(
+                id="B",
+                title="Газобетон",
+                description="Лёгкие блоки",
+                pros=["Тепло", "Лёгкий", "Быстрый монтаж"],
+                cons=["Впитывает влагу", "Требует отделки"],
+                price_range="2800 ₽/м²",
+                recommended=True,
+            ),
+            ClarificationOption(
+                id="C",
+                title="Дерево (брус)",
+                description="Экологичный",
+                pros=["Экология", "Тепло", "Красиво"],
+                cons=["Усадка", "Пожароопасность", "Биозащита"],
+                price_range="3800 ₽/м²",
+            ),
         ]
 
     def _options_roof(self, ctx: dict) -> list[ClarificationOption]:
         return [
-            ClarificationOption(id="A", title="Двускатная", description="Классическая",
-                                pros=["Простой узел", "Хороший отвод воды"],
-                                cons=["Нет террасы на крыше"], price_range="5000 ₽/м²"),
-            ClarificationOption(id="B", title="Плоская", description="Современная",
-                                pros=["Терраса", "Современный вид"],
-                                cons=["Дренаж критичен", "Конденсат"], price_range="3500 ₽/м²", recommended=True),
-            ClarificationOption(id="C", title="Вальмовая", description="Престижная",
-                                pros=["Красивая", "Устойчивость к ветру"],
-                                cons=["Дорого", "Сложные узлы"], price_range="6500 ₽/м²"),
+            ClarificationOption(
+                id="A",
+                title="Двускатная",
+                description="Классическая",
+                pros=["Простой узел", "Хороший отвод воды"],
+                cons=["Нет террасы на крыше"],
+                price_range="5000 ₽/м²",
+            ),
+            ClarificationOption(
+                id="B",
+                title="Плоская",
+                description="Современная",
+                pros=["Терраса", "Современный вид"],
+                cons=["Дренаж критичен", "Конденсат"],
+                price_range="3500 ₽/м²",
+                recommended=True,
+            ),
+            ClarificationOption(
+                id="C",
+                title="Вальмовая",
+                description="Престижная",
+                pros=["Красивая", "Устойчивость к ветру"],
+                cons=["Дорого", "Сложные узлы"],
+                price_range="6500 ₽/м²",
+            ),
         ]
 
     def _options_foundation(self, ctx: dict) -> list[ClarificationOption]:
         return [
-            ClarificationOption(id="A", title="Ленточный", description="Монолитная лента",
-                                pros=["Надёжно", "Для любых грунтов"], cons=["Дорого", "Долго"], price_range="4000 ₽/м²"),
-            ClarificationOption(id="B", title="Плитный", description="Монолитная плита",
-                                pros=["Просто", "Для слабых грунтов"],
-                                cons=["Плоскость пола фиксирована"], price_range="5500 ₽/м²"),
-            ClarificationOption(id="C", title="Свайный", description="Буронабивные сваи",
-                                pros=["Быстро", "Для сложных грунтов"],
-                                cons=["Нужен ростверк"], price_range="7000 ₽/м²"),
+            ClarificationOption(
+                id="A",
+                title="Ленточный",
+                description="Монолитная лента",
+                pros=["Надёжно", "Для любых грунтов"],
+                cons=["Дорого", "Долго"],
+                price_range="4000 ₽/м²",
+            ),
+            ClarificationOption(
+                id="B",
+                title="Плитный",
+                description="Монолитная плита",
+                pros=["Просто", "Для слабых грунтов"],
+                cons=["Плоскость пола фиксирована"],
+                price_range="5500 ₽/м²",
+            ),
+            ClarificationOption(
+                id="C",
+                title="Свайный",
+                description="Буронабивные сваи",
+                pros=["Быстро", "Для сложных грунтов"],
+                cons=["Нужен ростверк"],
+                price_range="7000 ₽/м²",
+            ),
         ]
 
     def _options_lstk(self, ctx: dict) -> list[ClarificationOption]:
         return [
-            ClarificationOption(id="A", title="Стоечно-балочный", description="Профили C+U",
-                                pros=["Гибкость планировок", "Легко прокладывать коммуникации"],
-                                cons=["Много мокрых процессов"], recommended=True),
-            ClarificationOption(id="B", title="Ферменный", description="Фермы из ЛСТК",
-                                pros=["Большие пролёты", "Прочность"],
-                                cons=["Сложные узлы"]),
-            ClarificationOption(id="C", title="Панельный (СИП)", description="Готовые панели",
-                                pros=["Быстрый монтаж", "Предсказуемая стоимость"],
-                                cons=["Типовые решения"]),
+            ClarificationOption(
+                id="A",
+                title="Стоечно-балочный",
+                description="Профили C+U",
+                pros=["Гибкость планировок", "Легко прокладывать коммуникации"],
+                cons=["Много мокрых процессов"],
+                recommended=True,
+            ),
+            ClarificationOption(
+                id="B",
+                title="Ферменный",
+                description="Фермы из ЛСТК",
+                pros=["Большие пролёты", "Прочность"],
+                cons=["Сложные узлы"],
+            ),
+            ClarificationOption(
+                id="C",
+                title="Панельный (СИП)",
+                description="Готовые панели",
+                pros=["Быстрый монтаж", "Предсказуемая стоимость"],
+                cons=["Типовые решения"],
+            ),
         ]
 
     def _options_smart_home(self, ctx: dict) -> list[ClarificationOption]:
         return [
-            ClarificationOption(id="A", title="KNX", description="Профессиональный проводной",
-                                pros=["Надёжность", "Полная интеграция"],
-                                cons=["Дорого (35000 ₽/точка)", "Много кабеля"], price_range="35000 ₽/точка"),
-            ClarificationOption(id="B", title="Loxone", description="Компактный проводной",
-                                pros=["Красивый UI", "Средняя цена"],
-                                cons=["Мало интеграций"], price_range="20000 ₽/точка", recommended=True),
-            ClarificationOption(id="C", title="Zigbee", description="Беспроводной",
-                                pros=["Дёшево", "Не нужно штробить"],
-                                cons=["Нестабильно", "Ограниченный функционал"], price_range="8000 ₽/точка"),
+            ClarificationOption(
+                id="A",
+                title="KNX",
+                description="Профессиональный проводной",
+                pros=["Надёжность", "Полная интеграция"],
+                cons=["Дорого (35000 ₽/точка)", "Много кабеля"],
+                price_range="35000 ₽/точка",
+            ),
+            ClarificationOption(
+                id="B",
+                title="Loxone",
+                description="Компактный проводной",
+                pros=["Красивый UI", "Средняя цена"],
+                cons=["Мало интеграций"],
+                price_range="20000 ₽/точка",
+                recommended=True,
+            ),
+            ClarificationOption(
+                id="C",
+                title="Zigbee",
+                description="Беспроводной",
+                pros=["Дёшево", "Не нужно штробить"],
+                cons=["Нестабильно", "Ограниченный функционал"],
+                price_range="8000 ₽/точка",
+            ),
         ]
 
     def _options_stove(self, ctx: dict) -> list[ClarificationOption]:
         return [
-            ClarificationOption(id="A", title="Кирпичная", description="Шамотный кирпич",
-                                pros=["Долго держит тепло", "Мягкий пар"],
-                                cons=["Дорого", "Тяжёлая (нужен фундамент)", "Долго топить"]),
-            ClarificationOption(id="B", title="Металлическая с обкладкой", description="Заводская + кирпич",
-                                pros=["Быстро прогревается", "Компактная", "Эстетика"],
-                                cons=["Дороже обычной"], recommended=True),
-            ClarificationOption(id="C", title="Металлическая", description="Эконом-вариант",
-                                pros=["Дёшево", "Легко"],
-                                cons=["Быстро остывает", "Жёсткий пар"], price_range="от 15000 ₽"),
+            ClarificationOption(
+                id="A",
+                title="Кирпичная",
+                description="Шамотный кирпич",
+                pros=["Долго держит тепло", "Мягкий пар"],
+                cons=["Дорого", "Тяжёлая (нужен фундамент)", "Долго топить"],
+            ),
+            ClarificationOption(
+                id="B",
+                title="Металлическая с обкладкой",
+                description="Заводская + кирпич",
+                pros=["Быстро прогревается", "Компактная", "Эстетика"],
+                cons=["Дороже обычной"],
+                recommended=True,
+            ),
+            ClarificationOption(
+                id="C",
+                title="Металлическая",
+                description="Эконом-вариант",
+                pros=["Дёшево", "Легко"],
+                cons=["Быстро остывает", "Жёсткий пар"],
+                price_range="от 15000 ₽",
+            ),
         ]
 
     def _options_heating(self, ctx: dict) -> list[ClarificationOption]:
         return [
-            ClarificationOption(id="A", title="Центральное (ЦТП/ИТП)", description="От теплосети",
-                                pros=["Надёжно", "Не нужно обслуживать"], cons=["Тарифы"]),
-            ClarificationOption(id="B", title="Автономная котельная", description="Газ/дизель/электро",
-                                pros=["Независимость"], cons=["Нужно обслуживать"]),
-            ClarificationOption(id="C", title="Поквартирное", description="Газ/электро котёл",
-                                pros=["Индивидуальный учёт"],
-                                cons=["Дорого", "Дымоходы"], recommended=True),
+            ClarificationOption(
+                id="A",
+                title="Центральное (ЦТП/ИТП)",
+                description="От теплосети",
+                pros=["Надёжно", "Не нужно обслуживать"],
+                cons=["Тарифы"],
+            ),
+            ClarificationOption(
+                id="B",
+                title="Автономная котельная",
+                description="Газ/дизель/электро",
+                pros=["Независимость"],
+                cons=["Нужно обслуживать"],
+            ),
+            ClarificationOption(
+                id="C",
+                title="Поквартирное",
+                description="Газ/электро котёл",
+                pros=["Индивидуальный учёт"],
+                cons=["Дорого", "Дымоходы"],
+                recommended=True,
+            ),
         ]
 
     def _options_ventilation(self, ctx: dict) -> list[ClarificationOption]:
         return [
-            ClarificationOption(id="A", title="Естественная", description="Приточные клапаны + вытяжка",
-                                pros=["Дёшево", "Не потребляет электричество"],
-                                cons=["Зависит от погоды", "Нет фильтрации"]),
-            ClarificationOption(id="B", title="Приточно-вытяжная с рекуперацией", description="Бризер/установка",
-                                pros=["Комфорт", "Экономия тепла", "Фильтрация"],
-                                cons=["Дорого", "Нужно место"], recommended=True),
-            ClarificationOption(id="C", title="Сплит + приточные клапаны", description="Кондиционер + клапаны",
-                                pros=["Кондиционирование + вентиляция"],
-                                cons=["Нет рекуперации"]),
+            ClarificationOption(
+                id="A",
+                title="Естественная",
+                description="Приточные клапаны + вытяжка",
+                pros=["Дёшево", "Не потребляет электричество"],
+                cons=["Зависит от погоды", "Нет фильтрации"],
+            ),
+            ClarificationOption(
+                id="B",
+                title="Приточно-вытяжная с рекуперацией",
+                description="Бризер/установка",
+                pros=["Комфорт", "Экономия тепла", "Фильтрация"],
+                cons=["Дорого", "Нужно место"],
+                recommended=True,
+            ),
+            ClarificationOption(
+                id="C",
+                title="Сплит + приточные клапаны",
+                description="Кондиционер + клапаны",
+                pros=["Кондиционирование + вентиляция"],
+                cons=["Нет рекуперации"],
+            ),
         ]
 
     def _options_window(self, ctx: dict) -> list[ClarificationOption]:
         return [
-            ClarificationOption(id="A", title="Панорамное (от пола)", description="Полное остекление",
-                                pros=["Максимум света", "Эффект «на природе»"],
-                                cons=["Дорого", "Конденсат", "Летом жарко"]),
-            ClarificationOption(id="B", title="Французское", description="От пола до подоконника",
-                                pros=["Дешевле панорамного", "Приватность сверху"],
-                                cons=["Стандарт"], recommended=True),
-            ClarificationOption(id="C", title="Раздвижные панели", description="Стеклянные панели",
-                                pros=["Открываются полностью", "Летом = терраса"],
-                                cons=["Механизм может ломаться"]),
+            ClarificationOption(
+                id="A",
+                title="Панорамное (от пола)",
+                description="Полное остекление",
+                pros=["Максимум света", "Эффект «на природе»"],
+                cons=["Дорого", "Конденсат", "Летом жарко"],
+            ),
+            ClarificationOption(
+                id="B",
+                title="Французское",
+                description="От пола до подоконника",
+                pros=["Дешевле панорамного", "Приватность сверху"],
+                cons=["Стандарт"],
+                recommended=True,
+            ),
+            ClarificationOption(
+                id="C",
+                title="Раздвижные панели",
+                description="Стеклянные панели",
+                pros=["Открываются полностью", "Летом = терраса"],
+                cons=["Механизм может ломаться"],
+            ),
         ]
 
     def _options_style(self, ctx: dict) -> list[ClarificationOption]:
         return [
-            ClarificationOption(id="A", title="Минимализм", description="Чистые линии",
-                                pros=["Низкий уход", "Современно"], cons=["Может быть холодно"]),
-            ClarificationOption(id="B", title="Современный", description="Смешение стилей",
-                                pros=["Уют", "Гибкость"], cons=["Нужен дизайнер"]),
-            ClarificationOption(id="C", title="Tropical Modern", description="Природа + минимализм",
-                                pros=["Уникальность", "Связь с природой"],
-                                cons=["Специфические материалы"], recommended=True),
+            ClarificationOption(
+                id="A",
+                title="Минимализм",
+                description="Чистые линии",
+                pros=["Низкий уход", "Современно"],
+                cons=["Может быть холодно"],
+            ),
+            ClarificationOption(
+                id="B",
+                title="Современный",
+                description="Смешение стилей",
+                pros=["Уют", "Гибкость"],
+                cons=["Нужен дизайнер"],
+            ),
+            ClarificationOption(
+                id="C",
+                title="Tropical Modern",
+                description="Природа + минимализм",
+                pros=["Уникальность", "Связь с природой"],
+                cons=["Специфические материалы"],
+                recommended=True,
+            ),
         ]
 
     def _options_landscape(self, ctx: dict) -> list[ClarificationOption]:
         return [
-            ClarificationOption(id="A", title="Регулярный", description="Геометрия, симметрия",
-                                pros=["Строго", "Представительно"], cons=["Дорогой уход"]),
-            ClarificationOption(id="B", title="Пейзажный", description="Естественность",
-                                pros=["Неприхотливость", "Красиво"], cons=["Нужен ландшафтник"], recommended=True),
-            ClarificationOption(id="C", title="Японский сад", description="Камень, вода, мох",
-                                pros=["Уют", "Медитативность"], cons=["Мало газона", "Уход"]),
+            ClarificationOption(
+                id="A",
+                title="Регулярный",
+                description="Геометрия, симметрия",
+                pros=["Строго", "Представительно"],
+                cons=["Дорогой уход"],
+            ),
+            ClarificationOption(
+                id="B",
+                title="Пейзажный",
+                description="Естественность",
+                pros=["Неприхотливость", "Красиво"],
+                cons=["Нужен ландшафтник"],
+                recommended=True,
+            ),
+            ClarificationOption(
+                id="C",
+                title="Японский сад",
+                description="Камень, вода, мох",
+                pros=["Уют", "Медитативность"],
+                cons=["Мало газона", "Уход"],
+            ),
         ]

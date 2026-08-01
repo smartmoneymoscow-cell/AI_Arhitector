@@ -55,6 +55,7 @@ def _check_circuit(service: str) -> bool:
     state = _circuit_state.get(service, {"failures": 0, "last_failure": 0})
     if state["failures"] >= 5:
         import time
+
         if time.time() - state["last_failure"] < 60:  # 60s cooldown
             return True
         # Half-open: allow one retry
@@ -64,6 +65,7 @@ def _check_circuit(service: str) -> bool:
 
 def _record_failure(service: str):
     import time
+
     state = _circuit_state.setdefault(service, {"failures": 0, "last_failure": 0})
     state["failures"] += 1
     state["last_failure"] = time.time()
@@ -110,12 +112,14 @@ async def request_with_retry(
 
 _redis = None
 
+
 def _get_redis():
     global _redis
     if _redis is not None:
         return _redis
     try:
         import redis
+
         _redis = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_timeout=3)
         _redis.ping()
         logger.info("Redis connected for jobs storage")
@@ -150,6 +154,7 @@ def _get_job(job_id: str) -> dict | None:
 # ═══════════════════════════════════════════════════════════════
 # HEALTH
 # ═══════════════════════════════════════════════════════════════
+
 
 @app.get("/health")
 @app.get("/api/v1/health")
@@ -188,6 +193,7 @@ async def health():
 # PARSE → routes to LLM Service
 # ═══════════════════════════════════════════════════════════════
 
+
 @app.post("/api/v1/parse")
 async def parse_proxy(
     req: dict,
@@ -212,6 +218,7 @@ async def parse_proxy(
 # GENERATE → routes to Blender Service
 # ═══════════════════════════════════════════════════════════════
 
+
 @app.post("/api/v1/generate")
 async def generate_proxy(
     req: dict,
@@ -231,6 +238,7 @@ async def generate_proxy(
 # ═══════════════════════════════════════════════════════════════
 # PREVIEW → routes to Blender Service
 # ═══════════════════════════════════════════════════════════════
+
 
 @app.post("/api/v1/preview")
 async def preview_proxy(
@@ -252,6 +260,7 @@ async def preview_proxy(
 # CHAT → routes to LLM Service
 # ═══════════════════════════════════════════════════════════════
 
+
 @app.post("/api/v1/chat")
 async def chat_proxy(
     req: dict,
@@ -271,6 +280,7 @@ async def chat_proxy(
 # ═══════════════════════════════════════════════════════════════
 # ORCHESTRATOR — full pipeline (Gateway owns this)
 # ═══════════════════════════════════════════════════════════════
+
 
 @app.post("/api/v1/orchestrator/execute")
 async def orchestrator_execute(
@@ -354,6 +364,7 @@ async def orchestrator_stream(
     api_key: str = Depends(get_api_key_required),
 ):
     from shared.streaming import get_streamer
+
     streamer = get_streamer(job_id)
     if not streamer:
         raise HTTPException(404, "Job not found or stream expired")
@@ -374,4 +385,5 @@ async def orchestrator_agents(
     api_key: str = Depends(get_api_key_required),
 ):
     from shared.agents import AGENT_REGISTRY
+
     return {"agents": list(AGENT_REGISTRY.keys())}

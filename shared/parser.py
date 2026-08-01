@@ -81,6 +81,7 @@ SYSTEM_PROMPT = """Ты — парсер архитектурных описан
 # L3: FALLBACK API KEYS — multiple keys for resilience
 # ═══════════════════════════════════════════════════════════════
 
+
 def _get_api_keys() -> list[str]:
     """Get all available API keys (primary + fallbacks)."""
     keys = []
@@ -126,29 +127,31 @@ LLM_CASCADE = [
 # PROMPT SANITIZATION (L1: security)
 # ═══════════════════════════════════════════════════════════════
 
+
 def _sanitize_prompt(text: str) -> str:
     """Sanitize user prompt before sending to LLM."""
-    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
     MAX_PROMPT_LENGTH = 2000
     if len(text) > MAX_PROMPT_LENGTH:
         text = text[:MAX_PROMPT_LENGTH] + "...(truncated)"
     injection_patterns = [
-        r'ignore\s+(all\s+)?previous\s+instructions',
-        r'you\s+are\s+now\s+',
-        r'system\s*:\s*',
-        r'<\|im_start\|>',
-        r'<\|im_end\|>',
-        r'###\s*System',
-        r'forget\s+(all\s+)?instructions',
+        r"ignore\s+(all\s+)?previous\s+instructions",
+        r"you\s+are\s+now\s+",
+        r"system\s*:\s*",
+        r"<\|im_start\|>",
+        r"<\|im_end\|>",
+        r"###\s*System",
+        r"forget\s+(all\s+)?instructions",
     ]
     for pattern in injection_patterns:
-        text = re.sub(pattern, '[FILTERED]', text, flags=re.IGNORECASE)
+        text = re.sub(pattern, "[FILTERED]", text, flags=re.IGNORECASE)
     return text.strip()
 
 
 # ═══════════════════════════════════════════════════════════════
 # JSON EXTRACTION (L5: improved)
 # ═══════════════════════════════════════════════════════════════
+
 
 def _extract_json(text: str) -> dict | None:
     """Extract JSON from LLM response, handling various formats."""
@@ -223,12 +226,14 @@ def _l1_set(text: str, val: dict) -> None:
 
 _redis = None
 
+
 def _get_redis():
     global _redis
     if _redis is not None:
         return _redis
     try:
         import redis
+
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/1")
         _redis = redis.from_url(redis_url, decode_responses=True, socket_timeout=2)
         _redis.ping()
@@ -266,6 +271,7 @@ class AllModelsFailedError(Exception):
 # ═══════════════════════════════════════════════════════════════
 # LLM CALL — with key rotation (L3) + ollama fallback (L4)
 # ═══════════════════════════════════════════════════════════════
+
 
 async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) -> dict | None:
     """Call a single LLM model via OpenRouter with given key."""
@@ -358,6 +364,7 @@ async def _call_ollama(prompt: str) -> dict | None:
 # VALIDATION
 # ═══════════════════════════════════════════════════════════════
 
+
 def _validate_result(result: dict) -> bool:
     """Minimal validation — only check essential fields."""
     if not result.get("object_type"):
@@ -393,6 +400,7 @@ def _minimal_defaults(reason: str) -> dict:
 # ═══════════════════════════════════════════════════════════════
 # MAIN PARSE FUNCTION
 # ═══════════════════════════════════════════════════════════════
+
 
 async def parse_prompt_async(text: str) -> dict:
     """
@@ -461,9 +469,7 @@ async def parse_prompt_async(text: str) -> dict:
         logger.info("Ollama fallback succeeded: %s", result.get("building_type"))
         return result
 
-    raise AllModelsFailedError(
-        f"All {len(LLM_CASCADE)} LLM models (+ Ollama) failed for prompt: {text[:100]}..."
-    )
+    raise AllModelsFailedError(f"All {len(LLM_CASCADE)} LLM models (+ Ollama) failed for prompt: {text[:100]}...")
 
 
 def get_cache_stats() -> dict:
@@ -487,6 +493,7 @@ def parse_prompt_sync(text: str) -> dict:
     """Sync wrapper for compatibility."""
     import asyncio
     import concurrent.futures
+
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
@@ -496,10 +503,12 @@ def parse_prompt_sync(text: str) -> dict:
     except RuntimeError:
         return asyncio.run(parse_prompt_async(text))
 
+
 # ═══════════════════ BACKWARD COMPAT ALIASES ═══════════════════
 # v8.0.0 renamed internal functions; these aliases keep tests + router working
 parse_prompt = parse_prompt_sync
 _call_llm = _call_openrouter
+
 
 def get_generation_type(params: dict) -> str:
     """Determine generation type from parsed params."""
@@ -507,6 +516,7 @@ def get_generation_type(params: dict) -> str:
     if obj in ("room", "interior"):
         return "interior"
     return "building"
+
 
 def _validate(params: dict) -> dict:
     """Validate and sanitize parsed parameters."""

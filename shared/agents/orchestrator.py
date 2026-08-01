@@ -27,30 +27,81 @@ PIPELINE_PROFILES = {
     "quick": ["parser", "geometry", "texture", "render", "export"],
     "standard": ["parser", "style", "geometry", "texture", "lighting", "render", "quality", "export"],
     "full": [
-        "parser", "research", "concept", "style", "masterplan",
-        "geometry", "texture", "furniture", "lighting", "render",
-        "quality", "structural", "compliance", "export",
+        "parser",
+        "research",
+        "concept",
+        "style",
+        "masterplan",
+        "geometry",
+        "texture",
+        "furniture",
+        "lighting",
+        "render",
+        "quality",
+        "structural",
+        "compliance",
+        "export",
     ],
     "premium": [
-        "parser", "research", "market", "concept", "brand", "style",
-        "masterplan", "landscape", "geometry", "texture", "furniture",
-        "lighting", "mep", "structural", "render", "quality",
-        "compliance", "financial", "export", "presentation",
+        "parser",
+        "research",
+        "market",
+        "concept",
+        "brand",
+        "style",
+        "masterplan",
+        "landscape",
+        "geometry",
+        "texture",
+        "furniture",
+        "lighting",
+        "mep",
+        "structural",
+        "render",
+        "quality",
+        "compliance",
+        "financial",
+        "export",
+        "presentation",
     ],
     "interior": [
-        "parser", "concept", "style", "furniture", "lighting",
-        "texture", "render", "quality", "export",
+        "parser",
+        "concept",
+        "style",
+        "furniture",
+        "lighting",
+        "texture",
+        "render",
+        "quality",
+        "export",
     ],
     "presentation": [
-        "parser", "concept", "style", "geometry", "texture",
-        "render", "quality", "export", "presentation",
+        "parser",
+        "concept",
+        "style",
+        "geometry",
+        "texture",
+        "render",
+        "quality",
+        "export",
+        "presentation",
     ],
     "electrical": ["parser", "el", "compliance", "export"],
     "landscape": ["parser", "research", "landscape", "masterplan", "compliance", "export"],
     "mep_documentation": ["parser", "mep", "mep_bim", "compliance", "export"],
     "interior_full": [
-        "parser", "concept", "style", "furniture", "lighting", "mep",
-        "el", "structural", "texture", "render", "quality", "export",
+        "parser",
+        "concept",
+        "style",
+        "furniture",
+        "lighting",
+        "mep",
+        "el",
+        "structural",
+        "texture",
+        "render",
+        "quality",
+        "export",
     ],
 }
 
@@ -157,28 +208,28 @@ class Orchestrator:
                         "partial_params": params,
                         "confidence": confidence,
                     }
-                    streamer.emit("clarification", "waiting", progress=10, message="Need clarification",
-                                  data=job["clarification"])
+                    streamer.emit(
+                        "clarification", "waiting", progress=10, message="Need clarification", data=job["clarification"]
+                    )
                     return job
 
             # ═══ Step 2: Route ═══
             streamer.emit("route", "running", progress=12, message="Planning generation...")
             plan = route_generation(prompt, llm_params or params)
             building_params = plan.params.get("building", {})
-            streamer.emit("route", "done", progress=15,
-                          message=f"Plan: {len(plan.steps)} steps, type={gen_type}")
+            streamer.emit("route", "done", progress=15, message=f"Plan: {len(plan.steps)} steps, type={gen_type}")
 
             # ═══ Pre-pipeline: Intelligence agents (parallel, non-critical) ═══
-            pre_agents = [a for a in agent_sequence
-                          if a in ("research", "market", "concept", "brand", "style", "masterplan")]
+            pre_agents = [
+                a for a in agent_sequence if a in ("research", "market", "concept", "brand", "style", "masterplan")
+            ]
 
             pre_pipeline_results = {}
             progress_step = 15
             progress_increment = 15 / max(len(pre_agents), 1)
 
             for agent_name in pre_agents:
-                streamer.emit(agent_name, "running", progress=int(progress_step),
-                              message=f"Running {agent_name}...")
+                streamer.emit(agent_name, "running", progress=int(progress_step), message=f"Running {agent_name}...")
                 agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
                 result = self._run_agent(
                     agent_name,
@@ -190,11 +241,19 @@ class Orchestrator:
                     pre_pipeline_results[agent_name] = result.data
                     if result.fallback:
                         job["fallback_agents"].append(agent_name)
-                    streamer.emit(agent_name, "done", progress=int(progress_step + progress_increment),
-                                  message=f"{agent_name} complete" + (" (fallback)" if result.fallback else ""))
+                    streamer.emit(
+                        agent_name,
+                        "done",
+                        progress=int(progress_step + progress_increment),
+                        message=f"{agent_name} complete" + (" (fallback)" if result.fallback else ""),
+                    )
                 else:
-                    streamer.emit(agent_name, "warning", progress=int(progress_step),
-                                  message=f"{agent_name} skipped: {result.error or 'no data'}")
+                    streamer.emit(
+                        agent_name,
+                        "warning",
+                        progress=int(progress_step),
+                        message=f"{agent_name} skipped: {result.error or 'no data'}",
+                    )
                     job["fallback_agents"].append(agent_name)
 
                 progress_step += progress_increment
@@ -221,14 +280,17 @@ class Orchestrator:
 
             # Run in parallel — each in its own subprocess
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
                 geom_future = executor.submit(
-                    self._run_agent, "geometry",
+                    self._run_agent,
+                    "geometry",
                     {"name": "geometry", "agent": "geometry", "params": geom_params},
                     120,
                 )
                 texture_future = executor.submit(
-                    self._run_agent, "texture",
+                    self._run_agent,
+                    "texture",
                     {"name": "texture", "agent": "texture", "params": texture_params},
                     60,
                 )
@@ -245,8 +307,12 @@ class Orchestrator:
             geometry_script = geom_result.data.get("script", "") if geom_result.data else ""
             if geom_result.fallback:
                 job["fallback_agents"].append("geometry")
-            streamer.emit("geometry", "done", progress=50,
-                          message="Geometry generated" + (" (fallback)" if geom_result.fallback else ""))
+            streamer.emit(
+                "geometry",
+                "done",
+                progress=50,
+                message="Geometry generated" + (" (fallback)" if geom_result.fallback else ""),
+            )
 
             texture_script = ""
             if texture_result.status == TaskStatus.DONE and texture_result.data:
@@ -256,15 +322,13 @@ class Orchestrator:
             streamer.emit("texture", "done", progress=55, message="Materials generated")
 
             # ═══ Mid-pipeline: Non-critical agents ═══
-            mid_agents = [a for a in agent_sequence
-                          if a in ("landscape", "furniture", "lighting", "mep", "structural")]
+            mid_agents = [a for a in agent_sequence if a in ("landscape", "furniture", "lighting", "mep", "structural")]
             mid_results = {}
             progress_step = 55
             progress_increment = 10 / max(len(mid_agents), 1)
 
             for agent_name in mid_agents:
-                streamer.emit(agent_name, "running", progress=int(progress_step),
-                              message=f"Running {agent_name}...")
+                streamer.emit(agent_name, "running", progress=int(progress_step), message=f"Running {agent_name}...")
                 agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
                 result = self._run_agent(
                     agent_name,
@@ -278,9 +342,12 @@ class Orchestrator:
                 else:
                     job["fallback_agents"].append(agent_name)
 
-                streamer.emit(agent_name, "done" if result.status == TaskStatus.DONE else "warning",
-                              progress=int(progress_step + progress_increment),
-                              message=f"{agent_name} " + ("done" if result.status == TaskStatus.DONE else "skipped"))
+                streamer.emit(
+                    agent_name,
+                    "done" if result.status == TaskStatus.DONE else "warning",
+                    progress=int(progress_step + progress_increment),
+                    message=f"{agent_name} " + ("done" if result.status == TaskStatus.DONE else "skipped"),
+                )
                 progress_step += progress_increment
 
             # ═══ Render (non-critical, uses Blender service) ═══
@@ -288,7 +355,8 @@ class Orchestrator:
             render_result = self._run_agent(
                 "render",
                 {
-                    "name": "render", "agent": "render",
+                    "name": "render",
+                    "agent": "render",
                     "params": {
                         "geometry_script": geometry_script,
                         "texture_script": texture_script,
@@ -311,7 +379,8 @@ class Orchestrator:
             quality_result = self._run_agent(
                 "quality",
                 {
-                    "name": "quality", "agent": "quality",
+                    "name": "quality",
+                    "agent": "quality",
                     "params": {"render_data": render_data, "quality": quality},
                 },
                 timeout=30,
@@ -324,7 +393,8 @@ class Orchestrator:
             export_result = self._run_agent(
                 "export",
                 {
-                    "name": "export", "agent": "export",
+                    "name": "export",
+                    "agent": "export",
                     "params": {
                         "geometry_script": geometry_script,
                         "export_formats": export_formats,
@@ -339,8 +409,7 @@ class Orchestrator:
                 job["fallback_agents"].append("export")
 
             # ═══ Post-pipeline: Compliance, Financial, Presentation ═══
-            post_agents = [a for a in agent_sequence
-                           if a in ("compliance", "financial", "presentation")]
+            post_agents = [a for a in agent_sequence if a in ("compliance", "financial", "presentation")]
             post_results = {}
             for agent_name in post_agents:
                 agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
@@ -355,8 +424,12 @@ class Orchestrator:
                     job["fallback_agents"].append(agent_name)
 
             # ═══ Collect results ═══
-            streamer.emit("complete", "done", progress=100,
-                          message=f"Complete! Fallback agents: {job['fallback_agents'] or 'none'}")
+            streamer.emit(
+                "complete",
+                "done",
+                progress=100,
+                message=f"Complete! Fallback agents: {job['fallback_agents'] or 'none'}",
+            )
 
             agent_results = {}
             for d in [pre_pipeline_results, mid_results, post_results]:
@@ -409,9 +482,6 @@ class Orchestrator:
         return {
             "job_id": job_id,
             "status": job["status"],
-            "steps": [
-                {"name": s.get("name", ""), "status": s.get("status", "")}
-                for s in job.get("steps", [])
-            ],
+            "steps": [{"name": s.get("name", ""), "status": s.get("status", "")} for s in job.get("steps", [])],
             "fallback_agents": job.get("fallback_agents", []),
         }

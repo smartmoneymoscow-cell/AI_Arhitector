@@ -178,7 +178,9 @@ class MEPBIMAgent(BaseAgent):
             "categories": system.get("categories", []),
             "elements_created": {
                 "equipment": self._place_equipment(sys_name, params),
-                "pipes_or_ducts": self._route_pipes(sys_name, params) if "Piping" in system.get("categories", []) else self._route_ducts(sys_name, params),
+                "pipes_or_ducts": self._route_pipes(sys_name, params)
+                if "Piping" in system.get("categories", [])
+                else self._route_ducts(sys_name, params),
                 "fittings": "Автоматические фитинги в Revit",
                 "insulation": "Утеплитель по расчёту теплозащиты",
             },

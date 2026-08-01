@@ -252,26 +252,38 @@ class MEPAgent(BaseAgent):
             # Освещение (LED)
             light_load = max(5, int(rarea * 10))  # 10 Вт/м² LED
             light_outlets = max(1, int(rarea / 5))
-            groups.append({
-                "group": group_num, "name": f"{rtype} — освещение",
-                "breaker_type": "B10", "breaker_poles": "1P",
-                "cable": "ВВГнг-LS 3×1.5", "cable_section_mm2": 1.5,
-                "load_w": light_load, "points": light_outlets,
-                "route": f"ЩК → РК{group_num} → выключатели/светильники",
-            })
+            groups.append(
+                {
+                    "group": group_num,
+                    "name": f"{rtype} — освещение",
+                    "breaker_type": "B10",
+                    "breaker_poles": "1P",
+                    "cable": "ВВГнг-LS 3×1.5",
+                    "cable_section_mm2": 1.5,
+                    "load_w": light_load,
+                    "points": light_outlets,
+                    "route": f"ЩК → РК{group_num} → выключатели/светильники",
+                }
+            )
             total_load_w += light_load
             group_num += 1
 
             # Розетки
             outlet_count = max(2, int(rarea / 3))
             outlet_load = min(3500, outlet_count * 400)
-            groups.append({
-                "group": group_num, "name": f"{rtype} — розетки",
-                "breaker_type": "B16", "breaker_poles": "1P",
-                "cable": "ВВГнг-LS 3×2.5", "cable_section_mm2": 2.5,
-                "load_w": outlet_load, "points": outlet_count,
-                "route": f"ЩК → РК{group_num} → розетки",
-            })
+            groups.append(
+                {
+                    "group": group_num,
+                    "name": f"{rtype} — розетки",
+                    "breaker_type": "B16",
+                    "breaker_poles": "1P",
+                    "cable": "ВВГнг-LS 3×2.5",
+                    "cable_section_mm2": 2.5,
+                    "load_w": outlet_load,
+                    "points": outlet_count,
+                    "route": f"ЩК → РК{group_num} → розетки",
+                }
+            )
             total_load_w += outlet_load
             group_num += 1
 
@@ -280,17 +292,28 @@ class MEPAgent(BaseAgent):
             {"name": "Электроплита", "breaker": "B32", "cable": "ВВГнг-LS 3×6", "load_w": 7000, "rcd": "30mA"},
             {"name": "Духовка", "breaker": "B16", "cable": "ВВГнг-LS 3×2.5", "load_w": 2500},
             {"name": "Стиральная машина", "breaker": "B16", "cable": "ВВГнг-LS 3×2.5", "load_w": 2500, "rcd": "30mA"},
-            {"name": "Посудомоечная машина", "breaker": "B16", "cable": "ВВГнг-LS 3×2.5", "load_w": 2000, "rcd": "30mA"},
+            {
+                "name": "Посудомоечная машина",
+                "breaker": "B16",
+                "cable": "ВВГнг-LS 3×2.5",
+                "load_w": 2000,
+                "rcd": "30mA",
+            },
             {"name": "Кондиционер", "breaker": "B16", "cable": "ВВГнг-LS 3×2.5", "load_w": 2000},
             {"name": "Водонагреватель", "breaker": "B16", "cable": "ВВГнг-LS 3×2.5", "load_w": 2500, "rcd": "30mA"},
         ]
         for pg in power_groups:
-            groups.append({
-                "group": group_num, "name": pg["name"],
-                "breaker_type": pg["breaker"], "breaker_poles": "1P",
-                "cable": pg["cable"], "load_w": pg["load_w"],
-                "rcd": pg.get("rcd"),
-            })
+            groups.append(
+                {
+                    "group": group_num,
+                    "name": pg["name"],
+                    "breaker_type": pg["breaker"],
+                    "breaker_poles": "1P",
+                    "cable": pg["cable"],
+                    "load_w": pg["load_w"],
+                    "rcd": pg.get("rcd"),
+                }
+            )
             total_load_w += pg["load_w"]
             group_num += 1
 
@@ -301,8 +324,10 @@ class MEPAgent(BaseAgent):
         single_line = {
             "main_breaker": f"QF0 — ВА47-29 — {main_breaker_a}A — 2P",
             "rcd_main": "RCD1 — ВДТ — 63A/30мА — 2P (если не дифавтоматы)",
-            "groups": [{"num": g["group"], "name": g["name"], "breaker": g["breaker_type"],
-                         "cable": g["cable"]} for g in groups],
+            "groups": [
+                {"num": g["group"], "name": g["name"], "breaker": g["breaker_type"], "cable": g["cable"]}
+                for g in groups
+            ],
         }
 
         return {
@@ -329,23 +354,35 @@ class MEPAgent(BaseAgent):
 
         systems = {
             "knx": {
-                "name": "KNX", "type": "проводной", "cable": "KNX TP 2×2×0.8",
-                "cost_per_point": 35000, "reliability": "высокая",
+                "name": "KNX",
+                "type": "проводной",
+                "cable": "KNX TP 2×2×0.8",
+                "cost_per_point": 35000,
+                "reliability": "высокая",
                 "features": ["Полная интеграция", "Промышленная надёжность", "Масштабируемость"],
             },
             "loxone": {
-                "name": "Loxone", "type": "проводной", "cable": "Cat5e/6",
-                "cost_per_point": 20000, "reliability": "высокая",
+                "name": "Loxone",
+                "type": "проводной",
+                "cable": "Cat5e/6",
+                "cost_per_point": 20000,
+                "reliability": "высокая",
                 "features": ["Компактный контроллер", "Красивый UI", "Средняя цена"],
             },
             "zigbee": {
-                "name": "Zigbee 3.0", "type": "беспроводной", "cable": "только питание 220V",
-                "cost_per_point": 8000, "reliability": "средняя",
+                "name": "Zigbee 3.0",
+                "type": "беспроводной",
+                "cable": "только питание 220V",
+                "cost_per_point": 8000,
+                "reliability": "средняя",
                 "features": ["Дёшево", "Не нужно штробить", "Ограниченный функционал"],
             },
             "yandex": {
-                "name": "Яндекс/Алиса", "type": "беспроводной", "cable": "Wi-Fi",
-                "cost_per_point": 3000, "reliability": "низкая",
+                "name": "Яндекс/Алиса",
+                "type": "беспроводной",
+                "cable": "Wi-Fi",
+                "cost_per_point": 3000,
+                "reliability": "низкая",
                 "features": ["Голосовое управление", "Бюджетно", "Очень ограниченный функционал"],
             },
         }
@@ -427,12 +464,14 @@ class MEPAgent(BaseAgent):
             return [{"note": "Только питание 220V для актуаторов в щите"}]
         routes = []
         for room in rooms:
-            routes.append({
-                "from": "Щит УД",
-                "to": room.get("name", "комната"),
-                "cable": system["cable"],
-                "note": f"Отдельная трасса от силовых (≥50мм)",
-            })
+            routes.append(
+                {
+                    "from": "Щит УД",
+                    "to": room.get("name", "комната"),
+                    "cable": system["cable"],
+                    "note": f"Отдельная трасса от силовых (≥50мм)",
+                }
+            )
         return routes
 
     def _create_electrical_groups(self, rooms: list) -> list[dict]:

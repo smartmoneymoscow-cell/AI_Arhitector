@@ -553,4 +553,5 @@ if ERRORS:
         print(f"    - {name}: {err}")
 print(f"{'═' * 50}")
 
-sys.exit(1 if FAIL > 0 else 0)
+if __name__ == "__main__":
+    sys.exit(1 if FAIL > 0 else 0)

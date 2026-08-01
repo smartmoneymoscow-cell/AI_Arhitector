@@ -35,28 +35,32 @@ class ELAgent(BaseAgent):
     # Умные дома
     SMART_HOME_SYSTEMS = {
         "knx": {
-            "name": "KNX", "type": "проводной",
+            "name": "KNX",
+            "type": "проводной",
             "cable": "KNX TP 2×2×0.8",
             "cost_per_point": 35000,
             "reliability": "высокая",
             "integration": "полная",
         },
         "loxone": {
-            "name": "Loxone", "type": "проводной",
+            "name": "Loxone",
+            "type": "проводной",
             "cable": "Cat5e/6",
             "cost_per_point": 20000,
             "reliability": "высокая",
             "integration": "хорошая",
         },
         "zigbee": {
-            "name": "Zigbee 3.0", "type": "беспроводной",
+            "name": "Zigbee 3.0",
+            "type": "беспроводной",
             "cable": "только питание 220V",
             "cost_per_point": 8000,
             "reliability": "средняя",
             "integration": "ограниченная",
         },
         "yandex": {
-            "name": "Яндекс/Алиса", "type": "беспроводной",
+            "name": "Яндекс/Алиса",
+            "type": "беспроводной",
             "cable": "Wi-Fi",
             "cost_per_point": 3000,
             "reliability": "низкая",
@@ -108,8 +112,7 @@ class ELAgent(BaseAgent):
             "smart_home": smart_home,
             "panel_visualization": panel,
             "total_cost_rub": (
-                electrical["estimated_cost_rub"]
-                + (smart_home["estimated_cost_rub"] if smart_home else 0)
+                electrical["estimated_cost_rub"] + (smart_home["estimated_cost_rub"] if smart_home else 0)
             ),
         }
 
@@ -132,28 +135,40 @@ class ELAgent(BaseAgent):
             # Освещение (LED 10 Вт/м²)
             light_load = max(5, int(rarea * 10))
             light_points = max(1, int(rarea / 5))
-            groups.append({
-                "group": group_num, "name": f"{rname} — освещение",
-                "breaker": "B10", "poles": "1P",
-                "cable": "ВВгнг-LS 3×1.5", "section_mm2": 1.5,
-                "load_w": light_load, "points": light_points,
-                "route": f"ЩК → РК{group_num} → выключатели/светильники",
-                "in_stяжке": True,
-            })
+            groups.append(
+                {
+                    "group": group_num,
+                    "name": f"{rname} — освещение",
+                    "breaker": "B10",
+                    "poles": "1P",
+                    "cable": "ВВгнг-LS 3×1.5",
+                    "section_mm2": 1.5,
+                    "load_w": light_load,
+                    "points": light_points,
+                    "route": f"ЩК → РК{group_num} → выключатели/светильники",
+                    "in_stяжке": True,
+                }
+            )
             total_load_w += light_load
             group_num += 1
 
             # Розетки
             outlet_count = max(2, int(rarea / 3))
             outlet_load = min(3500, outlet_count * 400)
-            groups.append({
-                "group": group_num, "name": f"{rname} — розетки",
-                "breaker": "B16", "poles": "1P",
-                "cable": "ВВгнг-LS 3×2.5", "section_mm2": 2.5,
-                "load_w": outlet_load, "points": outlet_count,
-                "route": f"ЩК → РК{group_num} → розетки",
-                "in_stяжке": True,
-            })
+            groups.append(
+                {
+                    "group": group_num,
+                    "name": f"{rname} — розетки",
+                    "breaker": "B16",
+                    "poles": "1P",
+                    "cable": "ВВгнг-LS 3×2.5",
+                    "section_mm2": 2.5,
+                    "load_w": outlet_load,
+                    "points": outlet_count,
+                    "route": f"ЩК → РК{group_num} → розетки",
+                    "in_stяжке": True,
+                }
+            )
             total_load_w += outlet_load
             group_num += 1
 
@@ -161,19 +176,46 @@ class ELAgent(BaseAgent):
         power_lines = [
             {"name": "Электроплита", "breaker": "B32", "cable": "ВВгнг-LS 3×6", "load_w": 7000, "section": 6},
             {"name": "Духовка", "breaker": "B16", "cable": "ВВгнг-LS 3×2.5", "load_w": 2500, "section": 2.5},
-            {"name": "Стиральная машина", "breaker": "B16", "cable": "ВВгнг-LS 3×2.5", "load_w": 2500, "section": 2.5, "rcd": "30mA"},
-            {"name": "Посудомоечная машина", "breaker": "B16", "cable": "ВВгнг-LS 3×2.5", "load_w": 2000, "section": 2.5, "rcd": "30mA"},
+            {
+                "name": "Стиральная машина",
+                "breaker": "B16",
+                "cable": "ВВгнг-LS 3×2.5",
+                "load_w": 2500,
+                "section": 2.5,
+                "rcd": "30mA",
+            },
+            {
+                "name": "Посудомоечная машина",
+                "breaker": "B16",
+                "cable": "ВВгнг-LS 3×2.5",
+                "load_w": 2000,
+                "section": 2.5,
+                "rcd": "30mA",
+            },
             {"name": "Кондиционер", "breaker": "B16", "cable": "ВВгнг-LS 3×2.5", "load_w": 2000, "section": 2.5},
-            {"name": "Водонагреватель", "breaker": "B16", "cable": "ВВгнг-LS 3×2.5", "load_w": 2500, "section": 2.5, "rcd": "30mA"},
+            {
+                "name": "Водонагреватель",
+                "breaker": "B16",
+                "cable": "ВВгнг-LS 3×2.5",
+                "load_w": 2500,
+                "section": 2.5,
+                "rcd": "30mA",
+            },
         ]
         for pl in power_lines:
-            groups.append({
-                "group": group_num, "name": pl["name"],
-                "breaker": pl["breaker"], "poles": "1P",
-                "cable": pl["cable"], "section_mm2": pl["section"],
-                "load_w": pl["load_w"], "rcd": pl.get("rcd"),
-                "route": f"ЩК → {pl['name']}",
-            })
+            groups.append(
+                {
+                    "group": group_num,
+                    "name": pl["name"],
+                    "breaker": pl["breaker"],
+                    "poles": "1P",
+                    "cable": pl["cable"],
+                    "section_mm2": pl["section"],
+                    "load_w": pl["load_w"],
+                    "rcd": pl.get("rcd"),
+                    "route": f"ЩК → {pl['name']}",
+                }
+            )
             total_load_w += pl["load_w"]
             group_num += 1
 
@@ -272,32 +314,48 @@ class ELAgent(BaseAgent):
 
         modules = []
         # Вводной автомат
-        modules.append({
-            "position": 1, "type": "Автомат вводной",
-            "model": f"ВА47-29 {main_breaker_a}A 2P",
-            "label": "QF0", "poles": 2,
-        })
+        modules.append(
+            {
+                "position": 1,
+                "type": "Автомат вводной",
+                "model": f"ВА47-29 {main_breaker_a}A 2P",
+                "label": "QF0",
+                "poles": 2,
+            }
+        )
         # Реле напряжения
-        modules.append({
-            "position": 3, "type": "Реле напряжения",
-            "model": "Зубр РН-113",
-            "label": "UV1", "poles": 2,
-        })
+        modules.append(
+            {
+                "position": 3,
+                "type": "Реле напряжения",
+                "model": "Зубр РН-113",
+                "label": "UV1",
+                "poles": 2,
+            }
+        )
         # УЗО
-        modules.append({
-            "position": 5, "type": "УЗО",
-            "model": "ВДТ-63 30мА 2P",
-            "label": "RCD1", "poles": 2,
-        })
+        modules.append(
+            {
+                "position": 5,
+                "type": "УЗО",
+                "model": "ВДТ-63 30мА 2P",
+                "label": "RCD1",
+                "poles": 2,
+            }
+        )
         # Автоматы групп
         pos = 7
         for g in groups:
-            modules.append({
-                "position": pos, "type": "Автомат группы",
-                "model": f"{g['breaker']} {g['poles']}",
-                "label": f"QF{g['group']}", "poles": 1,
-                "group_name": g["name"],
-            })
+            modules.append(
+                {
+                    "position": pos,
+                    "type": "Автомат группы",
+                    "model": f"{g['breaker']} {g['poles']}",
+                    "label": f"QF{g['group']}",
+                    "poles": 1,
+                    "group_name": g["name"],
+                }
+            )
             pos += 1
 
         total_modules = pos - 1

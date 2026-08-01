@@ -21,6 +21,7 @@ logger = logging.getLogger("archai.auth")
 # S3: KEY MASKING — never log full keys
 # ═══════════════════════════════════════════════════════════════
 
+
 def _mask_key(key: str) -> str:
     """Mask API key for safe logging. S3 fix."""
     if not key or len(key) < 8:
@@ -84,9 +85,10 @@ def get_api_key_optional(api_key: str | None = Security(API_KEY_HEADER)) -> str 
 # Docker internal network — Nginx is the only proxy
 TRUSTED_PROXIES = {
     "172.16.0.0/12",  # Docker default network
-    "10.0.0.0/8",     # Docker custom network
-    "127.0.0.1",      # localhost
+    "10.0.0.0/8",  # Docker custom network
+    "127.0.0.1",  # localhost
 }
+
 
 def _get_real_ip(request: Request) -> str:
     """S5: Get real client IP, trusting ONLY Nginx (not client headers)."""
@@ -95,6 +97,7 @@ def _get_real_ip(request: Request) -> str:
 
     # Check if request comes from trusted proxy (Nginx)
     from ipaddress import ip_address, ip_network
+
     is_trusted = False
     for proxy in TRUSTED_PROXIES:
         try:
@@ -121,6 +124,7 @@ def _get_real_ip(request: Request) -> str:
 
 _redis_client = None
 
+
 def _get_redis():
     global _redis_client
     if _redis_client is not None:
@@ -130,6 +134,7 @@ def _get_redis():
         return None
     try:
         import redis
+
         _redis_client = redis.from_url(redis_url, decode_responses=True, socket_timeout=2)
         _redis_client.ping()
         return _redis_client
@@ -216,6 +221,7 @@ class RateLimiter:
 
 
 _rate_limiter = RateLimiter()
+
 
 async def rate_limit_middleware(request: Request) -> None:
     """FastAPI dependency for rate limiting."""

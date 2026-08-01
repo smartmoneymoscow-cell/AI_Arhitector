@@ -172,7 +172,7 @@ def generate_bpy_script(params: dict) -> str:
     floors * fH
 
     # === Header ===
-    script = f"""import bpy, os, math
+    script = f"""import bpy, math
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete()
 W={W};L={L};floors={floors};fH={fH};thick={thick};total_h=floors*fH

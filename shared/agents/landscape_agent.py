@@ -183,7 +183,7 @@ class LandscapeAgent(BaseAgent):
 
         return zones
 
-    def _place_trees(self, lot_w, lot_l, zones, style, params=None) ->list[dict]:
+    def _place_trees(self, lot_w, lot_l, zones, style, params=None) -> list[dict]:
         """Размещение деревьев."""
         trees = []
         tree_type = "deciduous" if style in ("natural", "природный", "english") else "coniferous"
@@ -241,7 +241,9 @@ class LandscapeAgent(BaseAgent):
     def _design_groundcover(self, lot_w, lot_l, zones, params=None) -> list[dict]:
         """Покрытия (газон, клевер)."""
         total_area = lot_w * lot_l
-        building_area = (params or {}).get("width_m", 10) * (params or {}).get("length_m", 12) if isinstance(params, dict) else 120
+        building_area = (
+            (params or {}).get("width_m", 10) * (params or {}).get("length_m", 12) if isinstance(params, dict) else 120
+        )
         lawn_area = total_area - building_area - 50  # минус дорожки и площадки
 
         return [

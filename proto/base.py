@@ -24,6 +24,7 @@ class TaskStatus(StrEnum):
 @dataclass
 class Task:
     """Task for an agent."""
+
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     name: str = ""
     agent: str = ""
@@ -59,6 +60,7 @@ class Task:
 @dataclass
 class TaskResult:
     """Result of agent task execution."""
+
     status: TaskStatus = TaskStatus.DONE
     data: Any = None
     error: str | None = None

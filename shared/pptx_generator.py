@@ -58,6 +58,7 @@ class PresentationGenerator:
         """
         try:
             from pptx import Presentation as PptxPresentation
+
             pass  # PP_ALIGN unused
             pass  # Inches, Pt unused
         except ImportError:
@@ -241,7 +242,9 @@ class PresentationGenerator:
             lines = []
             for item in roadmap:
                 if isinstance(item, dict):
-                    lines.append(f"• {item.get('phase', '')}: {item.get('description', '')} ({item.get('duration', '')})")
+                    lines.append(
+                        f"• {item.get('phase', '')}: {item.get('description', '')} ({item.get('duration', '')})"
+                    )
                 else:
                     lines.append(f"• {item}")
             body.text = "\n".join(lines) if lines else "Дорожная карта реализации"
@@ -264,14 +267,16 @@ class PresentationGenerator:
         # Title
         slides_html.append(f"""
         <div class="slide title-slide">
-            <h1>{data.get('title', 'Архитектурный проект')}</h1>
-            <p>{data.get('subtitle', '')}</p>
+            <h1>{data.get("title", "Архитектурный проект")}</h1>
+            <p>{data.get("subtitle", "")}</p>
         </div>""")
 
         # Financial
         fin = data.get("financial", {})
         if fin:
-            items = "".join(f"<li><strong>{k}:</strong> {v:,.0f} ₽</li>" for k, v in fin.items() if isinstance(v, (int, float)))
+            items = "".join(
+                f"<li><strong>{k}:</strong> {v:,.0f} ₽</li>" for k, v in fin.items() if isinstance(v, (int, float))
+            )
             slides_html.append(f"""
         <div class="slide">
             <h2>Финансовая модель</h2>
@@ -282,11 +287,11 @@ class PresentationGenerator:
         slides_html.append(f"""
         <div class="slide">
             <h2>Контакты</h2>
-            <p>{data.get('contacts', 'Спасибо за внимание!')}</p>
+            <p>{data.get("contacts", "Спасибо за внимание!")}</p>
         </div>""")
 
         html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>{data.get('title', 'Презентация')}</title>
+<html><head><meta charset="utf-8"><title>{data.get("title", "Презентация")}</title>
 <style>
 body {{ font-family: Arial, sans-serif; margin: 0; }}
 .slide {{ width: 960px; height: 540px; margin: 20px auto; padding: 40px; box-sizing: border-box;
@@ -294,7 +299,7 @@ body {{ font-family: Arial, sans-serif; margin: 0; }}
 .title-slide {{ background: #1a1a2e; color: white; text-align: center; }}
 h1 {{ font-size: 36px; }} h2 {{ font-size: 28px; color: #1a1a2e; }}
 ul {{ font-size: 18px; }} li {{ margin: 10px 0; }}
-</style></head><body>{''.join(slides_html)}</body></html>"""
+</style></head><body>{"".join(slides_html)}</body></html>"""
 
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(html)

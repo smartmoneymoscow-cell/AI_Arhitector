@@ -26,6 +26,7 @@ logger = logging.getLogger("archai.agent_runner")
 @dataclass
 class IsolatedResult:
     """Результат изолированного выполнения агента."""
+
     status: TaskStatus
     data: Any = None
     error: str | None = None
@@ -46,6 +47,7 @@ def _run_agent_in_subprocess(
     try:
         # Импортируем агента внутри процесса (изоляция)
         import importlib
+
         module_path, class_name = agent_class_path.rsplit(".", 1)
         module = importlib.import_module(module_path)
         agent_cls = getattr(module, class_name)
@@ -61,20 +63,24 @@ def _run_agent_in_subprocess(
         result = agent.process(task)
         duration = (time.time() - start) * 1000
 
-        result_queue.put({
-            "status": result.status.value,
-            "data": result.data,
-            "error": result.error,
-            "duration_ms": duration,
-        })
+        result_queue.put(
+            {
+                "status": result.status.value,
+                "data": result.data,
+                "error": result.error,
+                "duration_ms": duration,
+            }
+        )
 
     except Exception as e:
-        result_queue.put({
-            "status": "failed",
-            "data": None,
-            "error": f"{type(e).__name__}: {str(e)}\n{traceback.format_exc()[-500:]}",
-            "duration_ms": 0,
-        })
+        result_queue.put(
+            {
+                "status": "failed",
+                "data": None,
+                "error": f"{type(e).__name__}: {str(e)}\n{traceback.format_exc()[-500:]}",
+                "duration_ms": 0,
+            }
+        )
 
 
 class AgentRunner:

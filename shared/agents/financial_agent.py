@@ -349,18 +349,20 @@ class FinancialAgent(BaseAgent):
             cash_flows.append(round(discounted))
             cumulative += discounted
 
-            details.append({
-                "year": year,
-                "load_pct": round(load_factor * 100),
-                "revenue": round(rev),
-                "opex": round(opex),
-                "ebitda": round(ebitda),
-                "depreciation": round(depreciation),
-                "net_profit": round(net_profit),
-                "fcf": round(fcf),
-                "discounted_fcf": round(discounted),
-                "cumulative_npv": round(cumulative),
-            })
+            details.append(
+                {
+                    "year": year,
+                    "load_pct": round(load_factor * 100),
+                    "revenue": round(rev),
+                    "opex": round(opex),
+                    "ebitda": round(ebitda),
+                    "depreciation": round(depreciation),
+                    "net_profit": round(net_profit),
+                    "fcf": round(fcf),
+                    "discounted_fcf": round(discounted),
+                    "cumulative_npv": round(cumulative),
+                }
+            )
 
         # NPV
         npv = sum(cash_flows)
@@ -412,12 +414,14 @@ class FinancialAgent(BaseAgent):
                     test_params["capex_rub"] = base_params["capex_rub"] * (1 + pct / 100)
 
                 r = self.calculate_dcf(test_params)
-                factor_results.append({
-                    "change_pct": pct,
-                    "npv": r["npv"],
-                    "irr_pct": r["irr_pct"],
-                    "payback_years": r["payback_years"],
-                })
+                factor_results.append(
+                    {
+                        "change_pct": pct,
+                        "npv": r["npv"],
+                        "irr_pct": r["irr_pct"],
+                        "payback_years": r["payback_years"],
+                    }
+                )
             results[factor] = factor_results
 
         return {
@@ -434,11 +438,14 @@ class FinancialAgent(BaseAgent):
             "low_occupancy": dict(params, **{"annual_revenue_rub": params["annual_revenue_rub"] * 0.4}),
             "high_capex": dict(params, **{"capex_rub": params["capex_rub"] * 1.5}),
             "revenue_stagnation": dict(params, **{"revenue_growth_pct": 0}),
-            "combined_stress": dict(params, **{
-                "annual_revenue_rub": params["annual_revenue_rub"] * 0.4,
-                "capex_rub": params["capex_rub"] * 1.3,
-                "revenue_growth_pct": 0,
-            }),
+            "combined_stress": dict(
+                params,
+                **{
+                    "annual_revenue_rub": params["annual_revenue_rub"] * 0.4,
+                    "capex_rub": params["capex_rub"] * 1.3,
+                    "revenue_growth_pct": 0,
+                },
+            ),
         }
 
         results = {}
@@ -455,7 +462,8 @@ class FinancialAgent(BaseAgent):
             "scenarios": results,
             "survives_stress": results["combined_stress"]["viable"],
             "recommendation": (
-                "✅ Проект устойчив к стрессам" if results["combined_stress"]["viable"]
+                "✅ Проект устойчив к стрессам"
+                if results["combined_stress"]["viable"]
                 else "⚠️ Проект уязвим — рассмотрите снижение CAPEX или увеличение загрузки"
             ),
         }
@@ -511,5 +519,10 @@ class FinancialAgent(BaseAgent):
         return {
             "passed": passed,
             "checks": checks,
-            "metrics": {"npv": result["npv"], "irr": result["irr_pct"], "dscr": result["dscr"], "payback": result["payback_years"]},
+            "metrics": {
+                "npv": result["npv"],
+                "irr": result["irr_pct"],
+                "dscr": result["dscr"],
+                "payback": result["payback_years"],
+            },
         }

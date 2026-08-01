@@ -43,6 +43,7 @@ _LAZY_IMPORTS = {
 def __getattr__(name: str):
     if name in _LAZY_IMPORTS:
         import importlib
+
         module = importlib.import_module(_LAZY_IMPORTS[name])
         cls = getattr(module, name)
         # Кэшируем в модуле чтобы не импортировать повторно
@@ -52,15 +53,32 @@ def __getattr__(name: str):
 
 
 __all__ = [
-    "BaseAgent", "Task", "TaskResult", "TaskStatus",
-    "ParserAgent", "GeometryAgent", "TextureAgent",
-    "RenderAgent", "ExportAgent", "QualityAgent",
-    "ResearchAgent", "MarketAgent", "ConceptAgent",
-    "MasterplanAgent", "LandscapeAgent", "BrandAgent",
-    "FinancialAgent", "PresentationAgent",
-    "StyleAgent", "LightingAgent", "FurnitureAgent",
-    "MEPAgent", "StructuralAgent", "ComplianceAgent",
-    "ELAgent", "MEPBIMAgent",
+    "BaseAgent",
+    "Task",
+    "TaskResult",
+    "TaskStatus",
+    "ParserAgent",
+    "GeometryAgent",
+    "TextureAgent",
+    "RenderAgent",
+    "ExportAgent",
+    "QualityAgent",
+    "ResearchAgent",
+    "MarketAgent",
+    "ConceptAgent",
+    "MasterplanAgent",
+    "LandscapeAgent",
+    "BrandAgent",
+    "FinancialAgent",
+    "PresentationAgent",
+    "StyleAgent",
+    "LightingAgent",
+    "FurnitureAgent",
+    "MEPAgent",
+    "StructuralAgent",
+    "ComplianceAgent",
+    "ELAgent",
+    "MEPBIMAgent",
     "Orchestrator",
 ]
 
@@ -69,25 +87,53 @@ class _AgentRegistry:
     """Lazy registry — создаёт агентов только при обращении."""
 
     _names = [
-        "parser", "geometry", "texture", "render", "export", "quality",
-        "research", "market", "concept", "masterplan", "landscape",
-        "brand", "financial", "presentation", "style", "lighting",
-        "furniture", "mep", "structural", "compliance",
-        "el", "mep_bim",
+        "parser",
+        "geometry",
+        "texture",
+        "render",
+        "export",
+        "quality",
+        "research",
+        "market",
+        "concept",
+        "masterplan",
+        "landscape",
+        "brand",
+        "financial",
+        "presentation",
+        "style",
+        "lighting",
+        "furniture",
+        "mep",
+        "structural",
+        "compliance",
+        "el",
+        "mep_bim",
     ]
 
     _class_map = {
-        "parser": "ParserAgent", "geometry": "GeometryAgent",
-        "texture": "TextureAgent", "render": "RenderAgent",
-        "export": "ExportAgent", "quality": "QualityAgent",
-        "research": "ResearchAgent", "market": "MarketAgent",
-        "concept": "ConceptAgent", "masterplan": "MasterplanAgent",
-        "landscape": "LandscapeAgent", "brand": "BrandAgent",
-        "financial": "FinancialAgent", "presentation": "PresentationAgent",
-        "style": "StyleAgent", "lighting": "LightingAgent",
-        "furniture": "FurnitureAgent", "mep": "MEPAgent",
-        "structural": "StructuralAgent", "compliance": "ComplianceAgent",
-        "el": "ELAgent", "mep_bim": "MEPBIMAgent",
+        "parser": "ParserAgent",
+        "geometry": "GeometryAgent",
+        "texture": "TextureAgent",
+        "render": "RenderAgent",
+        "export": "ExportAgent",
+        "quality": "QualityAgent",
+        "research": "ResearchAgent",
+        "market": "MarketAgent",
+        "concept": "ConceptAgent",
+        "masterplan": "MasterplanAgent",
+        "landscape": "LandscapeAgent",
+        "brand": "BrandAgent",
+        "financial": "FinancialAgent",
+        "presentation": "PresentationAgent",
+        "style": "StyleAgent",
+        "lighting": "LightingAgent",
+        "furniture": "FurnitureAgent",
+        "mep": "MEPAgent",
+        "structural": "StructuralAgent",
+        "compliance": "ComplianceAgent",
+        "el": "ELAgent",
+        "mep_bim": "MEPBIMAgent",
     }
 
     def __getitem__(self, name: str):

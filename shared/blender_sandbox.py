@@ -19,42 +19,75 @@ logger = logging.getLogger("archai.blender_sandbox")
 # ═══════════════════════════════════════════════════════════════
 
 BLOCKED_IMPORTS = {
-    "os", "sys", "subprocess", "shutil", "pathlib",
-    "socket", "http", "urllib", "requests", "httpx",
-    "ctypes", "signal", "multiprocessing", "threading",
-    "importlib", "code", "codeop", "compile",
-    "eval", "exec", "__import__",
+    "os",
+    "sys",
+    "subprocess",
+    "shutil",
+    "pathlib",
+    "socket",
+    "http",
+    "urllib",
+    "requests",
+    "httpx",
+    "ctypes",
+    "signal",
+    "multiprocessing",
+    "threading",
+    "importlib",
+    "code",
+    "codeop",
+    "compile",
+    "eval",
+    "exec",
+    "__import__",
 }
 
 BLOCKED_FUNCTIONS = {
-    "os.system", "os.popen", "os.exec", "os.spawn",
-    "os.remove", "os.unlink", "os.rmdir", "os.makedirs",
-    "subprocess.run", "subprocess.Popen", "subprocess.call",
-    "subprocess.check_output", "subprocess.check_call",
-    "exec(", "eval(", "__import__(", "compile(",
+    "os.system",
+    "os.popen",
+    "os.exec",
+    "os.spawn",
+    "os.remove",
+    "os.unlink",
+    "os.rmdir",
+    "os.makedirs",
+    "subprocess.run",
+    "subprocess.Popen",
+    "subprocess.call",
+    "subprocess.check_output",
+    "subprocess.check_call",
+    "exec(",
+    "eval(",
+    "__import__(",
+    "compile(",
     "open(",  # blocks file I/O outside Blender
 }
 
 BLOCKED_ATTRIBUTES = {
-    "__subclasses__", "__bases__", "__globals__", "__builtins__",
-    "__import__", "__loader__", "__spec__",
+    "__subclasses__",
+    "__bases__",
+    "__globals__",
+    "__builtins__",
+    "__import__",
+    "__loader__",
+    "__spec__",
 }
 
 BLOCKED_PATTERNS = [
-    r'import\s+os',
-    r'import\s+sys',
-    r'import\s+subprocess',
-    r'from\s+os\s+import',
-    r'from\s+sys\s+import',
-    r'from\s+subprocess\s+import',
-    r'os\.system\s*\(',
-    r'os\.popen\s*\(',
-    r'subprocess\.\w+\s*\(',
-    r'__import__\s*\(',
-    r'exec\s*\(',
-    r'eval\s*\(',
-    r'compile\s*\(',
-    r'open\s*\(',  # careful — blocks legitimate file writes
+    r"import\s+os",
+    r"import\s+sys",
+    r"import\s+subprocess",
+    r"from\s+os\s+import",
+    r"from\s+sys\s+import",
+    r"from\s+subprocess\s+import",
+    r"os\.system\s*\(",
+    r"os\.popen\s*\(",
+    r"subprocess\.\w+\s*\(",
+    r"__import__\s*\(",
+    r"exec\s*\(",
+    r"eval\s*\(",
+    r"compile\s*\(",
+    r"open\s*\(",  # careful — blocks legitimate file writes
 ]
 
 
@@ -62,8 +95,10 @@ BLOCKED_PATTERNS = [
 # AST ANALYSIS
 # ═══════════════════════════════════════════════════════════════
 
+
 class ScriptSecurityError(Exception):
     """Raised when a script fails security checks."""
+
     pass
 
 
@@ -136,6 +171,7 @@ def _check_regex(script: str) -> list[str]:
 # PUBLIC API
 # ═══════════════════════════════════════════════════════════════
 
+
 def validate_blender_script(script: str, allow_file_write: bool = False) -> str:
     """
     Validate a bpy-script for security before execution.
@@ -172,14 +208,12 @@ def validate_blender_script(script: str, allow_file_write: bool = False) -> str:
     if all_issues:
         issue_text = "\n".join(all_issues[:10])  # limit output
         logger.error("Script SECURITY VIOLATION:\n%s", issue_text)
-        raise ScriptSecurityError(
-            f"Script failed security check ({len(all_issues)} issues):\n{issue_text}"
-        )
+        raise ScriptSecurityError(f"Script failed security check ({len(all_issues)} issues):\n{issue_text}")
 
     # Additional cleanup: remove any remaining dangerous patterns
     cleaned = script
     # Remove any sneaky __import__ calls
-    cleaned = re.sub(r'__import__\s*\([^)]*\)', 'pass  # BLOCKED', cleaned)
+    cleaned = re.sub(r"__import__\s*\([^)]*\)", "pass  # BLOCKED", cleaned)
 
     return cleaned
 
