@@ -36,8 +36,8 @@ SYSTEM_PROMPT = """Ты — парсер архитектурных описан
 Отвечай ТОЛЬКО валидным JSON. Никаких рассуждений, пояснений, markdown.
 
 Твоя задача — понять контекст пользователя и передать параметры для 3D-генерации.
-НЕ ограничивайся списком — если пользователь просит что-то необычное (сарай, навес, 
-беседка, гараж, теплица, курятник, баня, бассейн, забор, ворота) — ты ОБЯЗАН это понять 
+НЕ ограничивайся списком — если пользователь просит что-то необычное (сарай, навес,
+беседка, гараж, теплица, курятник, баня, бассейн, забор, ворота) — ты ОБЯЗАН это понять
 и сгенерировать подходящие параметры.
 
 Формат JSON (строго):
@@ -63,9 +63,9 @@ SYSTEM_PROMPT = """Ты — парсер архитектурных описан
 ПРАВИЛА:
 1. building_type — НЕ ограничивайся списком. Если "сарай" → "barn". Если "навес" → "carport".
    Если "беседка" → "gazebo". Если "теплица" → "greenhouse". Если "курятник" → "chicken_coop".
-   
+
 2. material — НЕ ограничивайся. "из брёвен" → "log". "из соломы" → "straw".
-   
+
 3. style — НЕ ограничивайся. "в японском стиле" → "japanese". "средневековый" → "medieval".
 
 4. Размеры — если не указаны, подбери РЕАЛИСТИЧНЫЕ:
@@ -87,7 +87,7 @@ def _get_api_keys() -> list[str]:
     primary = os.environ.get("OPENROUTER_API_KEY", "")
     if primary:
         keys.append(primary)
-    
+
     # L3: Fallback keys (comma-separated)
     fallback = os.environ.get("OPENROUTER_FALLBACK_KEYS", "")
     if fallback:
@@ -95,7 +95,7 @@ def _get_api_keys() -> list[str]:
             k = k.strip()
             if k and k not in keys:
                 keys.append(k)
-    
+
     return keys
 
 
@@ -154,14 +154,14 @@ def _extract_json(text: str) -> dict | None:
     """Extract JSON from LLM response, handling various formats."""
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
     text = re.sub(r"<reasoning>.*?</reasoning>", "", text, flags=re.DOTALL)
-    
+
     md = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if md:
         try:
             return json.loads(md.group(1))
         except json.JSONDecodeError:
             pass
-    
+
     depth, start = 0, -1
     for i, ch in enumerate(text):
         if ch == "{":
@@ -175,7 +175,7 @@ def _extract_json(text: str) -> dict | None:
                     return json.loads(text[start : i + 1])
                 except json.JSONDecodeError:
                     start = -1
-    
+
     try:
         return json.loads(text.strip())
     except json.JSONDecodeError:
@@ -270,14 +270,14 @@ class AllModelsFailedError(Exception):
 async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) -> dict | None:
     """Call a single LLM model via OpenRouter with given key."""
     base_url = os.environ.get("OPENROUTER_BASE", "https://openrouter.ai/api/v1")
-    
+
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
         "HTTP-Referer": "https://archai.app",
         "X-Title": "Architect Parser",
     }
-    
+
     payload = {
         "model": model,
         "messages": [
@@ -287,7 +287,7 @@ async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) 
         "max_tokens": 1024,
         "temperature": 0.1,
     }
-    
+
     try:
         async with httpx.AsyncClient() as client:
             r = await client.post(
@@ -296,19 +296,19 @@ async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) 
                 json=payload,
                 timeout=timeout,
             )
-        
+
         if r.status_code == 429:
             logger.warning("LLM %s rate-limited, trying next key/model", model)
             return None  # signal to try next key
-        
+
         if r.status_code != 200:
             logger.warning("LLM %s returned %d", model, r.status_code)
             return None
-        
+
         data = r.json()
         content = data["choices"][0]["message"]["content"]
         return _extract_json(content)
-    
+
     except httpx.TimeoutException:
         logger.warning("LLM %s timeout (%ds)", model, timeout)
         return None
@@ -321,9 +321,9 @@ async def _call_ollama(prompt: str) -> dict | None:
     """L4: Call local Ollama model as last resort."""
     if not OLLAMA_URL:
         return None
-    
+
     logger.info("Trying Ollama fallback: %s at %s", OLLAMA_MODEL, OLLAMA_URL)
-    
+
     payload = {
         "model": OLLAMA_MODEL,
         "messages": [
@@ -332,7 +332,7 @@ async def _call_ollama(prompt: str) -> dict | None:
         ],
         "stream": False,
     }
-    
+
     try:
         async with httpx.AsyncClient() as client:
             r = await client.post(
@@ -340,15 +340,15 @@ async def _call_ollama(prompt: str) -> dict | None:
                 json=payload,
                 timeout=60,
             )
-        
+
         if r.status_code != 200:
             logger.warning("Ollama returned %d", r.status_code)
             return None
-        
+
         data = r.json()
         content = data.get("message", {}).get("content", "")
         return _extract_json(content)
-    
+
     except Exception as e:
         logger.warning("Ollama error: %s", e)
         return None
@@ -367,9 +367,7 @@ def _validate_result(result: dict) -> bool:
     if w <= 0 or l <= 0 or w > 500 or l > 500:
         return False
     floors = result.get("floors", 0)
-    if floors <= 0 or floors > 50:
-        return False
-    return True
+    return not (floors <= 0 or floors > 50)
 
 
 def _minimal_defaults(reason: str) -> dict:
@@ -399,7 +397,7 @@ def _minimal_defaults(reason: str) -> dict:
 async def parse_prompt_async(text: str) -> dict:
     """
     Parse architectural prompt using LLM cascade.
-    
+
     L1: Prompt sanitized (injection prevention)
     L2: Timeouts 30-40s
     L3: Multiple API keys with rotation
@@ -411,18 +409,18 @@ async def parse_prompt_async(text: str) -> dict:
     text = _sanitize_prompt(text)
     if not text:
         return _minimal_defaults("Empty prompt")
-    
+
     # L1 cache
     cached = _l1_get(text)
     if cached:
         return cached
-    
+
     # L2 cache
     cached = _l2_get(text)
     if cached:
         _l1_set(text, cached)
         return cached
-    
+
     # L3: Get all available keys
     api_keys = _get_api_keys()
     if not api_keys:
@@ -434,26 +432,26 @@ async def parse_prompt_async(text: str) -> dict:
             _l2_set(text, result)
             return result
         raise AllModelsFailedError("No API keys configured and Ollama unavailable")
-    
+
     # LLM cascade with key rotation (L3)
     for model_config in LLM_CASCADE:
         model = model_config["model"]
         timeout = model_config["timeout"]
-        
+
         for key_idx, api_key in enumerate(api_keys):
             logger.info("Trying LLM: %s (key %d/%d)", model, key_idx + 1, len(api_keys))
             result = await _call_openrouter(model, text, timeout, api_key)
-            
+
             if result and _validate_result(result):
                 _l1_set(text, result)
                 _l2_set(text, result)
                 logger.info("LLM %s parsed successfully: %s", model, result.get("building_type"))
                 return result
-            
+
             if result is not None:
                 # Got response but invalid — try next model, not next key
                 break
-    
+
     # L4: All OpenRouter models failed → try Ollama
     logger.warning("All OpenRouter models failed, trying Ollama fallback")
     result = await _call_ollama(text)
@@ -462,7 +460,7 @@ async def parse_prompt_async(text: str) -> dict:
         _l2_set(text, result)
         logger.info("Ollama fallback succeeded: %s", result.get("building_type"))
         return result
-    
+
     raise AllModelsFailedError(
         f"All {len(LLM_CASCADE)} LLM models (+ Ollama) failed for prompt: {text[:100]}..."
     )

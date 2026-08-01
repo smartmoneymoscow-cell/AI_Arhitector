@@ -92,7 +92,7 @@ def _get_real_ip(request: Request) -> str:
     """S5: Get real client IP, trusting ONLY Nginx (not client headers)."""
     # Only trust X-Forwarded-For from known proxies
     client_ip = request.client.host if request.client else "unknown"
-    
+
     # Check if request comes from trusted proxy (Nginx)
     from ipaddress import ip_address, ip_network
     is_trusted = False
@@ -103,14 +103,14 @@ def _get_real_ip(request: Request) -> str:
                 break
         except ValueError:
             continue
-    
+
     if is_trusted:
         # Trust X-Forwarded-For from Nginx
         forwarded = request.headers.get("X-Forwarded-For", "")
         if forwarded:
             # Take the FIRST IP (original client), not the last (Nginx)
             return forwarded.split(",")[0].strip()
-    
+
     # Not from trusted proxy → use direct IP
     return client_ip
 
@@ -150,7 +150,7 @@ class RateLimiter:
         api_key = request.headers.get("X-API-Key", "")
         if api_key:
             return f"key:{_mask_key(api_key)}"  # S3: masked
-        
+
         real_ip = _get_real_ip(request)  # S5: trusted proxy
         return f"ip:{real_ip}"
 

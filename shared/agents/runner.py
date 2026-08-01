@@ -15,10 +15,10 @@ import logging
 import multiprocessing
 import time
 import traceback
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
-from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
+from shared.agents.base import Task, TaskStatus
 
 logger = logging.getLogger("archai.agent_runner")
 
@@ -80,7 +80,7 @@ def _run_agent_in_subprocess(
 class AgentRunner:
     """
     Запускает агентов в изолированных subprocess.
-    
+
     Каждый агент — отдельный процесс. Если падает:
     - Логирует ошибку
     - Возвращает fallback результат
@@ -165,12 +165,12 @@ class AgentRunner:
     def run(self, agent_name: str, task_params: dict, timeout: int | None = None) -> IsolatedResult:
         """
         Запускает агента в изолированном subprocess.
-        
+
         Args:
             agent_name: имя агента (geometry, texture, etc.)
             task_params: параметры задачи
             timeout: таймаут в секундах (default: self.default_timeout)
-            
+
         Returns:
             IsolatedResult с данными или fallback
         """

@@ -14,7 +14,6 @@ shared/pptx_generator.py — Генератор инвестиционных п�
 """
 
 import logging
-import os
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -59,8 +58,8 @@ class PresentationGenerator:
         """
         try:
             from pptx import Presentation as PptxPresentation
-            from pptx.util import Inches, Pt
-            from pptx.enum.text import PP_ALIGN
+            pass  # PP_ALIGN unused
+            pass  # Inches, Pt unused
         except ImportError:
             logger.warning("python-pptx not installed — generating HTML fallback")
             return self._generate_html(data, output_path.replace(".pptx", ".html"))
@@ -115,7 +114,6 @@ class PresentationGenerator:
 
     def _add_title_slide(self, prs, data: dict):
         try:
-            from pptx.util import Inches, Pt
             slide = prs.slides.add_slide(prs.slide_layouts[0])
             slide.shapes.title.text = data.get("title", "Архитектурный проект")
             if slide.placeholders[1]:

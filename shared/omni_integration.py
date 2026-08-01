@@ -14,7 +14,6 @@ shared/omni_integration.py — Интеграция с mimo-omni для расп
     result = engine.recognize_sketch(image_url)
 """
 
-import base64
 import json
 import logging
 import os

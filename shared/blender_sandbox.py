@@ -70,12 +70,12 @@ class ScriptSecurityError(Exception):
 def _check_ast(script: str) -> list[str]:
     """Analyze script AST for dangerous patterns."""
     issues = []
-    
+
     try:
         tree = ast.parse(script)
     except SyntaxError as e:
         return [f"Syntax error: {e}"]
-    
+
     for node in ast.walk(tree):
         # Check imports
         if isinstance(node, ast.Import):
@@ -83,13 +83,13 @@ def _check_ast(script: str) -> list[str]:
                 module = alias.name.split(".")[0]
                 if module in BLOCKED_IMPORTS:
                     issues.append(f"BLOCKED import: {alias.name} (line {node.lineno})")
-        
+
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 module = node.module.split(".")[0]
                 if module in BLOCKED_IMPORTS:
                     issues.append(f"BLOCKED from-import: {node.module} (line {node.lineno})")
-        
+
         # Check function calls
         elif isinstance(node, ast.Call):
             func_name = _get_call_name(node)
@@ -97,12 +97,12 @@ def _check_ast(script: str) -> list[str]:
                 for blocked in BLOCKED_FUNCTIONS:
                     if blocked in func_name:
                         issues.append(f"BLOCKED call: {func_name} (line {node.lineno})")
-        
+
         # Check attribute access
         elif isinstance(node, ast.Attribute):
             if node.attr in BLOCKED_ATTRIBUTES:
                 issues.append(f"BLOCKED attribute: {node.attr} (line {node.lineno})")
-    
+
     return issues
 
 
@@ -139,48 +139,48 @@ def _check_regex(script: str) -> list[str]:
 def validate_blender_script(script: str, allow_file_write: bool = False) -> str:
     """
     Validate a bpy-script for security before execution.
-    
+
     S4 fix: Prevents LLM-generated scripts from:
     - Importing os/sys/subprocess
     - Calling os.system(), subprocess.run(), etc.
     - Accessing __globals__, __builtins__, etc.
     - Using exec()/eval() for code injection
-    
+
     Args:
         script: Python script to validate
         allow_file_write: If True, allows open() for output files
-        
+
     Returns:
         Cleaned script if valid
-        
+
     Raises:
         ScriptSecurityError if script contains dangerous patterns
     """
     # AST analysis
     ast_issues = _check_ast(script)
-    
+
     # Regex backup
     regex_issues = _check_regex(script)
-    
+
     # Filter open() if allowed
     if allow_file_write:
         ast_issues = [i for i in ast_issues if "open(" not in i]
         regex_issues = [i for i in regex_issues if "open(" not in i]
-    
+
     all_issues = ast_issues + regex_issues
-    
+
     if all_issues:
         issue_text = "\n".join(all_issues[:10])  # limit output
         logger.error("Script SECURITY VIOLATION:\n%s", issue_text)
         raise ScriptSecurityError(
             f"Script failed security check ({len(all_issues)} issues):\n{issue_text}"
         )
-    
+
     # Additional cleanup: remove any remaining dangerous patterns
     cleaned = script
     # Remove any sneaky __import__ calls
     cleaned = re.sub(r'__import__\s*\([^)]*\)', 'pass  # BLOCKED', cleaned)
-    
+
     return cleaned
 
 
