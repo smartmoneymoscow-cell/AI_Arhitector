@@ -30,7 +30,7 @@ class LLMParsedResponse(BaseModel):
 
     object_type: str = Field("building", pattern="^(building|interior|room)$")
     building_type: str = Field(
-        "house", pattern="^(house|office|cottage|villa|apartment|townhouse|hotel|warehouse|school)$"
+        "house", pattern="^(house|office|cottage|villa|apartment|townhouse|hotel|warehouse|school|bathhouse|tourism_complex|industrial|residential_complex)$"
     )
     room_type: str | None = Field(
         None, pattern="^(bedroom|kitchen|living|bathroom|children|study|dining|hall|laundry)$"
@@ -99,7 +99,7 @@ class LLMParsedResponse(BaseModel):
     @field_validator("features")
     @classmethod
     def validate_features(cls, v):
-        valid = {"balcony", "terrace", "garage", "pool", "garden", "basement", "attic", "chimney", "bay_window"}
+        valid = {"balcony", "terrace", "garage", "pool", "garden", "basement", "attic", "chimney", "bay_window", "smart_home", "underfloor_heating", "solar_panels", "ev_charging", "sauna", "fireplace", "wine_cellar", "home_theater", "gym"}
         return [f for f in v if f in valid]
 
     @field_validator("furniture")
@@ -284,6 +284,19 @@ SYSTEM_PROMPT = """Ты — парсер архитектурных описан
 - Размеры в метрах. "64 кв м" → width_m=8, length_m=8
 - Если room_type определён, а furniture не указан → подобрать дефолтную мебель
 - confidence: 1.0 если все параметры явны, 0.3 если додумываешь
+
+Дополнительные типы объектов:
+- "баня/сауна" → building_type="bathhouse"
+- "таунхаус" → building_type="townhouse"
+- "туристический комплекс/курорт/отель" → building_type="tourism_complex"
+- "электрика/умный дом/проводка" → special_task="electrical"
+- "ландшафт/участок/генплан" → special_task="landscape"
+- "ОВиК/вентиляция/отопление/водоснабжение" → special_task="mep"
+- "Ревит/Revit/рабочая документация" → special_task="revit_documentation"
+- "смета/стоимость" → special_task="cost_estimate"
+- "дизайн проект/интерьер" → special_task="interior_design"
+
+Если в промте есть фото/зарисовки → special_task="sketch_recognition"
 """
 
 
@@ -293,7 +306,7 @@ SYSTEM_PROMPT = """Ты — парсер архитектурных описан
 
 _VALID = {
     "object_type": {"building", "interior", "room"},
-    "building_type": {"house", "office", "cottage", "villa", "apartment", "townhouse", "hotel", "warehouse", "school"},
+    "building_type": {"house", "office", "cottage", "villa", "apartment", "townhouse", "hotel", "warehouse", "school", "bathhouse", "tourism_complex", "industrial", "residential_complex"},
     "room_type": {"bedroom", "kitchen", "living", "bathroom", "children", "study", "dining", "hall", "laundry"},
     "style": {
         "modern",
@@ -328,9 +341,14 @@ _VALID = {
         "foam_block",
         "sip_panel",
         "timber_frame",
+        "lstk",
+        "monolithic_concrete",
+        "hybrid_rbc_lstk",
+        "gas_block",
+        "keramzit_block",
     },
     "roof_type": {"gabled", "flat", "hip", "mansard", "shed", "dome"},
-    "features": {"balcony", "terrace", "garage", "pool", "garden", "basement", "attic", "chimney", "bay_window"},
+    "features": {"balcony", "terrace", "garage", "pool", "garden", "basement", "attic", "chimney", "bay_window", "smart_home", "underfloor_heating", "solar_panels", "ev_charging", "sauna", "fireplace", "wine_cellar", "home_theater", "gym"},
 }
 
 _DEFAULTS = {
@@ -373,6 +391,7 @@ def _detect_complexity(prompt: str) -> dict:
         "инвестиц", "инвестмодел", "инвестор", "презентация для инвесторов",
         "капитализац", "окупаемость", "ebitda", "финансовая модель",
         "сценарии развития", "очереди строительства", "дорожная карта",
+        "дом", "коттедж", "здание", "таунхаус", "вилла",
     ]
     enterprise_count = sum(1 for kw in enterprise_kw if kw in p)
 
@@ -386,6 +405,15 @@ def _detect_complexity(prompt: str) -> dict:
     complex_count = sum(1 for kw in complex_kw if kw in p)
 
     result = {}
+
+    # Ландшафт (check early to override complex)
+    landscape_kw = ["ландшафт", "участок", "генплан", "беседк", "дорожк", "газон",
+                     "деревья", "клумб", "забор", "мощен", "бассейн на участке", "соток"]
+    landscape_count = sum(1 for kw in landscape_kw if kw in p)
+    if landscape_count >= 1 and "мастер" not in p and "комплекс" not in p:
+        result["special_task"] = "landscape"
+        result["pipeline_profile"] = "landscape"
+        return result
 
     if enterprise_count >= 3:
         result["complexity"] = "enterprise"
@@ -466,6 +494,63 @@ def _detect_complexity(prompt: str) -> dict:
             requirements.append(req)
     if requirements:
         result["key_requirements"] = requirements
+
+    # Электрика и умный дом
+    electrical_kw = ["электрик", "электрик", "проводк", "умный дом", "smart home", "автомат", "узо", "щит",
+                     "кабельн", "трасс", "розетк", "выключател", "освещен", "однолинейн",
+                     "электрика", "электрическ"]
+    electrical_count = sum(1 for kw in electrical_kw if kw in p)
+    if electrical_count >= 2:
+        result["special_task"] = "electrical"
+        result["pipeline_profile"] = "electrical"
+
+    # Бани и сауны
+    bathhouse_kw = ["бан", "саун", "парилк", "дымоход", "печь дровян", "мойк"]
+    bathhouse_count = sum(1 for kw in bathhouse_kw if kw in p)
+    if bathhouse_count >= 1:
+        result["special_task"] = "bathhouse"
+        result["building_type"] = "bathhouse"
+        result["pipeline_profile"] = "bathhouse"
+
+    # Ландшафт
+    landscape_kw = ["ландшафт", "участок", "генплан", "беседк", "дорожк", "газон",
+                     "деревья", "клумб", "забор", "мощен", "бассейн на участке"]
+    landscape_count = sum(1 for kw in landscape_kw if kw in p)
+    if landscape_count >= 1 and "мастер" not in p:
+        result["special_task"] = "landscape"
+        result["pipeline_profile"] = "full"
+
+    # MEP (инженерные системы)
+    mep_kw = ["отоплен", "вентиляц", "водоснабж", "канализац", "кондиционер", "теплый пол",
+              "хвс", "гвс", "стояк", "коллектор", "бойлер", "котельн"]
+    mep_count = sum(1 for kw in mep_kw if kw in p)
+    if mep_count >= 2:
+        result["special_task"] = "mep"
+        result["pipeline_profile"] = "mep_documentation"
+
+    # Revit / рабочая документация
+    revit_kw = ["revit", "ревит", "рабочая документац", "стадия р", "autocad", "автокад",
+                "чертеж", "спецификац", "гост 21.1101"]
+    revit_count = sum(1 for kw in revit_kw if kw in p)
+    if revit_count >= 1:
+        result["special_task"] = "revit_documentation"
+        result["pipeline_profile"] = "mep_documentation"
+
+    # Дизайн-проект интерьера
+    interior_kw = ["дизайн проект", "дизайн-проект", "отделк", "перегородк",
+                    "меблировк", "визуализация интерьера", "спальня", "гостиная", "кухня",
+                    "ванная", "детская", "прихожая", "интерьер"]
+    interior_count = sum(1 for kw in interior_kw if kw in p)
+    if interior_count >= 1:
+        result["special_task"] = "interior_design"
+        result["object_type"] = "interior"
+        result["pipeline_profile"] = "interior_full"
+
+    # Смета и стоимость
+    cost_kw = ["смет", "стоимость строительств", "бюджет", "расценк", "смета на"]
+    cost_count = sum(1 for kw in cost_kw if kw in p)
+    if cost_count >= 1:
+        result["special_task"] = "cost_estimate"
 
     return result
 
@@ -650,8 +735,25 @@ def get_generation_type(params: dict) -> str:
 def get_pipeline_profile(params: dict) -> str:
     """Determine pipeline profile from parsed params."""
     profile = params.get("pipeline_profile")
-    if profile and profile in ("quick", "standard", "full", "premium", "interior", "presentation"):
+    if profile and profile in ("quick", "standard", "full", "premium", "interior", "presentation",
+                                "electrical", "bathhouse", "landscape", "mep_documentation", "interior_full"):
         return profile
+
+    # Special task routing
+    special_task = params.get("special_task", "")
+    if special_task == "electrical":
+        return "electrical"
+    if special_task == "bathhouse":
+        return "bathhouse"
+    if special_task == "landscape":
+        return "landscape"
+    if special_task == "mep":
+        return "mep_documentation"
+    if special_task == "revit_documentation":
+        return "mep_documentation"
+    if special_task == "interior_design":
+        return "interior_full"
+
     complexity = params.get("complexity", "simple")
     obj_type = params.get("object_type", "building")
     if complexity == "enterprise":

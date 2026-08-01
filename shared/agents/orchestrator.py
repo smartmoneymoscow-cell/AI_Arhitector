@@ -136,6 +136,54 @@ PIPELINE_PROFILES = {
         "export",
         "presentation",
     ],
+    "electrical": [
+        "parser",
+        "el",
+        "compliance",
+        "export",
+    ],
+    "bathhouse": [
+        "parser",
+        "concept",
+        "style",
+        "structural",
+        "mep",
+        "compliance",
+        "geometry",
+        "texture",
+        "render",
+        "quality",
+        "export",
+    ],
+    "landscape": [
+        "parser",
+        "research",
+        "landscape",
+        "masterplan",
+        "compliance",
+        "export",
+    ],
+    "mep_documentation": [
+        "parser",
+        "mep",
+        "mep_bim",
+        "compliance",
+        "export",
+    ],
+    "interior_full": [
+        "parser",
+        "concept",
+        "style",
+        "furniture",
+        "lighting",
+        "mep",
+        "el",
+        "structural",
+        "texture",
+        "render",
+        "quality",
+        "export",
+    ],
 }
 
 
@@ -173,6 +221,9 @@ class Orchestrator:
             "mep": MEPAgent(),
             "structural": StructuralAgent(),
             "compliance": ComplianceAgent(),
+            # New v7.2
+            "el": ELAgent(),
+            "mep_bim": MEPBIMAgent(),
         }
 
         self.clarification = ClarificationEngine()
