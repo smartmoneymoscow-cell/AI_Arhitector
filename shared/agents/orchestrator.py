@@ -22,6 +22,9 @@ import time
 import uuid
 
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
+from shared.clarification import ClarificationEngine
+from shared.router import route_generation
+from shared.streaming import create_streamer
 
 # ═══ Lazy imports — only load agents when actually needed ═══
 def _import_agent(name: str):
