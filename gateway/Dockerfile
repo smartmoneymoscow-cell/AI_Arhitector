@@ -7,21 +7,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends locales && \
 ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 ENV PYTHONIOENCODING=utf-8
+ENV PORT=8080
 
 WORKDIR /app
 
-# Copy shared package (build context = project root)
 COPY shared/ ./shared/
-
-# Copy gateway requirements and install
 COPY gateway/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy gateway code
 COPY gateway/ .
-
-# Copy frontend
 COPY frontend/ ./frontend/
 
-EXPOSE 8080
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
+EXPOSE ${PORT}
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT}"]
