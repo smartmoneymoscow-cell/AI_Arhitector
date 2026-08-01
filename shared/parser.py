@@ -362,6 +362,114 @@ _FURNITURE = {
 }
 
 
+def _detect_complexity(prompt: str) -> dict:
+    """
+    Fallback complexity detection when LLM doesn't return complexity fields.
+    Analyzes prompt keywords to determine complexity and pipeline profile.
+    """
+    p = prompt.lower()
+
+    enterprise_kw = [
+        "инвестиц", "инвестмодел", "инвестор", "презентация для инвесторов",
+        "капитализац", "окупаемость", "ebitda", "финансовая модель",
+        "сценарии развития", "очереди строительства", "дорожная карта",
+    ]
+    enterprise_count = sum(1 for kw in enterprise_kw if kw in p)
+
+    complex_kw = [
+        "мастер-план", "мастерплан", "генплан", "генеральный план",
+        "туристическ", "курорт", "санатори", "гостиничн", "отель",
+        "комплекс", "зонирован", "территори", "многофункционал",
+        "swot", "конкурент", "целевая аудитория",
+        "архитектурная концепция", "легенда", "идентичност",
+    ]
+    complex_count = sum(1 for kw in complex_kw if kw in p)
+
+    result = {}
+
+    if enterprise_count >= 3:
+        result["complexity"] = "enterprise"
+        result["pipeline_profile"] = "premium"
+        result["object_type"] = "investment_concept"
+    elif complex_count >= 3:
+        result["complexity"] = "complex"
+        result["pipeline_profile"] = "full"
+        if any(kw in p for kw in ["туристическ", "курорт", "санатори", "отель", "гостиниц"]):
+            result["object_type"] = "tourism_complex"
+            result["building_type"] = "tourism_complex"
+            result["project_type"] = "tourism"
+        elif any(kw in p for kw in ["мастер-план", "мастерплан", "генплан"]):
+            result["object_type"] = "masterplan"
+        else:
+            result["object_type"] = "complex"
+
+    deliverables = []
+    deliverable_map = {
+        "swot": "swot_analysis", "инвестиц": "financial_model",
+        "презентац": "presentation", "мастер-план": "masterplan",
+        "мастерплан": "masterplan", "генплан": "masterplan",
+        "зонирован": "zoning", "окупаем": "payback_analysis",
+        "капитализац": "capitalization", "визуал": "visualization",
+        "очеред": "phasing", "сценари": "scenario_analysis",
+    }
+    for kw, deliverable in deliverable_map.items():
+        if kw in p and deliverable not in deliverables:
+            deliverables.append(deliverable)
+    if deliverables:
+        result["deliverables"] = deliverables
+
+    services = []
+    service_map = {
+        "гостиниц": "hotel", "отель": "hotel", "туристическ": "hotel",
+        "спа": "spa", "ресторан": "restaurant", "горные лыжи": "ski", "лыж": "ski",
+        "пляж": "beach", "конференц": "conference", "детск": "kids_club",
+        "бассейн": "pool", "фитнес": "fitness", "сауна": "sauna",
+    }
+    for kw, svc in service_map.items():
+        if kw in p and svc not in services:
+            services.append(svc)
+    if services:
+        result["services"] = services
+
+    location_patterns = [
+        r"в\s+([А-Яа-яё]+(?:\s+[А-Яа-яё]+)*(?:\s+(?:области|крае|республике|округе)))",
+    ]
+    for pat in location_patterns:
+        m = re.search(pat, prompt)
+        if m:
+            result["location"] = m.group(1)
+            break
+
+    audience = []
+    audience_map = {
+        "инвестор": "investors", "девелопер": "developers",
+        "турист": "tourists", "семь": "families",
+        "корпорат": "corporate", "бизнес": "business",
+    }
+    for kw, aud in audience_map.items():
+        if kw in p and aud not in audience:
+            audience.append(aud)
+    if audience:
+        result["target_audience"] = audience
+
+    requirements = []
+    req_map = {
+        "swot": "SWOT-анализ", "инвестиционная модель": "инвестиционная модель",
+        "презентация для инвесторов": "презентация для инвесторов",
+        "мастер-план": "мастер-план", "зонирование": "зонирование",
+        "финансовая модель": "_financial_model_excel",
+        "окупаемость": "расчет окупаемости", "капитализация": "оценка капитализации",
+        "архитектурная концепция": "архитектурная концепция",
+    }
+    for kw, req in req_map.items():
+        if kw in p and req not in requirements:
+            requirements.append(req)
+    if requirements:
+        result["key_requirements"] = requirements
+
+    return result
+
+
 def _validate(raw: dict) -> dict:
     """Validate raw LLM output using Pydantic schema (strict validation)."""
     try:
@@ -521,7 +629,29 @@ parse_prompt_sync = parse_prompt  # sync alias
 
 def get_generation_type(params: dict) -> str:
     obj_type = params.get("object_type", "building")
-    return "interior" if obj_type in ("interior", "room") else "building"
+    if obj_type in ("interior", "room"):
+        return "interior"
+    if obj_type in ("masterplan", "complex", "tourism_complex", "investment_concept", "urban_planning", "mixed_use"):
+        return obj_type
+    return "building"
+
+
+def get_pipeline_profile(params: dict) -> str:
+    """Determine pipeline profile from parsed params."""
+    profile = params.get("pipeline_profile")
+    if profile and profile in ("quick", "standard", "full", "premium", "interior", "presentation"):
+        return profile
+    complexity = params.get("complexity", "simple")
+    obj_type = params.get("object_type", "building")
+    if complexity == "enterprise":
+        return "premium"
+    if complexity == "complex":
+        return "full"
+    if obj_type in ("interior", "room"):
+        return "interior"
+    if any(d in params.get("deliverables", []) for d in ["presentation"]):
+        return "presentation"
+    return "standard"
 
 
 def get_cache_stats() -> dict:
