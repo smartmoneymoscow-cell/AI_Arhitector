@@ -1,5 +1,5 @@
 /**
- * E2E Browser Test v3 — Architect 3D Generation
+ * E2E Browser Test v4 — Architect 3D Generation
  * Uses Playwright. Runs against local server or file://.
  *
  * Run:
@@ -32,7 +32,11 @@ async function runTest(tc, browser) {
 
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   const errors = [];
+  const consoleErrors = [];
   page.on('pageerror', e => errors.push(e.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
 
   try {
     // 1. Load
@@ -113,19 +117,41 @@ async function runTest(tc, browser) {
     console.log(`     Chat msgs: ${r.chatMsgs.length}`);
     console.log(`     Think msgs: ${r.thinkMsgs.length}`);
 
-    // 7. Check reasoning (think blocks should exist)
-    console.log('  6️⃣  Checking reasoning...');
+    // 7. Check JS errors
+    console.log('  6️⃣  Checking JS errors...');
+    const allErrors = [...errors, ...consoleErrors];
+    const criticalErrors = allErrors.filter(e => {
+      if (e.includes('skip LLM')) return false;
+      if (e.includes('ResizeObserver')) return false;
+      if (e.includes('export') && e.includes('default')) return false;
+      if (e.includes('Failed to load resource')) return false;
+      return true;
+    });
+    if (criticalErrors.length > 0) {
+      console.log('     ❌ Critical JS errors found:');
+      criticalErrors.forEach((e, i) => console.log(`       [${i}] ${e.substring(0, 200)}`));
+    } else {
+      console.log('     ✅ No critical JS errors');
+    }
+    const hasUninitError = errors.some(e => e.includes('uninitialized') || e.includes('Cannot access') || e.includes('TDZ'));
+    if (hasUninitError) {
+      console.log('     ❌ TDZ/uninitialized variable error detected!');
+    }
+
+    // 8. Check reasoning (think blocks should exist)
+    console.log('  7️⃣  Checking reasoning...');
     const hasReasoning = r.thinkMsgs.length > 0;
     console.log(`     ${hasReasoning ? '✅' : '❌'} Reasoning blocks present (${r.thinkMsgs.length})`);
     if (hasReasoning) {
       r.thinkMsgs.forEach((m, i) => console.log(`       [${i}] ${m.substring(0, 120)}`));
     }
 
-    // 8. Verify
+    // 9. Verify
     console.log('\n  🔍 Checks:');
     const checks = {
       'Page loads': true,
-      'No critical JS errors': !errors.some(e => !e.includes('export') && !e.includes('ResizeObserver') && !e.includes('skip LLM')),
+      'No critical JS errors': criticalErrors.length === 0 && !hasUninitError,
+      'No TDZ/uninitialized errors': !hasUninitError,
       'Chat has messages': r.chatMsgs.length >= 2,
       'Reasoning visible': hasReasoning,
       'Canvas visible': r.canvasOk,
