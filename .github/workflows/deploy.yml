@@ -33,14 +33,14 @@ jobs:
       matrix:
         service:
           - name: gateway
-            context: ./gateway
-            file: ./gateway/Dockerfile
+            context: .
+            file: ./gateway.Dockerfile
           - name: llm-service
-            context: ./llm-service
-            file: ./llm-service/Dockerfile
+            context: .
+            file: ./llm.Dockerfile
           - name: blender-service
-            context: ./blender-service
-            file: ./blender-service/Dockerfile
+            context: .
+            file: ./blender.Dockerfile
     steps:
       - uses: actions/checkout@v4
 

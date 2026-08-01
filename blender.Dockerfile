@@ -12,11 +12,12 @@ RUN find /usr/share/blender -name "numpy" -type d -exec rm -rf {} + 2>/dev/null;
     mkdir -p "$BLENDER_MODULES" && cp -r "$SYS_NUMPY" "$BLENDER_MODULES/"
 WORKDIR /app
 COPY requirements.txt .
-RUN pip3 install --break-system-packages --no-cache-dir -r requirements.txt
+RUN python3 -m venv /app/venv && \
+    /app/venv/bin/pip install --no-cache-dir -r requirements.txt
 COPY shared/ /app/shared/
 COPY blender-service/ /app/blender-service/
 COPY server.py /app/
 RUN mkdir -p /app/output
 EXPOSE 8082
-ENV PORT=8082 DISPLAY=:99 PYTHONUNBUFFERED=1
+ENV PORT=8082 DISPLAY=:99 PYTHONUNBUFFERED=1 PATH="/app/venv/bin:$PATH"
 CMD ["sh", "-c", "Xvfb :99 -screen 0 1920x1080x24 &>/dev/null & exec python3 blender-service/app.py"]
