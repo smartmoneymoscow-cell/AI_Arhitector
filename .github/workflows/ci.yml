@@ -103,7 +103,16 @@ jobs:
           pip install pytest pytest-cov
 
       - name: Run server import test
-        run: python -c "import server; print('✅ server.py imports OK')"
+        run: |
+          python -c "import server; print('✅ server.py imports OK')" 2>&1 || {
+            echo "❌ import server failed, debugging..."
+            python -c "from shared.config import settings; print('config OK')"
+            python -c "from shared.models import GenerateRequest; print('models OK')"
+            python -c "from shared.parser import parse_prompt_sync; print('parser OK')"
+            python -c "from shared.blender import generate_bpy_script; print('blender OK')"
+            python -c "from shared.logging_config import setup_logging; print('logging OK')"
+            exit 1
+          }
 
       - name: Run gateway import test
         run: |
