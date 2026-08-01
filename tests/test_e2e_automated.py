@@ -132,9 +132,9 @@ MOCK_LLM_RESPONSES = {
 }
 
 
-def _mock_call_llm(text: str, cfg: dict) -> Optional[dict]:
+async def _mock_call_openrouter(model, prompt, timeout, api_key):
     for key, resp in MOCK_LLM_RESPONSES.items():
-        if key in text:
+        if key in prompt:
             return resp
     return {
         "object_type": "building", "building_type": "house", "room_type": None,
@@ -142,6 +142,8 @@ def _mock_call_llm(text: str, cfg: dict) -> Optional[dict]:
         "style": "modern", "material": "plaster", "roof_type": "gabled",
         "features": [], "furniture": [], "confidence": 0.5,
     }
+
+_mock_call_llm = _mock_call_openrouter
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -161,7 +163,7 @@ def test_llm_prompt_parsing():
 
     # Test 1a: Building prompt
     t0 = time.time()
-    with patch("shared.parser._call_llm", side_effect=_mock_call_llm):
+    with patch("shared.parser._get_api_keys", return_value=["test-key"]), patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter):
         params = parse_prompt("двухэтажный кирпичный дом 10×12 с балконом")
 
     assert params["object_type"] == "building", f"Expected building, got {params['object_type']}"
@@ -181,7 +183,7 @@ def test_llm_prompt_parsing():
 
     # Test 1b: Room prompt
     t0 = time.time()
-    with patch("shared.parser._call_llm", side_effect=_mock_call_llm):
+    with patch("shared.parser._get_api_keys", return_value=["test-key"]), patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter):
         params = parse_prompt("современная спальня 6×8 в стиле хайтек")
 
     assert params["object_type"] == "room", f"Expected room, got {params['object_type']}"
@@ -200,7 +202,7 @@ def test_llm_prompt_parsing():
 
     # Test 1c: Office prompt
     t0 = time.time()
-    with patch("shared.parser._call_llm", side_effect=_mock_call_llm):
+    with patch("shared.parser._get_api_keys", return_value=["test-key"]), patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter):
         params = parse_prompt("офис 5 этажей стекло плоская кровля 20×24")
 
     assert params["object_type"] == "building"
@@ -527,6 +529,7 @@ def test_quality_16k():
 # TEST 6: FULL PIPELINE (ORCHESTRATOR)
 # ═══════════════════════════════════════════════════════════════
 
+@pytest.mark.blender
 def test_full_pipeline():
     """
     Тест: полный pipeline через оркестратор.
@@ -537,7 +540,7 @@ def test_full_pipeline():
     t0 = time.time()
     tmpdir = tempfile.mkdtemp()
 
-    with patch("shared.parser._call_llm", side_effect=_mock_call_llm):
+    with patch("shared.parser._get_api_keys", return_value=["test-key"]), patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter):
         orch = Orchestrator(output_dir=tmpdir)
         result = orch.execute(
             "двухэтажный кирпичный дом 10×12 с балконом",
@@ -573,7 +576,7 @@ def test_full_pipeline():
 
     # Test interior pipeline
     t0 = time.time()
-    with patch("shared.parser._call_llm", side_effect=_mock_call_llm):
+    with patch("shared.parser._get_api_keys", return_value=["test-key"]), patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter):
         orch = Orchestrator(output_dir=tmpdir)
         result = orch.execute(
             "современная спальня 6×8 в стиле хайтек",

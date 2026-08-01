@@ -75,7 +75,7 @@ def validate_params(params: dict) -> dict:
     # dimensions
     for key in ("width_m", "length_m", "height_m"):
         val = params.get(key, DEFAULTS[key])
-        result[key] = int(val) if isinstance(val, (int, float)) and 1 <= val <= 200 else DEFAULTS[key]
+        result[key] = int(val) if isinstance(val, int | float) and 1 <= val <= 200 else DEFAULTS[key]
 
     # style
     style = params.get("style", "modern")

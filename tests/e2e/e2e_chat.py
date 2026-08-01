@@ -15,6 +15,16 @@ Uses Playwright for browser automation.
 
 import json
 import os
+
+import pytest
+
+try:
+    import playwright
+    HAS_PLAYWRIGHT = True
+except ImportError:
+    HAS_PLAYWRIGHT = False
+
+pytestmark = pytest.mark.skipif(not HAS_PLAYWRIGHT, reason="playwright not installed")
 import random
 import time
 from pathlib import Path

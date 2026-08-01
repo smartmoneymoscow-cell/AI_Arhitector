@@ -71,7 +71,9 @@ MOCK_RESPONSES = {
 }
 
 
-def _mock_call_llm(text, cfg):
+async def _mock_call_openrouter(model, prompt, timeout, api_key):
+    text = prompt
+
     for key, resp in MOCK_RESPONSES.items():
         if key in text:
             return resp
@@ -104,7 +106,8 @@ def test_parser_no_regex():
 test("No regex in parser", test_parser_no_regex)
 
 
-@patch("shared.parser._call_llm", side_effect=_mock_call_llm)
+@patch("shared.parser._get_api_keys", return_value=["test-key"])
+@patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
 def test_parser_building(mock):
     from shared.parser import parse_prompt
     p = parse_prompt("двухэтажный кирпичный дом 10×12")
@@ -116,7 +119,8 @@ def test_parser_building(mock):
 test("Parser: building", test_parser_building)
 
 
-@patch("shared.parser._call_llm", side_effect=_mock_call_llm)
+@patch("shared.parser._get_api_keys", return_value=["test-key"])
+@patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
 def test_parser_room(mock):
     from shared.parser import parse_prompt
     p = parse_prompt("спальня в стиле хайтек")
@@ -136,7 +140,7 @@ test("Parser: empty prompt", test_parser_empty)
 
 def test_parser_all_models_failed():
     from shared.parser import parse_prompt, AllModelsFailedError
-    with patch("shared.parser._call_llm", return_value=None):
+    with patch("shared.parser._call_openrouter", return_value=None):
         with patch("shared.parser._l2_get", return_value=None):
             try:
                 parse_prompt("test")
@@ -223,7 +227,8 @@ def test_routing():
 test("Routing types", test_routing)
 
 
-@patch("shared.parser._call_llm", side_effect=_mock_call_llm)
+@patch("shared.parser._get_api_keys", return_value=["test-key"])
+@patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
 def test_router_building(mock):
     from shared.router import route_generation
     plan = route_generation("двухэтажный кирпичный дом 10×12")
@@ -235,7 +240,8 @@ def test_router_building(mock):
 test("Router: building plan", test_router_building)
 
 
-@patch("shared.parser._call_llm", side_effect=_mock_call_llm)
+@patch("shared.parser._get_api_keys", return_value=["test-key"])
+@patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
 def test_router_interior(mock):
     from shared.router import route_generation
     plan = route_generation("спальня в стиле хайтек")
@@ -255,7 +261,7 @@ def test_parser_agent():
     from shared.agents.base import Task, TaskStatus
     import shared.parser
     agent = ParserAgent()
-    with patch.object(shared.parser, '_call_llm', side_effect=_mock_call_llm):
+    with patch("shared.parser._get_api_keys", return_value=["test-key"]), patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter):
         task = Task(name="parse", agent="parser", params={"prompt": "кирпичный дом"})
         result = agent.process(task)
         assert result.status == TaskStatus.DONE
@@ -332,7 +338,8 @@ test("Export commands", test_export_commands)
 print("\n═══ 6. ORCHESTRATOR ═══")
 
 
-@patch("shared.parser._call_llm", side_effect=_mock_call_llm)
+@patch("shared.parser._get_api_keys", return_value=["test-key"])
+@patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
 def test_orchestrator_full(mock):
     from shared.agents.orchestrator import Orchestrator
     orch = Orchestrator(output_dir="/tmp/arch_test")
@@ -349,7 +356,8 @@ def test_orchestrator_full(mock):
 test("Orchestrator: full pipeline", test_orchestrator_full)
 
 
-@patch("shared.parser._call_llm", side_effect=_mock_call_llm)
+@patch("shared.parser._get_api_keys", return_value=["test-key"])
+@patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
 def test_orchestrator_interior(mock):
     from shared.agents.orchestrator import Orchestrator
     orch = Orchestrator(output_dir="/tmp/arch_test")

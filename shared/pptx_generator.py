@@ -275,7 +275,7 @@ class PresentationGenerator:
         fin = data.get("financial", {})
         if fin:
             items = "".join(
-                f"<li><strong>{k}:</strong> {v:,.0f} ₽</li>" for k, v in fin.items() if isinstance(v, (int, float))
+                f"<li><strong>{k}:</strong> {v:,.0f} ₽</li>" for k, v in fin.items() if isinstance(v, int | float)
             )
             slides_html.append(f"""
         <div class="slide">
