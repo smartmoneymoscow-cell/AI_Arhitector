@@ -13,13 +13,27 @@ jobs:
     timeout-minutes: 10
     environment: staging
     steps:
-      - run: |
+      - name: Check secrets
+        id: check
+        run: |
+          if [ -z "${{ secrets.RENDER_SERVICE_ID }}" ] || [ -z "${{ secrets.RENDER_API_KEY }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "⚠️ Render secrets not configured — skipping deploy"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger Render deploy
+        if: steps.check.outputs.skip != 'true'
+        run: |
           curl -s -X POST \
             "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
             -H "Content-Type: application/json" \
             -d '{"clearCache": false}'
+
       - name: Wait for live
+        if: steps.check.outputs.skip != 'true'
         run: |
           for i in $(seq 1 30); do
             STATUS=$(curl -s "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
@@ -28,7 +42,9 @@ jobs:
             sleep 10
           done
           exit 1
+
       - name: Smoke test
+        if: steps.check.outputs.skip != 'true'
         run: |
           CODE=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.STAGING_URL }}/health")
           [ "$CODE" = "200" ] || exit 1
@@ -36,11 +52,24 @@ jobs:
   production:
     runs-on: ubuntu-latest
     needs: staging
+    if: ${{ !cancelled() && needs.staging.result != 'failure' }}
     environment:
       name: production
       url: ${{ secrets.PRODUCTION_URL }}
     steps:
-      - run: |
+      - name: Check secrets
+        id: check
+        run: |
+          if [ -z "${{ secrets.RENDER_PROD_SERVICE_ID }}" ] || [ -z "${{ secrets.RENDER_API_KEY }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "⚠️ Production secrets not configured — skipping"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger production deploy
+        if: steps.check.outputs.skip != 'true'
+        run: |
           curl -s -X POST \
             "https://api.render.com/v1/services/${{ secrets.RENDER_PROD_SERVICE_ID }}/deploys" \
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
