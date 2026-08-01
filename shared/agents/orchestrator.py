@@ -197,40 +197,27 @@ class Orchestrator:
 
     def __init__(self, blender_service_url: str = "", output_dir: str = "/app/output"):
         # Все 20 агентов
-        self.agents: dict[str, BaseAgent] = {
-            # Pipeline (6)
-            "parser": ParserAgent(),
-            "geometry": GeometryAgent(),
-            "texture": TextureAgent(),
-            "render": RenderAgent(),
-            "export": ExportAgent(),
-            "quality": QualityAgent(),
-            # Intelligence (8)
-            "research": ResearchAgent(),
-            "market": MarketAgent(),
-            "concept": ConceptAgent(),
-            "masterplan": MasterplanAgent(),
-            "landscape": LandscapeAgent(),
-            "brand": BrandAgent(),
-            "financial": FinancialAgent(),
-            "presentation": PresentationAgent(),
-            # Specialized (6)
-            "style": StyleAgent(),
-            "lighting": LightingAgent(),
-            "furniture": FurnitureAgent(),
-            "mep": MEPAgent(),
-            "structural": StructuralAgent(),
-            "compliance": ComplianceAgent(),
-            # New v7.2
-            "el": ELAgent(),
-            "mep_bim": MEPBIMAgent(),
-        }
+        # Lazy-loaded agents (created on first use to save memory)
+        self._agent_names = [
+            "parser", "geometry", "texture", "render", "export", "quality",
+            "research", "market", "concept", "masterplan", "landscape",
+            "brand", "financial", "presentation", "style", "lighting",
+            "furniture", "mep", "structural", "compliance",
+        ]
+        self.agents: dict[str, BaseAgent] = {}
 
         self.clarification = ClarificationEngine()
         self.jobs: dict[str, dict] = {}
         self.blender_service_url = blender_service_url
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
+
+
+    def _get_agent(self, name: str) -> BaseAgent:
+        """Lazy-load agent on first use."""
+        if name not in self.agents:
+            self.agents[name] = _import_agent(name)
+        return self.agents[name]
 
     def execute(
         self,
@@ -665,7 +652,7 @@ class Orchestrator:
         }
         job["steps"].append(step_info)
 
-        agent = self.agents.get(task.agent)
+        agent = self._get_agent(task.agent) if task.agent in self._agent_names else self.agents.get(task.agent)
         if not agent:
             result = TaskResult(status=TaskStatus.FAILED, error=f"Agent '{task.agent}' not found")
             step_info["status"] = "failed"
