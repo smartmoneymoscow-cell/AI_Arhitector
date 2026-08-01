@@ -49,7 +49,9 @@ MOCK_RESPONSES = {
 }
 
 
-def _mock_call_llm(text, cfg):
+async def _mock_call_openrouter(model, prompt, timeout, api_key):
+    text = prompt
+
     for key, resp in MOCK_RESPONSES.items():
         if key in text or text in key:
             return resp
@@ -65,8 +67,9 @@ def _mock_call_llm(text, cfg):
 class TestRouter:
     """Тесты маршрутизации генерации."""
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_basic_building_route(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_basic_building_route(self, mock_keys, mock):
         plan = route_generation("двухэтажный кирпичный дом 10×12")
         assert plan.gen_type == "building"
         assert plan.params["building"]["W"] == 10.0
@@ -74,13 +77,15 @@ class TestRouter:
         assert plan.params["building"]["floors"] == 2
         assert plan.params["building"]["mat"] == "brick"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_interior_route(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_interior_route(self, mock_keys, mock):
         plan = route_generation("спальня в стиле хайтек")
         assert plan.gen_type == "interior"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_office_route(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_office_route(self, mock_keys, mock):
         plan = route_generation("офис 5 этажей стекло 20×24")
         assert plan.gen_type == "building"
         assert plan.params["building"]["floors"] == 5
@@ -88,52 +93,61 @@ class TestRouter:
         assert plan.params["building"]["L"] == 24.0
         assert plan.params["building"]["mat"] == "glass"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_cottage_template(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_cottage_template(self, mock_keys, mock):
         plan = route_generation("коттедж 12×15 дерево")
         assert plan.params["building"]["mat"] == "wood"
         assert plan.params["building"]["W"] == 12.0
         assert plan.params["building"]["L"] == 15.0
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_balcony_feature(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_balcony_feature(self, mock_keys, mock):
         plan = route_generation("дом с балконом")
         assert plan.params["building"].get("balcony") is True
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_garage_feature(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_garage_feature(self, mock_keys, mock):
         plan = route_generation("дом с гаражом")
         assert plan.params["building"].get("has_garage") is True
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_terrace_feature(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_terrace_feature(self, mock_keys, mock):
         plan = route_generation("коттедж с террасой")
         assert plan.params["building"].get("has_terrace") is True
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_style_hitech(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_style_hitech(self, mock_keys, mock):
         plan = route_generation("здание в стиле хайтек")
         assert plan.params["parsed"]["style"] == "hitech"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_style_loft(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_style_loft(self, mock_keys, mock):
         plan = route_generation("кухня в стиле лофт")
         assert plan.gen_type == "interior"
         assert plan.params["parsed"]["style"] == "loft"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_plan_has_steps(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_plan_has_steps(self, mock_keys, mock):
         plan = route_generation("дом 2 этажа")
         assert len(plan.steps) >= 3
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_plan_job_id(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_plan_job_id(self, mock_keys, mock):
         plan = route_generation("дом")
         assert plan.job_id is not None
         assert len(plan.job_id) == 8
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_default_template_fallback(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_default_template_fallback(self, mock_keys, mock):
         plan = route_generation("построй что-нибудь")
         assert plan.params["building"]["label"] in (
             "Жилой дом", "Офисный центр", "Загородный коттедж", "Таунхаус"
@@ -145,8 +159,9 @@ class TestRouter:
             for key in required:
                 assert key in tpl, f"Template '{name}' missing '{key}'"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_material_colors(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_material_colors(self, mock_keys, mock):
         plan = route_generation("деревянный дом")
         assert plan.params["building"]["fc"] == "#b8864e"
         assert plan.params["building"]["rc"] == "#3e2005"
@@ -160,8 +175,9 @@ TEST_OUTPUT = "/tmp/arch_test_output"
 
 
 class TestParserAgent:
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_parse_building(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_parse_building(self, mock_keys, mock):
         agent = ParserAgent()
         task = Task(name="parse", agent="parser", params={"prompt": "кирпичный дом"})
         result = agent.process(task)
@@ -169,16 +185,18 @@ class TestParserAgent:
         assert result.data["gen_type"] == "building"
         assert result.data["params"]["material"] == "brick"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_parse_interior(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_parse_interior(self, mock_keys, mock):
         agent = ParserAgent()
         task = Task(name="parse", agent="parser", params={"prompt": "кухня в стиле лофт"})
         result = agent.process(task)
         assert result.status == TaskStatus.DONE
         assert result.data["gen_type"] == "interior"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_confidence_score(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_confidence_score(self, mock_keys, mock):
         agent = ParserAgent()
         task = Task(name="parse", agent="parser", params={"prompt": "дом"})
         result = agent.process(task)
@@ -277,30 +295,36 @@ class TestExportAgent:
 # ═══════════════════════════════════════════════════════════════
 
 class TestOrchestrator:
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_full_building_execution(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    @pytest.mark.blender
+    def test_full_building_execution(self, mock_keys, mock):
         orch = Orchestrator(output_dir=TEST_OUTPUT)
         result = orch.execute("двухэтажный кирпичный дом 10×12")
         assert result["status"] == "done"
         assert result["result"]["gen_type"] == "building"
         assert len(result["steps"]) >= 3
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_full_interior_execution(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_full_interior_execution(self, mock_keys, mock):
         orch = Orchestrator(output_dir=TEST_OUTPUT)
         result = orch.execute("спальня в стиле минимализм", skip_clarification=True)
         assert result["status"] == "done"
         assert result["result"]["gen_type"] == "interior"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_job_id_unique(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_job_id_unique(self, mock_keys, mock):
         orch = Orchestrator(output_dir=TEST_OUTPUT)
         r1 = orch.execute("дом")
         r2 = orch.execute("дом")
         assert r1["job_id"] != r2["job_id"]
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_progress_tracking(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    @pytest.mark.blender
+    def test_progress_tracking(self, mock_keys, mock):
         orch = Orchestrator(output_dir=TEST_OUTPUT)
         result = orch.execute("дом 2 этажа", skip_clarification=True)
         progress = orch.get_progress(result["job_id"])
@@ -312,29 +336,35 @@ class TestOrchestrator:
         progress = orch.get_progress("nonexistent")
         assert "error" in progress
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_steps_timing(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_steps_timing(self, mock_keys, mock):
         orch = Orchestrator(output_dir=TEST_OUTPUT)
         result = orch.execute("офис 5 этажей стекло")
         for step in result["steps"]:
             assert "name" in step
             assert "status" in step
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_params_passed_to_geometry(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    @pytest.mark.blender
+    def test_params_passed_to_geometry(self, mock_keys, mock):
         orch = Orchestrator(output_dir=TEST_OUTPUT)
         result = orch.execute("деревянный коттедж 12×15")
         geom_step = next(s for s in result["steps"] if s["name"] == "geometry")
         assert geom_step["status"] == "done"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_material_in_result(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_material_in_result(self, mock_keys, mock):
         orch = Orchestrator(output_dir=TEST_OUTPUT)
         result = orch.execute("кирпичный дом")
         assert result["result"]["params"]["material"] == "brick"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_dimensions_in_result(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    @pytest.mark.blender
+    def test_dimensions_in_result(self, mock_keys, mock):
         orch = Orchestrator(output_dir=TEST_OUTPUT)
         result = orch.execute("дом 20×30")
         building = result["result"]["building_params"]
@@ -352,25 +382,29 @@ class TestEdgeCases:
         result = orch.execute("")
         assert result["status"] in ("done", "clarification_needed")
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_very_long_prompt(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_very_long_prompt(self, mock_keys, mock):
         orch = Orchestrator(output_dir=TEST_OUTPUT)
         result = orch.execute("дом " * 1000)
         assert result["status"] in ("done", "clarification_needed")
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_skip_clarification(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_skip_clarification(self, mock_keys, mock):
         orch = Orchestrator(output_dir=TEST_OUTPUT)
         result = orch.execute("построй дом", skip_clarification=True)
         assert result["status"] == "done"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_mixed_language(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_mixed_language(self, mock_keys, mock):
         plan = route_generation("modern house 2 floors brick 10x12")
         assert plan.gen_type == "building"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_numbers_only(self, mock):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
+    def test_numbers_only(self, mock_keys, mock):
         plan = route_generation("10×12×3")
         assert plan.gen_type == "building"
 

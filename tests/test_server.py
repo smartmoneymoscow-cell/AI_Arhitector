@@ -94,14 +94,14 @@ class TestParser:
 
     @patch("shared.parser._get_api_keys", return_value=["test-key"])
     @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
-    def test_parse_floors(self, mock):
+    def test_parse_floors(self, mock_keys, mock):
         from shared.parser import parse_prompt
         params = parse_prompt("двухэтажный дом")
         assert params["floors"] == 2
 
     @patch("shared.parser._get_api_keys", return_value=["test-key"])
     @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
-    def test_parse_dimensions(self, mock):
+    def test_parse_dimensions(self, mock_keys, mock):
         from shared.parser import parse_prompt
         params = parse_prompt("дом 10×12")
         assert params["width_m"] == 10
@@ -109,35 +109,35 @@ class TestParser:
 
     @patch("shared.parser._get_api_keys", return_value=["test-key"])
     @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
-    def test_parse_material_brick(self, mock):
+    def test_parse_material_brick(self, mock_keys, mock):
         from shared.parser import parse_prompt
         params = parse_prompt("кирпичный дом")
         assert params["material"] == "brick"
 
     @patch("shared.parser._get_api_keys", return_value=["test-key"])
     @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
-    def test_parse_material_wood(self, mock):
+    def test_parse_material_wood(self, mock_keys, mock):
         from shared.parser import parse_prompt
         params = parse_prompt("деревянный дом")
         assert params["material"] == "wood"
 
     @patch("shared.parser._get_api_keys", return_value=["test-key"])
     @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
-    def test_parse_roof_flat(self, mock):
+    def test_parse_roof_flat(self, mock_keys, mock):
         from shared.parser import parse_prompt
         params = parse_prompt("дом с плоской кровлей")
         assert params["roof_type"] == "flat"
 
     @patch("shared.parser._get_api_keys", return_value=["test-key"])
     @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
-    def test_parse_roof_gabled(self, mock):
+    def test_parse_roof_gabled(self, mock_keys, mock):
         from shared.parser import parse_prompt
         params = parse_prompt("дом с двускатной кровлей")
         assert params["roof_type"] == "gabled"
 
     @patch("shared.parser._get_api_keys", return_value=["test-key"])
     @patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter)
-    def test_parse_office_glass(self, mock):
+    def test_parse_office_glass(self, mock_keys, mock):
         from shared.parser import parse_prompt
         params = parse_prompt("офис 5 этажей стекло 20×24")
         assert params["floors"] == 5
