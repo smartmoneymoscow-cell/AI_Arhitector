@@ -58,39 +58,41 @@ def analyze_screenshot(screenshot_path: str, prompt: str, gen_type: str) -> dict
             f"Ответь кратко, затем выведи строку: MATCH_SCORE=<число>"
         )
 
-    # Try mimo_api.sh first, then fallback to mimo_api.py
-    script_dir = os.path.expanduser("~/.openclaw/skills/mimo-omni")
-    mimo_sh = os.path.join(script_dir, "mimo_api.sh")
-    mimo_py = os.path.join(script_dir, "mimo_api.py")
-
     vision_result = None
 
-    if os.path.exists(mimo_sh):
-        try:
-            proc = subprocess.run(
-                ["bash", mimo_sh, "image", screenshot_path, question, "--max-tokens", "4096"],
-                capture_output=True, text=True, timeout=120
-            )
-            vision_result = proc.stdout.strip()
-        except (subprocess.TimeoutExpired, Exception) as e:
-            result["issues"].append(f"mimo_api.sh failed: {e}")
+    # 1. Direct API call (most reliable in CI)
+    vision_result = _call_mimo_api_direct(screenshot_path, question)
 
-    if not vision_result and os.path.exists(mimo_py):
-        try:
-            proc = subprocess.run(
-                ["python3", mimo_py, "image", screenshot_path, question, "--max-tokens", "4096"],
-                capture_output=True, text=True, timeout=120
-            )
-            vision_result = proc.stdout.strip()
-        except (subprocess.TimeoutExpired, Exception) as e:
-            result["issues"].append(f"mimo_api.py failed: {e}")
+    # 2. Fallback: mimo_api.sh (local development)
+    if not vision_result:
+        script_dir = os.path.expanduser("~/.openclaw/skills/mimo-omni")
+        mimo_sh = os.path.join(script_dir, "mimo_api.sh")
+        if os.path.exists(mimo_sh):
+            try:
+                proc = subprocess.run(
+                    ["bash", mimo_sh, "image", screenshot_path, question, "--max-tokens", "4096"],
+                    capture_output=True, text=True, timeout=120
+                )
+                vision_result = proc.stdout.strip()
+            except (subprocess.TimeoutExpired, Exception) as e:
+                result["issues"].append(f"mimo_api.sh failed: {e}")
+
+    # 3. Fallback: mimo_api.py
+    if not vision_result:
+        mimo_py = os.path.join(os.path.expanduser("~/.openclaw/skills/mimo-omni"), "mimo_api.py")
+        if os.path.exists(mimo_py):
+            try:
+                proc = subprocess.run(
+                    ["python3", mimo_py, "image", screenshot_path, question, "--max-tokens", "4096"],
+                    capture_output=True, text=True, timeout=120
+                )
+                vision_result = proc.stdout.strip()
+            except (subprocess.TimeoutExpired, Exception) as e:
+                result["issues"].append(f"mimo_api.py failed: {e}")
 
     if not vision_result:
-        # Last resort: try direct API call
-        vision_result = _call_mimo_api_direct(screenshot_path, question)
-        if not vision_result:
-            result["issues"].append("All MiMo vision methods failed")
-            return result
+        result["issues"].append("All MiMo vision methods failed")
+        return result
 
     result["vision_analysis"] = vision_result
 
