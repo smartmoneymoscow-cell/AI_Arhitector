@@ -1,4 +1,3 @@
-# Gateway — lightweight, no Blender
 FROM python:3.11-slim AS builder
 WORKDIR /build
 COPY gateway/requirements.txt requirements.txt
@@ -9,10 +8,8 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY shared/ /app/shared/
 COPY gateway/ /app/gateway/
-COPY server.py /app/
-COPY index.html /app/
-COPY .env.example /app/
+COPY frontend/ /app/frontend/
 RUN mkdir -p /app/output
-EXPOSE 8080
 ENV PORT=8080 PYTHONUNBUFFERED=1
-CMD ["python", "gateway/app.py"]
+EXPOSE ${PORT}
+CMD ["sh", "-c", "uvicorn gateway.app:app --host 0.0.0.0 --port ${PORT}"]
