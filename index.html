@@ -2846,69 +2846,6 @@ function checkMobile(){
   if(!isMob){sb.style.transform='';const ov=document.getElementById('sb-overlay');if(ov)ov.style.display='none';}
 }
 window.addEventListener('resize',()=>{checkMobile();resizeR();if(ST.hasModel&&ST.view!=='ext'&&ST.view!=='int')draw2D(ST.view);});
-
-
-
-
-
-// ═══════════════════ VOICE INPUT ═══════════════════════════════
-let recognition = null;
-let isListening = false;
-
-function toggleMic() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    showNotif('Голосовой ввод не поддерживается', 'warn');
-    return;
-  }
-
-  const btn = document.getElementById('mic-btn');
-  const inp = document.getElementById('ci');
-
-  if (isListening && recognition) {
-    recognition.stop();
-    return;
-  }
-
-  recognition = new SpeechRecognition();
-  recognition.lang = 'ru-RU';
-  recognition.continuous = true;
-  recognition.interimResults = true;
-
-  recognition.onresult = (event) => {
-    let transcript = '';
-    for (let i = 0; i < event.results.length; i++) {
-      transcript += event.results[i][0].transcript;
-    }
-    if (inp) {
-      inp.value = transcript;
-      inp.style.height = 'auto';
-      inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
-    }
-  };
-
-  recognition.onstart = () => {
-    isListening = true;
-    if (btn) { btn.style.background = '#ef4444'; btn.textContent = '⏹'; }
-  };
-
-  recognition.onend = () => {
-    isListening = false;
-    recognition = null;
-    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
-  };
-
-  recognition.onerror = (e) => {
-    console.warn('Voice error:', e.error);
-    isListening = false;
-    recognition = null;
-    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
-    if (e.error === 'not-allowed') showNotif('Разрешите доступ к микрофону', 'warn');
-  };
-
-  recognition.start();
-}
-
 // ═══════════════════ SETTINGS ═══════════════════════════════
 function openSettings(){
   const m=document.getElementById('settings-modal');

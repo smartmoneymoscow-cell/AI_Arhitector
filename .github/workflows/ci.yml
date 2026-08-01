@@ -172,6 +172,51 @@ jobs:
           fi
 
   # ─────────────────────────────────────────────────────────────
+  # Frontend E2E Browser Tests (Playwright)
+  # ─────────────────────────────────────────────────────────────
+  test-e2e-browser:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Playwright
+        run: npx playwright install chromium --with-deps
+
+      - name: Validate JS syntax (no duplicate let/const in strict mode)
+        run: |
+          node -e "
+          const fs = require('fs');
+          const html = fs.readFileSync('index.html','utf8');
+          const m = html.match(/<script>([\s\S]*?)<\/script>/g);
+          let ok = true;
+          for (const block of m) {
+            const inner = block.replace(/<\/?script>/g,'');
+            if (inner.length < 1000) continue;
+            try { new Function(inner); } catch(e) {
+              if (e instanceof SyntaxError) {
+                console.error('❌ JS SyntaxError:', e.message);
+                ok = false;
+              }
+            }
+          }
+          if (!ok) process.exit(1);
+          console.log('✅ No JS syntax errors');
+          "
+
+      - name: E2E browser test — send button + chat
+        run: |
+          npx playwright test --reporter=line 2>/dev/null \
+            || node tests/test_e2e_browser.js http://localhost:8080/
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: /tmp/pw-browsers
+
+  # ─────────────────────────────────────────────────────────────
   # Docker Build (verify images compile)
   # ─────────────────────────────────────────────────────────────
   docker-build:
@@ -250,7 +295,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   ci-ok:
     if: always()
-    needs: [changes, lint-python, test-python, test-frontend, docker-build, nginx-validate, security]
+    needs: [changes, lint-python, test-python, test-frontend, test-e2e-browser, docker-build, nginx-validate, security]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
@@ -259,6 +304,7 @@ jobs:
           echo "lint-python:      ${{ needs.lint-python.result }}"
           echo "test-python:      ${{ needs.test-python.result }}"
           echo "test-frontend:    ${{ needs.test-frontend.result }}"
+          echo "test-e2e-browser: ${{ needs.test-e2e-browser.result }}"
           echo "docker-build:     ${{ needs.docker-build.result }}"
           echo "nginx-validate:   ${{ needs.nginx-validate.result }}"
           echo "security:         ${{ needs.security.result }}"
@@ -268,6 +314,7 @@ jobs:
             "${{ needs.lint-python.result }}" \
             "${{ needs.test-python.result }}" \
             "${{ needs.test-frontend.result }}" \
+            "${{ needs.test-e2e-browser.result }}" \
             "${{ needs.docker-build.result }}" \
             "${{ needs.security.result }}"; do
             if [ "$result" = "failure" ]; then
