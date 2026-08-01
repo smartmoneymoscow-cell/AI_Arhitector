@@ -54,3 +54,11 @@ ignore = [
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-x --tb=short"
+markers = [
+    "blender: tests requiring Blender (deselect with '-m \"not blender\"')",
+    "llm_external: tests requiring external LLM API (deselect with '-m \"not llm_external\"')",
+    "e2e: end-to-end tests (deselect with '-m \"not e2e\"')",
+]
