@@ -1655,7 +1655,7 @@ function addAnns(b,W,L,H){
 // ═══════════════════ GENERATION PIPELINE ════════════════════
 const GSTEPS_BUILDING=[{l:'Читаю описание'},{l:'Извлекаю параметры'},{l:'Планировка'},{l:'Фундамент и стены'},{l:'Фасад и материалы'},{l:'Кровля'},{l:'Окна и двери'},{l:'Интерьер + мебель'},{l:'Ландшафт'},{l:'Аннотации'}];
 const GSTEPS_INTERIOR=[{l:'Читаю описание'},{l:'Анализирую стиль'},{l:'Планировка помещения'},{l:'Стены и пол'},{l:'Мебель и расстановка'},{l:'Материалы и текстуры'},{l:'Освещение'},{l:'Декор и детали'},{l:'Финальная сборка'},{l:'Рендер'}];
-let GSTEPS=GSTEPS_BUILDING;
+var GSTEPS=GSTEPS_BUILDING;
 function renderGS(ai){
   const el=document.getElementById('gsteps');if(!el)return;
   el.innerHTML=GSTEPS.map((s,i)=>`<div class="gs ${i<ai?'done':i===ai?'active':''}">${i<ai?'✅':i===ai?'⟳':'○'} ${s.l}</div>`).join('');
