@@ -1,10 +1,16 @@
 """
-shared/parser.py — LLM-only парсер архитектурных промтов.
+llm-service/parser_flexible.py — FLEXIBLE LLM parsing with all fixes applied.
 
-v6.0 — БЕЗ REGEX FALLBACK.
-Каскад: сильная модель → средняя → слабая → бесплатные (7 моделей).
-Кеш: Redis (L2, 24h) + in-memory (L1, 5min).
-Если ВСЕ модели недоступны + кеш пуст → AllModelsFailedError (HTTP 503).
+Fixes:
+  L1  — Prompt sanitization (injection prevention)
+  L2  — Timeouts increased to 30-40s
+  L3  — Fallback OpenRouter key
+  L4  — Ollama local model fallback
+  L5  — Improved JSON extraction
+  L6  — threading.Lock for L1 cache (thread-safe)
+  L7  — Full sha256 hash (no truncation)
+  L8  — Model version in cache key (auto-invalidation)
+  L9  — Agent isolation (in orchestrator, not here)
 """
 
 import hashlib
@@ -12,174 +18,210 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 
 import httpx
-from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger("archai.parser")
 
 
 # ═══════════════════════════════════════════════════════════════
-# PYDANTIC VALIDATION — strict schema for LLM responses
+# SYSTEM PROMPT — FLEXIBLE, no hardcoded values
 # ═══════════════════════════════════════════════════════════════
 
+SYSTEM_PROMPT_VERSION = "v8.1"  # ← bump to invalidate all caches
 
-class LLMParsedResponse(BaseModel):
-    """Validated schema for LLM parser output."""
+SYSTEM_PROMPT = """Ты — парсер архитектурных описаний для 3D-генератора.
+Отвечай ТОЛЬКО валидным JSON. Никаких рассуждений, пояснений, markdown.
 
-    object_type: str = Field("building", pattern="^(building|interior|room)$")
-    building_type: str = Field(
-        "house", pattern="^(house|office|cottage|villa|apartment|townhouse|hotel|warehouse|school|bathhouse|tourism_complex|industrial|residential_complex)$"
-    )
-    room_type: str | None = Field(
-        None, pattern="^(bedroom|kitchen|living|bathroom|children|study|dining|hall|laundry)$"
-    )
-    floors: int = Field(2, ge=1, le=20)
-    width_m: int = Field(10, ge=1, le=200)
-    length_m: int = Field(12, ge=1, le=200)
-    height_m: float = Field(3.0, ge=1.0, le=50.0)
-    style: str = Field("modern")
-    material: str = Field("plaster")
-    roof_type: str = Field("gabled")
-    features: list[str] = Field(default_factory=list)
-    furniture: list[str] = Field(default_factory=list)
-    confidence: float = Field(0.5, ge=0.0, le=1.0)
+Твоя задача — понять контекст пользователя и передать параметры для 3D-генерации.
+НЕ ограничивайся списком — если пользователь просит что-то необычное (сарай, навес, 
+беседка, гараж, теплица, курятник, баня, бассейн, забор, ворота) — ты ОБЯЗАН это понять 
+и сгенерировать подходящие параметры.
 
-    @field_validator("style")
-    @classmethod
-    def validate_style(cls, v):
-        valid = {
-            "modern",
-            "classic",
-            "loft",
-            "scandinavian",
-            "minimalist",
-            "hitech",
-            "art_deco",
-            "baroque",
-            "brutalism",
-            "japandi",
-            "biophilic",
-            "industrial",
-            "colonial",
-            "mediterranean",
-            "provence",
-        }
-        return v if v in valid else "modern"
+Формат JSON (строго):
+{
+  "object_type": "building|interior|room|structure|landscape|element",
+  "building_type": "ЛЮБОЕ строковое значение — ты определяешь по контексту",
+  "building_description": "подробное описание что именно строим",
+  "room_type": "тип комнаты если интерьер, иначе null",
+  "floors": число этажей (1-20, для одноэтажных строений = 1),
+  "width_m": ширина в метрах (реалистичная для данного объекта),
+  "length_m": длина в метрах,
+  "height_m": высота в метрах (реалистичная),
+  "style": "стиль — ЛЮБОЕ значение: modern, classic, loft, rustic, medieval, japanese, и т.д.",
+  "material": "основной материал — ЛЮБОЕ значение: brick, wood, stone, metal, glass, concrete, plastic, fabric, и т.д.",
+  "roof_type": "тип крыши — ЛЮБОЕ значение: gabled, flat, hip, mansard, shed, dome, asymmetric, green, и т.д.",
+  "features": ["ЛЮБЫЕ особенности: balcony, terrace, garage, pool, garden, chimney, skylight, и т.д."],
+  "furniture": ["ЛЮБАЯ мебель/оборудование для интерьера"],
+  "special_requirements": ["ЛЮБЫЕ особые требования из промта"],
+  "confidence": 0.0-1.0 (насколько ты уверен в интерпретации),
+  "reasoning": "кратко почему ты решил именно так"
+}
 
-    @field_validator("material")
-    @classmethod
-    def validate_material(cls, v):
-        valid = {
-            "brick",
-            "wood",
-            "glass",
-            "stone",
-            "concrete",
-            "plaster",
-            "marble",
-            "granite",
-            "ceramic",
-            "metal",
-            "composite",
-            "aerated_concrete",
-            "foam_block",
-            "sip_panel",
-            "timber_frame",
-        }
-        return v if v in valid else "plaster"
+ПРАВИЛА:
+1. building_type — НЕ ограничивайся списком. Если "сарай" → "barn". Если "навес" → "carport".
+   Если "беседка" → "gazebo". Если "теплица" → "greenhouse". Если "курятник" → "chicken_coop".
+   
+2. material — НЕ ограничивайся. "из брёвен" → "log". "из соломы" → "straw".
+   
+3. style — НЕ ограничивайся. "в японском стиле" → "japanese". "средневековый" → "medieval".
 
-    @field_validator("roof_type")
-    @classmethod
-    def validate_roof_type(cls, v):
-        valid = {"gabled", "flat", "hip", "mansard", "shed", "dome"}
-        return v if v in valid else "gabled"
+4. Размеры — если не указаны, подбери РЕАЛИСТИЧНЫЕ:
+   Сарай: 3×4×2.5м. Беседка: 3×3×2.5м. Гараж: 6×3×3м. Дом: 10×12×3м.
 
-    @field_validator("features")
-    @classmethod
-    def validate_features(cls, v):
-        valid = {"balcony", "terrace", "garage", "pool", "garden", "basement", "attic", "chimney", "bay_window", "smart_home", "underfloor_heating", "solar_panels", "ev_charging", "sauna", "fireplace", "wine_cellar", "home_theater", "gym"}
-        return [f for f in v if f in valid]
+5. Русские слова: сарай=barn, навес=carport, беседка=gazebo, гараж=garage,
+   теплица=greenhouse, баня=bathhouse, курятник=chicken_coop, забор=fence,
+   ворота=gate, сруб=log_cabin, изба=izba.
+"""
 
-    @field_validator("furniture")
-    @classmethod
-    def validate_furniture(cls, v):
-        valid = {
-            "sofa",
-            "table",
-            "bed",
-            "chandelier",
-            "wardrobe",
-            "bookshelf",
-            "sink",
-            "stove",
-            "bathtub",
-            "chair",
-            "desk",
-            "nightstand",
-            "bench",
-            "washing_machine",
-            "shelf",
-            "chairs",
-        }
-        return [f for f in v if f in valid]
-
-
-OPENROUTER_BASE = os.environ.get("OPENROUTER_BASE", "https://openrouter.ai/api/v1")
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/1")
 
 # ═══════════════════════════════════════════════════════════════
-# LLM CASCADE — 7 моделей, от сильной к бесплатным
+# L3: FALLBACK API KEYS — multiple keys for resilience
+# ═══════════════════════════════════════════════════════════════
+
+def _get_api_keys() -> list[str]:
+    """Get all available API keys (primary + fallbacks)."""
+    keys = []
+    primary = os.environ.get("OPENROUTER_API_KEY", "")
+    if primary:
+        keys.append(primary)
+    
+    # L3: Fallback keys (comma-separated)
+    fallback = os.environ.get("OPENROUTER_FALLBACK_KEYS", "")
+    if fallback:
+        for k in fallback.split(","):
+            k = k.strip()
+            if k and k not in keys:
+                keys.append(k)
+    
+    return keys
+
+
+# ═══════════════════════════════════════════════════════════════
+# L4: OLLAMA LOCAL FALLBACK
+# ═══════════════════════════════════════════════════════════════
+
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "")  # e.g. "http://host.docker.internal:11434"
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
+
+
+# ═══════════════════════════════════════════════════════════════
+# LLM CASCADE
 # ═══════════════════════════════════════════════════════════════
 
 LLM_CASCADE = [
-    {"model": "google/gemini-2.5-pro", "tier": 1, "timeout": 20},
-    {"model": "anthropic/claude-sonnet-4", "tier": 1, "timeout": 20},
-    {"model": "google/gemini-2.5-flash", "tier": 2, "timeout": 15},
-    {"model": "openai/gpt-4o-mini", "tier": 2, "timeout": 15},
-    {"model": "meta-llama/llama-4-maverick:free", "tier": 3, "timeout": 30},
-    {"model": "qwen/qwen3-235b-a22b:free", "tier": 3, "timeout": 30},
-    {"model": "deepseek/deepseek-chat-v3-0324:free", "tier": 3, "timeout": 30},
+    {"model": "google/gemini-2.5-pro", "tier": 1, "timeout": 35},
+    {"model": "anthropic/claude-sonnet-4", "tier": 1, "timeout": 35},
+    {"model": "google/gemini-2.5-flash", "tier": 2, "timeout": 25},
+    {"model": "openai/gpt-4o-mini", "tier": 2, "timeout": 25},
+    {"model": "meta-llama/llama-4-maverick:free", "tier": 3, "timeout": 40},
+    {"model": "qwen/qwen3-235b-a22b:free", "tier": 3, "timeout": 40},
+    {"model": "deepseek/deepseek-chat-v3-0324:free", "tier": 3, "timeout": 40},
 ]
 
+
 # ═══════════════════════════════════════════════════════════════
-# L1 CACHE — in-memory
+# PROMPT SANITIZATION (L1: security)
+# ═══════════════════════════════════════════════════════════════
+
+def _sanitize_prompt(text: str) -> str:
+    """Sanitize user prompt before sending to LLM."""
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+    MAX_PROMPT_LENGTH = 2000
+    if len(text) > MAX_PROMPT_LENGTH:
+        text = text[:MAX_PROMPT_LENGTH] + "...(truncated)"
+    injection_patterns = [
+        r'ignore\s+(all\s+)?previous\s+instructions',
+        r'you\s+are\s+now\s+',
+        r'system\s*:\s*',
+        r'<\|im_start\|>',
+        r'<\|im_end\|>',
+        r'###\s*System',
+        r'forget\s+(all\s+)?instructions',
+    ]
+    for pattern in injection_patterns:
+        text = re.sub(pattern, '[FILTERED]', text, flags=re.IGNORECASE)
+    return text.strip()
+
+
+# ═══════════════════════════════════════════════════════════════
+# JSON EXTRACTION (L5: improved)
+# ═══════════════════════════════════════════════════════════════
+
+def _extract_json(text: str) -> dict | None:
+    """Extract JSON from LLM response, handling various formats."""
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    text = re.sub(r"<reasoning>.*?</reasoning>", "", text, flags=re.DOTALL)
+    
+    md = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if md:
+        try:
+            return json.loads(md.group(1))
+        except json.JSONDecodeError:
+            pass
+    
+    depth, start = 0, -1
+    for i, ch in enumerate(text):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start >= 0:
+                try:
+                    return json.loads(text[start : i + 1])
+                except json.JSONDecodeError:
+                    start = -1
+    
+    try:
+        return json.loads(text.strip())
+    except json.JSONDecodeError:
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# CACHE — L1 (thread-safe) + L2 (Redis)
+# L6: threading.Lock
+# L7: full sha256
+# L8: model version in key
 # ═══════════════════════════════════════════════════════════════
 
 _l1: dict[str, tuple[float, dict]] = {}
+_l1_lock = threading.Lock()  # L6: thread-safe
 _L1_TTL = 300
 _L1_MAX = 1000
 
 
 def _key(text: str) -> str:
-    return hashlib.sha256(text.strip().lower().encode()).hexdigest()[:16]
+    """L7: Full sha256 hash (no truncation). L8: includes model version."""
+    content = f"{SYSTEM_PROMPT_VERSION}:{text.strip().lower()}"
+    return hashlib.sha256(content.encode()).hexdigest()  # L7: full 64 chars
 
 
 def _l1_get(text: str) -> dict | None:
     k = _key(text)
-    if k in _l1:
-        ts, val = _l1[k]
-        if time.time() - ts < _L1_TTL:
-            return val
-        del _l1[k]
+    with _l1_lock:  # L6: thread-safe read
+        if k in _l1:
+            ts, val = _l1[k]
+            if time.time() - ts < _L1_TTL:
+                return val
+            del _l1[k]
     return None
 
 
 def _l1_set(text: str, val: dict) -> None:
-    if len(_l1) >= _L1_MAX:
-        oldest = min(_l1, key=lambda k: _l1[k][0])
-        del _l1[oldest]
-    _l1[_key(text)] = (time.time(), val)
+    k = _key(text)
+    with _l1_lock:  # L6: thread-safe write
+        if len(_l1) >= _L1_MAX:
+            oldest = min(_l1, key=lambda x: _l1[x][0])
+            del _l1[oldest]
+        _l1[k] = (time.time(), val)
 
-
-# ═══════════════════════════════════════════════════════════════
-# L2 CACHE — Redis
-# ═══════════════════════════════════════════════════════════════
 
 _redis = None
-
 
 def _get_redis():
     global _redis
@@ -187,8 +229,8 @@ def _get_redis():
         return _redis
     try:
         import redis
-
-        _redis = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=2)
+        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/1")
+        _redis = redis.from_url(redis_url, decode_responses=True, socket_timeout=2)
         _redis.ping()
         return _redis
     except Exception:
@@ -217,570 +259,241 @@ def _l2_set(text: str, val: dict) -> None:
         pass
 
 
+class AllModelsFailedError(Exception):
+    pass
+
+
 # ═══════════════════════════════════════════════════════════════
-# JSON EXTRACTION
+# LLM CALL — with key rotation (L3) + ollama fallback (L4)
 # ═══════════════════════════════════════════════════════════════
 
-
-def _extract_json(text: str) -> dict | None:
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
-    text = re.sub(r"<reasoning>.*?</reasoning>", "", text, flags=re.DOTALL)
-
-    md = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if md:
-        try:
-            return json.loads(md.group(1))
-        except json.JSONDecodeError:
-            pass
-
-    depth, start = 0, -1
-    for i, ch in enumerate(text):
-        if ch == "{":
-            if depth == 0:
-                start = i
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0 and start >= 0:
-                try:
-                    return json.loads(text[start : i + 1])
-                except json.JSONDecodeError:
-                    start = -1
-
+async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) -> dict | None:
+    """Call a single LLM model via OpenRouter with given key."""
+    base_url = os.environ.get("OPENROUTER_BASE", "https://openrouter.ai/api/v1")
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+        "HTTP-Referer": "https://archai.app",
+        "X-Title": "Architect Parser",
+    }
+    
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": 1024,
+        "temperature": 0.1,
+    }
+    
     try:
-        return json.loads(text.strip())
-    except json.JSONDecodeError:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(
+                f"{base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=timeout,
+            )
+        
+        if r.status_code == 429:
+            logger.warning("LLM %s rate-limited, trying next key/model", model)
+            return None  # signal to try next key
+        
+        if r.status_code != 200:
+            logger.warning("LLM %s returned %d", model, r.status_code)
+            return None
+        
+        data = r.json()
+        content = data["choices"][0]["message"]["content"]
+        return _extract_json(content)
+    
+    except httpx.TimeoutException:
+        logger.warning("LLM %s timeout (%ds)", model, timeout)
+        return None
+    except Exception as e:
+        logger.warning("LLM %s error: %s", model, e)
         return None
 
 
-# ═══════════════════════════════════════════════════════════════
-# SYSTEM PROMPT
-# ═══════════════════════════════════════════════════════════════
-
-SYSTEM_PROMPT = """Ты — парсер архитектурных описаний для 3D-генератора.
-Отвечай ТОЛЬКО валидным JSON. Никаких рассуждений, пояснений, markdown.
-
-Формат (строго JSON):
-{
-  "object_type": "building|interior|room",
-  "building_type": "house|office|cottage|villa|apartment|townhouse|hotel|warehouse|school",
-  "room_type": "bedroom|kitchen|living|bathroom|children|study|dining|hall|laundry|null",
-  "floors": 2,
-  "width_m": 10,
-  "length_m": 12,
-  "height_m": 3,
-  "style": "modern|classic|loft|scandinavian|minimalist|hitech|art_deco|baroque|brutalism|japandi|biophilic|industrial|colonial|mediterranean|provence",
-  "material": "brick|wood|glass|stone|concrete|plaster|marble|granite|ceramic|metal|composite|aerated_concrete|foam_block|sip_panel|timber_frame",
-  "roof_type": "gabled|flat|hip|mansard|shed|dome",
-  "features": ["balcony","terrace","garage","pool","garden","basement","attic","chimney","bay_window"],
-  "furniture": ["sofa","table","bed","chandelier","wardrobe","bookshelf"],
-  "confidence": 0.0-1.0
-}
-
-Правила:
-- "детская/спальня/кухня/гостиная/ванная/прихожая" → object_type="room"
-- "интерьер/дизайн интерьера" → object_type="interior"
-- "дом/здание/коттедж/офис/таунхаус" → object_type="building"
-- Размеры в метрах. "64 кв м" → width_m=8, length_m=8
-- Если room_type определён, а furniture не указан → подобрать дефолтную мебель
-- confidence: 1.0 если все параметры явны, 0.3 если додумываешь
-
-Дополнительные типы объектов:
-- "баня/сауна" → building_type="bathhouse"
-- "таунхаус" → building_type="townhouse"
-- "туристический комплекс/курорт/отель" → building_type="tourism_complex"
-- "электрика/умный дом/проводка" → special_task="electrical"
-- "ландшафт/участок/генплан" → special_task="landscape"
-- "ОВиК/вентиляция/отопление/водоснабжение" → special_task="mep"
-- "Ревит/Revit/рабочая документация" → special_task="revit_documentation"
-- "смета/стоимость" → special_task="cost_estimate"
-- "дизайн проект/интерьер" → special_task="interior_design"
-
-Если в промте есть фото/зарисовки → special_task="sketch_recognition"
-"""
+async def _call_ollama(prompt: str) -> dict | None:
+    """L4: Call local Ollama model as last resort."""
+    if not OLLAMA_URL:
+        return None
+    
+    logger.info("Trying Ollama fallback: %s at %s", OLLAMA_MODEL, OLLAMA_URL)
+    
+    payload = {
+        "model": OLLAMA_MODEL,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "stream": False,
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(
+                f"{OLLAMA_URL}/api/chat",
+                json=payload,
+                timeout=60,
+            )
+        
+        if r.status_code != 200:
+            logger.warning("Ollama returned %d", r.status_code)
+            return None
+        
+        data = r.json()
+        content = data.get("message", {}).get("content", "")
+        return _extract_json(content)
+    
+    except Exception as e:
+        logger.warning("Ollama error: %s", e)
+        return None
 
 
 # ═══════════════════════════════════════════════════════════════
 # VALIDATION
 # ═══════════════════════════════════════════════════════════════
 
-_VALID = {
-    "object_type": {"building", "interior", "room"},
-    "building_type": {"house", "office", "cottage", "villa", "apartment", "townhouse", "hotel", "warehouse", "school", "bathhouse", "tourism_complex", "industrial", "residential_complex"},
-    "room_type": {"bedroom", "kitchen", "living", "bathroom", "children", "study", "dining", "hall", "laundry"},
-    "style": {
-        "modern",
-        "classic",
-        "loft",
-        "scandinavian",
-        "minimalist",
-        "hitech",
-        "art_deco",
-        "baroque",
-        "brutalism",
-        "japandi",
-        "biophilic",
-        "industrial",
-        "colonial",
-        "mediterranean",
-        "provence",
-    },
-    "material": {
-        "brick",
-        "wood",
-        "glass",
-        "stone",
-        "concrete",
-        "plaster",
-        "marble",
-        "granite",
-        "ceramic",
-        "metal",
-        "composite",
-        "aerated_concrete",
-        "foam_block",
-        "sip_panel",
-        "timber_frame",
-        "lstk",
-        "monolithic_concrete",
-        "hybrid_rbc_lstk",
-        "gas_block",
-        "keramzit_block",
-    },
-    "roof_type": {"gabled", "flat", "hip", "mansard", "shed", "dome"},
-    "features": {"balcony", "terrace", "garage", "pool", "garden", "basement", "attic", "chimney", "bay_window", "smart_home", "underfloor_heating", "solar_panels", "ev_charging", "sauna", "fireplace", "wine_cellar", "home_theater", "gym"},
-}
-
-_DEFAULTS = {
-    "object_type": "building",
-    "building_type": "house",
-    "room_type": None,
-    "floors": 2,
-    "width_m": 10,
-    "length_m": 12,
-    "height_m": 3,
-    "style": "modern",
-    "material": "plaster",
-    "roof_type": "gabled",
-    "features": [],
-    "furniture": [],
-    "confidence": 0.5,
-}
-
-_FURNITURE = {
-    "bedroom": ["bed", "wardrobe", "nightstand"],
-    "children": ["bed", "desk", "bookshelf"],
-    "kitchen": ["table", "sink", "stove"],
-    "living": ["sofa", "table", "chandelier"],
-    "bathroom": ["sink", "bathtub"],
-    "study": ["desk", "bookshelf", "chair"],
-    "dining": ["table", "chairs"],
-    "hall": ["wardrobe", "bench"],
-    "laundry": ["washing_machine", "shelf"],
-}
+def _validate_result(result: dict) -> bool:
+    """Minimal validation — only check essential fields."""
+    if not result.get("object_type"):
+        return False
+    w = result.get("width_m", 0)
+    l = result.get("length_m", 0)
+    if w <= 0 or l <= 0 or w > 500 or l > 500:
+        return False
+    floors = result.get("floors", 0)
+    if floors <= 0 or floors > 50:
+        return False
+    return True
 
 
-def _detect_complexity(prompt: str) -> dict:
+def _minimal_defaults(reason: str) -> dict:
+    """Absolute minimal defaults when everything fails."""
+    return {
+        "object_type": "building",
+        "building_type": "house",
+        "building_description": reason,
+        "floors": 2,
+        "width_m": 10,
+        "length_m": 12,
+        "height_m": 3.0,
+        "style": "modern",
+        "material": "plaster",
+        "roof_type": "gabled",
+        "features": [],
+        "furniture": [],
+        "confidence": 0.1,
+        "reasoning": reason,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# MAIN PARSE FUNCTION
+# ═══════════════════════════════════════════════════════════════
+
+async def parse_prompt_async(text: str) -> dict:
     """
-    Fallback complexity detection when LLM doesn't return complexity fields.
-    Analyzes prompt keywords to determine complexity and pipeline profile.
+    Parse architectural prompt using LLM cascade.
+    
+    L1: Prompt sanitized (injection prevention)
+    L2: Timeouts 30-40s
+    L3: Multiple API keys with rotation
+    L4: Ollama local fallback
+    L6: Thread-safe L1 cache
+    L7: Full sha256 hash
+    L8: Model version in cache key
     """
-    p = prompt.lower()
-
-    enterprise_kw = [
-        "инвестиц", "инвестмодел", "инвестор", "презентация для инвесторов",
-        "капитализац", "окупаемость", "ebitda", "финансовая модель",
-        "сценарии развития", "очереди строительства", "дорожная карта",
-        "дом", "коттедж", "здание", "таунхаус", "вилла",
-    ]
-    enterprise_count = sum(1 for kw in enterprise_kw if kw in p)
-
-    complex_kw = [
-        "мастер-план", "мастерплан", "генплан", "генеральный план",
-        "туристическ", "курорт", "санатори", "гостиничн", "отель",
-        "комплекс", "зонирован", "территори", "многофункционал",
-        "swot", "конкурент", "целевая аудитория",
-        "архитектурная концепция", "легенда", "идентичност",
-    ]
-    complex_count = sum(1 for kw in complex_kw if kw in p)
-
-    result = {}
-
-    # Ландшафт (check early to override complex)
-    landscape_kw = ["ландшафт", "участок", "генплан", "беседк", "дорожк", "газон",
-                     "деревья", "клумб", "забор", "мощен", "бассейн на участке", "соток"]
-    landscape_count = sum(1 for kw in landscape_kw if kw in p)
-    if landscape_count >= 1 and "мастер" not in p and "комплекс" not in p:
-        result["special_task"] = "landscape"
-        result["pipeline_profile"] = "landscape"
-        return result
-
-    if enterprise_count >= 3:
-        result["complexity"] = "enterprise"
-        result["pipeline_profile"] = "premium"
-        result["object_type"] = "investment_concept"
-    elif complex_count >= 3:
-        result["complexity"] = "complex"
-        result["pipeline_profile"] = "full"
-        if any(kw in p for kw in ["туристическ", "курорт", "санатори", "отель", "гостиниц"]):
-            result["object_type"] = "tourism_complex"
-            result["building_type"] = "tourism_complex"
-            result["project_type"] = "tourism"
-        elif any(kw in p for kw in ["мастер-план", "мастерплан", "генплан"]):
-            result["object_type"] = "masterplan"
-        else:
-            result["object_type"] = "complex"
-
-    deliverables = []
-    deliverable_map = {
-        "swot": "swot_analysis", "инвестиц": "financial_model",
-        "презентац": "presentation", "мастер-план": "masterplan",
-        "мастерплан": "masterplan", "генплан": "masterplan",
-        "зонирован": "zoning", "окупаем": "payback_analysis",
-        "капитализац": "capitalization", "визуал": "visualization",
-        "очеред": "phasing", "сценари": "scenario_analysis",
-    }
-    for kw, deliverable in deliverable_map.items():
-        if kw in p and deliverable not in deliverables:
-            deliverables.append(deliverable)
-    if deliverables:
-        result["deliverables"] = deliverables
-
-    services = []
-    service_map = {
-        "гостиниц": "hotel", "отель": "hotel", "туристическ": "hotel",
-        "спа": "spa", "ресторан": "restaurant", "горные лыжи": "ski", "лыж": "ski",
-        "пляж": "beach", "конференц": "conference", "детск": "kids_club",
-        "бассейн": "pool", "фитнес": "fitness", "сауна": "sauna",
-    }
-    for kw, svc in service_map.items():
-        if kw in p and svc not in services:
-            services.append(svc)
-    if services:
-        result["services"] = services
-
-    location_patterns = [
-        r"в\s+([А-Яа-яё]+(?:\s+[А-Яа-яё]+)*(?:\s+(?:области|крае|республике|округе)))",
-    ]
-    for pat in location_patterns:
-        m = re.search(pat, prompt)
-        if m:
-            result["location"] = m.group(1)
-            break
-
-    audience = []
-    audience_map = {
-        "инвестор": "investors", "девелопер": "developers",
-        "турист": "tourists", "семь": "families",
-        "корпорат": "corporate", "бизнес": "business",
-    }
-    for kw, aud in audience_map.items():
-        if kw in p and aud not in audience:
-            audience.append(aud)
-    if audience:
-        result["target_audience"] = audience
-
-    requirements = []
-    req_map = {
-        "swot": "SWOT-анализ", "инвестиционная модель": "инвестиционная модель",
-        "презентация для инвесторов": "презентация для инвесторов",
-        "мастер-план": "мастер-план", "зонирование": "зонирование",
-        "финансовая модель": "_financial_model_excel",
-        "окупаемость": "расчет окупаемости", "капитализация": "оценка капитализации",
-        "архитектурная концепция": "архитектурная концепция",
-    }
-    for kw, req in req_map.items():
-        if kw in p and req not in requirements:
-            requirements.append(req)
-    if requirements:
-        result["key_requirements"] = requirements
-
-    # Электрика и умный дом
-    electrical_kw = ["электрик", "электрик", "проводк", "умный дом", "smart home", "автомат", "узо", "щит",
-                     "кабельн", "трасс", "розетк", "выключател", "освещен", "однолинейн",
-                     "электрика", "электрическ"]
-    electrical_count = sum(1 for kw in electrical_kw if kw in p)
-    if electrical_count >= 2:
-        result["special_task"] = "electrical"
-        result["pipeline_profile"] = "electrical"
-
-    # Бани и сауны
-    bathhouse_kw = ["бан", "саун", "парилк", "дымоход", "печь дровян", "мойк"]
-    bathhouse_count = sum(1 for kw in bathhouse_kw if kw in p)
-    if bathhouse_count >= 1:
-        result["special_task"] = "bathhouse"
-        result["building_type"] = "bathhouse"
-        result["pipeline_profile"] = "bathhouse"
-
-    # Ландшафт
-    landscape_kw = ["ландшафт", "участок", "генплан", "беседк", "дорожк", "газон",
-                     "деревья", "клумб", "забор", "мощен", "бассейн на участке"]
-    landscape_count = sum(1 for kw in landscape_kw if kw in p)
-    if landscape_count >= 1 and "мастер" not in p:
-        result["special_task"] = "landscape"
-        result["pipeline_profile"] = "full"
-
-    # MEP (инженерные системы)
-    mep_kw = ["отоплен", "вентиляц", "водоснабж", "канализац", "кондиционер", "теплый пол",
-              "хвс", "гвс", "стояк", "коллектор", "бойлер", "котельн"]
-    mep_count = sum(1 for kw in mep_kw if kw in p)
-    if mep_count >= 2:
-        result["special_task"] = "mep"
-        result["pipeline_profile"] = "mep_documentation"
-
-    # Revit / рабочая документация
-    revit_kw = ["revit", "ревит", "рабочая документац", "стадия р", "autocad", "автокад",
-                "чертеж", "спецификац", "гост 21.1101"]
-    revit_count = sum(1 for kw in revit_kw if kw in p)
-    if revit_count >= 1:
-        result["special_task"] = "revit_documentation"
-        result["pipeline_profile"] = "mep_documentation"
-
-    # Дизайн-проект интерьера
-    interior_kw = ["дизайн проект", "дизайн-проект", "отделк", "перегородк",
-                    "меблировк", "визуализация интерьера", "спальня", "гостиная", "кухня",
-                    "ванная", "детская", "прихожая", "интерьер"]
-    interior_count = sum(1 for kw in interior_kw if kw in p)
-    if interior_count >= 1:
-        result["special_task"] = "interior_design"
-        result["object_type"] = "interior"
-        result["pipeline_profile"] = "interior_full"
-
-    # Смета и стоимость
-    cost_kw = ["смет", "стоимость строительств", "бюджет", "расценк", "смета на"]
-    cost_count = sum(1 for kw in cost_kw if kw in p)
-    if cost_count >= 1:
-        result["special_task"] = "cost_estimate"
-
-    return result
-
-
-def _validate(raw: dict) -> dict:
-    """Validate raw LLM output using Pydantic schema (strict validation)."""
-    try:
-        validated = LLMParsedResponse(**raw)
-        result = validated.model_dump()
-    except Exception as e:
-        logger.warning("Pydantic validation failed: %s — using fallback", e)
-        result = {**_DEFAULTS, "features": [], "furniture": []}
-        for field, valid in _VALID.items():
-            val = raw.get(field)
-            if field == "features":
-                result["features"] = [f for f in (val or []) if f in valid] if isinstance(val, list) else []
-            elif field == "room_type":
-                result["room_type"] = (
-                    val if val and val in valid else ("living" if raw.get("object_type") == "room" else None)
-                )
-            else:
-                result[field] = val if val in valid else _DEFAULTS[field]
-        floors = raw.get("floors", 2)
-        result["floors"] = floors if isinstance(floors, int) and 1 <= floors <= 20 else 2
-        for key in ("width_m", "length_m", "height_m"):
-            val = raw.get(key, _DEFAULTS[key])
-            result[key] = (
-                (int if key != "height_m" else float)(val)
-                if isinstance(val, (int, float)) and 1 <= val <= 200
-                else _DEFAULTS[key]
-            )
-        conf = raw.get("confidence", 0.5)
-        result["confidence"] = max(0.0, min(1.0, conf)) if isinstance(conf, (int, float)) else 0.5
-
-    # Auto-fill furniture if room_type is set but furniture is empty
-    if result.get("room_type") and not result.get("furniture"):
-        result["furniture"] = _FURNITURE.get(result["room_type"], ["sofa", "table"])
-
-    # Auto-detect complexity if LLM didn't provide it
-    if result.get("complexity", "simple") == "simple" and not result.get("deliverables"):
-        prompt_text = raw.get("_prompt_text", "")
-        if prompt_text:
-            detected = _detect_complexity(prompt_text)
-            if detected:
-                for key, val in detected.items():
-                    if key not in result or not result[key] or result[key] == _DEFAULTS.get(key):
-                        result[key] = val
-
-    return result
-
-
-# ═══════════════════════════════════════════════════════════════
-# LLM CALLS
-# ═══════════════════════════════════════════════════════════════
-
-
-def _call_llm(text: str, cfg: dict) -> dict | None:
-    if not OPENROUTER_API_KEY:
-        return None
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {OPENROUTER_API_KEY}"}
-    payload = {
-        "model": cfg["model"],
-        "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": text}],
-        "max_tokens": 500,
-        "temperature": 0.1,
-    }
-    try:
-        r = httpx.post(
-            f"{OPENROUTER_BASE}/chat/completions", headers=headers, json=payload, timeout=cfg.get("timeout", 15)
-        )
-        if r.status_code == 200:
-            content = r.json()["choices"][0]["message"]["content"]
-            parsed = _extract_json(content)
-            if parsed:
-                logger.info(f"LLM ok: {cfg['model']}")
-                return parsed
-            logger.warning(f"LLM non-JSON: {cfg['model']}: {content[:200]}")
-        elif r.status_code == 429:
-            logger.warning(f"LLM rate limited: {cfg['model']}")
-        else:
-            logger.warning(f"LLM {cfg['model']}: HTTP {r.status_code}")
-    except httpx.TimeoutException:
-        logger.warning(f"LLM timeout: {cfg['model']}")
-    except Exception as e:
-        logger.warning(f"LLM error ({cfg['model']}): {e}")
-    return None
-
-
-async def _call_llm_async(text: str, cfg: dict) -> dict | None:
-    if not OPENROUTER_API_KEY:
-        return None
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {OPENROUTER_API_KEY}"}
-    payload = {
-        "model": cfg["model"],
-        "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": text}],
-        "max_tokens": 500,
-        "temperature": 0.1,
-    }
-    try:
-        async with httpx.AsyncClient() as client:
-            r = await client.post(
-                f"{OPENROUTER_BASE}/chat/completions", headers=headers, json=payload, timeout=cfg.get("timeout", 15)
-            )
-        if r.status_code == 200:
-            content = r.json()["choices"][0]["message"]["content"]
-            parsed = _extract_json(content)
-            if parsed:
-                logger.info(f"LLM async ok: {cfg['model']}")
-                return parsed
-    except Exception:
-        pass
-    return None
-
-
-# ═══════════════════════════════════════════════════════════════
-# MAIN — LLM-ONLY, NO REGEX
-# ═══════════════════════════════════════════════════════════════
-
-
-class AllModelsFailedError(Exception):
-    pass
-
-
-def parse_prompt(text: str) -> dict:
-    if not text or not text.strip():
-        return {**_DEFAULTS, "features": [], "furniture": []}
+    text = _sanitize_prompt(text)
+    if not text:
+        return _minimal_defaults("Empty prompt")
+    
+    # L1 cache
     cached = _l1_get(text)
     if cached:
         return cached
+    
+    # L2 cache
     cached = _l2_get(text)
     if cached:
         _l1_set(text, cached)
         return cached
-    for cfg in LLM_CASCADE:
-        raw = _call_llm(text, cfg)
-        if raw:
-            val = _validate(raw)
-            _l1_set(text, val)
-            _l2_set(text, val)
-            return val
+    
+    # L3: Get all available keys
+    api_keys = _get_api_keys()
+    if not api_keys:
+        logger.error("No OPENROUTER_API_KEY configured")
+        # L4: Try Ollama as last resort
+        result = await _call_ollama(text)
+        if result and _validate_result(result):
+            _l1_set(text, result)
+            _l2_set(text, result)
+            return result
+        raise AllModelsFailedError("No API keys configured and Ollama unavailable")
+    
+    # LLM cascade with key rotation (L3)
+    for model_config in LLM_CASCADE:
+        model = model_config["model"]
+        timeout = model_config["timeout"]
+        
+        for key_idx, api_key in enumerate(api_keys):
+            logger.info("Trying LLM: %s (key %d/%d)", model, key_idx + 1, len(api_keys))
+            result = await _call_openrouter(model, text, timeout, api_key)
+            
+            if result and _validate_result(result):
+                _l1_set(text, result)
+                _l2_set(text, result)
+                logger.info("LLM %s parsed successfully: %s", model, result.get("building_type"))
+                return result
+            
+            if result is not None:
+                # Got response but invalid — try next model, not next key
+                break
+    
+    # L4: All OpenRouter models failed → try Ollama
+    logger.warning("All OpenRouter models failed, trying Ollama fallback")
+    result = await _call_ollama(text)
+    if result and _validate_result(result):
+        _l1_set(text, result)
+        _l2_set(text, result)
+        logger.info("Ollama fallback succeeded: %s", result.get("building_type"))
+        return result
+    
     raise AllModelsFailedError(
-        "Все 7 LLM-моделей недоступны и кеш парсинга пуст. Проверьте OPENROUTER_API_KEY и доступность openrouter.ai"
+        f"All {len(LLM_CASCADE)} LLM models (+ Ollama) failed for prompt: {text[:100]}..."
     )
 
 
-async def parse_prompt_async(text: str) -> dict:
-    if not text or not text.strip():
-        return {**_DEFAULTS, "features": [], "furniture": []}
-    cached = _l1_get(text)
-    if cached:
-        return cached
-    cached = _l2_get(text)
-    if cached:
-        _l1_set(text, cached)
-        return cached
-    for cfg in LLM_CASCADE:
-        raw = await _call_llm_async(text, cfg)
-        if raw:
-            val = _validate(raw)
-            _l1_set(text, val)
-            _l2_set(text, val)
-            return val
-    raise AllModelsFailedError("Все 7 LLM-моделей недоступны и кеш парсинга пуст.")
-
-
-# ═══════════════════════════════════════════════════════════════
-# COMPATIBILITY ALIASES (для существующего кода)
-# ═══════════════════════════════════════════════════════════════
-
-parse_prompt_sync = parse_prompt  # sync alias
-
-
-def get_generation_type(params: dict) -> str:
-    obj_type = params.get("object_type", "building")
-    if obj_type in ("interior", "room"):
-        return "interior"
-    if obj_type in ("masterplan", "complex", "tourism_complex", "investment_concept", "urban_planning", "mixed_use"):
-        return obj_type
-    return "building"
-
-
-def get_pipeline_profile(params: dict) -> str:
-    """Determine pipeline profile from parsed params."""
-    profile = params.get("pipeline_profile")
-    if profile and profile in ("quick", "standard", "full", "premium", "interior", "presentation",
-                                "electrical", "bathhouse", "landscape", "mep_documentation", "interior_full"):
-        return profile
-
-    # Special task routing
-    special_task = params.get("special_task", "")
-    if special_task == "electrical":
-        return "electrical"
-    if special_task == "bathhouse":
-        return "bathhouse"
-    if special_task == "landscape":
-        return "landscape"
-    if special_task == "mep":
-        return "mep_documentation"
-    if special_task == "revit_documentation":
-        return "mep_documentation"
-    if special_task == "interior_design":
-        return "interior_full"
-
-    complexity = params.get("complexity", "simple")
-    obj_type = params.get("object_type", "building")
-    if complexity == "enterprise":
-        return "premium"
-    if complexity == "complex":
-        return "full"
-    if obj_type in ("interior", "room"):
-        return "interior"
-    if any(d in params.get("deliverables", []) for d in ["presentation"]):
-        return "presentation"
-    return "standard"
-
-
 def get_cache_stats() -> dict:
-    r = _get_redis()
-    redis_keys = 0
-    if r:
-        try:
-            redis_keys = len(r.keys("parse:*"))
-        except Exception:
-            pass
+    """Cache statistics for health endpoint."""
+    with _l1_lock:
+        l1_count = len(_l1)
+    redis_ok = _get_redis() is not None
     return {
-        "l1_entries": len(_l1),
+        "l1_entries": l1_count,
         "l1_max": _L1_MAX,
         "l1_ttl": _L1_TTL,
-        "l2_redis_entries": redis_keys,
-        "l2_ttl": 86400,
-        "llm_cascade": [m["model"] for m in LLM_CASCADE],
-        "redis_connected": r is not None,
+        "redis_connected": redis_ok,
+        "system_prompt_version": SYSTEM_PROMPT_VERSION,
+        "api_keys_configured": len(_get_api_keys()),
+        "ollama_configured": bool(OLLAMA_URL),
+        "llm_cascade": [{"model": m["model"], "tier": m["tier"]} for m in LLM_CASCADE],
     }
+
+
+def parse_prompt_sync(text: str) -> dict:
+    """Sync wrapper for compatibility."""
+    import asyncio
+    import concurrent.futures
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(asyncio.run, parse_prompt_async(text)).result()
+        return loop.run_until_complete(parse_prompt_async(text))
+    except RuntimeError:
+        return asyncio.run(parse_prompt_async(text))

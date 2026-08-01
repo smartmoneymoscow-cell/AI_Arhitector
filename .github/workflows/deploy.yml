@@ -1,216 +1,48 @@
-# ═══════════════════════════════════════════════════════════════
-# CD Pipeline — Architect v7.0
-# Deploys on merge to main
-# ═══════════════════════════════════════════════════════════════
 name: Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Publish Images"]
+    types: [completed]
     branches: [main]
-    paths-ignore:
-      - '**.md'
-      - '.nojekyll'
-      - 'colab/**'
-
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false  # don't cancel in-flight deploys
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_PREFIX: ${{ github.repository }}
 
 jobs:
-  # ─────────────────────────────────────────────────────────────
-  # Build & Push Docker images to GitHub Container Registry
-  # ─────────────────────────────────────────────────────────────
-  docker-push:
+  staging:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      matrix:
-        service:
-          - name: gateway
-            context: .
-            file: ./gateway.Dockerfile
-          - name: llm-service
-            context: .
-            file: ./llm.Dockerfile
-          - name: blender-service
-            context: .
-            file: ./blender.Dockerfile
+    timeout-minutes: 10
+    environment: staging
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}
-          tags: |
-            type=sha,prefix=
-            type=raw,value=latest
-
-      - name: Build and push ${{ matrix.service.name }}
-        uses: docker/build-push-action@v5
-        with:
-          context: ${{ matrix.service.context }}
-          file: ${{ matrix.service.file }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.service.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
-
-  # ─────────────────────────────────────────────────────────────
-  # Deploy to Render (via deploy hook)
-  # ─────────────────────────────────────────────────────────────
-  deploy-render:
-    needs: docker-push
-    runs-on: ubuntu-latest
-    if: success()
-    steps:
-      - name: Trigger Render deploy
+      - run: |
+          curl -s -X POST \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache": false}'
+      - name: Wait for live
         run: |
-          # Render auto-deploys on push to main (configured in render.yaml)
-          # If you have a deploy hook URL, uncomment below:
-          # curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
-          echo "✅ Docker images pushed to GHCR"
-          echo "📦 Render will auto-deploy from main branch"
-          echo "🔗 Check deploy status at https://dashboard.render.com"
-
-  # ─────────────────────────────────────────────────────────────
-  # Deploy frontend to GitHub Pages
-  # ─────────────────────────────────────────────────────────────
-  deploy-pages:
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload frontend artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-  # ─────────────────────────────────────────────────────────────
-  # Smoke Tests (after deploy)
-  # ─────────────────────────────────────────────────────────────
-  smoke-tests:
-    needs: [deploy-render, deploy-pages]
-    runs-on: ubuntu-latest
-    if: always() && (needs.deploy-render.result == 'success' || needs.deploy-pages.result == 'success')
-    steps:
-      - name: Wait for Render cold start
-        run: sleep 60
-
-      - name: Smoke test — GitHub Pages frontend
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://smartmoneymoscow-cell.github.io/AI_Arhitector/ || echo "000")
-          if [ "$STATUS" = "200" ]; then
-            echo "✅ Frontend is live (HTTP $STATUS)"
-          else
-            echo "⚠️ Frontend returned HTTP $STATUS (may need time to propagate)"
-          fi
-
-      - name: Smoke test — Render health endpoint
-        run: |
-          # Try multiple Render service URLs
-          for url in \
-            "https://architect.onrender.com/health" \
-            "https://ai-arch-llmproxy.onrender.com/health" \
-            "https://ai-arch-blender3d.onrender.com/health"; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$url" || echo "000")
-            if [ "$STATUS" = "200" ]; then
-              echo "✅ $url → HTTP $STATUS"
-            else
-              echo "⚠️ $url → HTTP $STATUS (Render free plan: cold start may take 60s)"
-            fi
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+              -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" | jq -r '.[0].status')
+            [ "$STATUS" = "live" ] && echo "OK" && exit 0
+            sleep 10
           done
-
-  # ─────────────────────────────────────────────────────────────
-  # Post-Deploy E2E Tests (Playwright — real browser)
-  # ─────────────────────────────────────────────────────────────
-  e2e-tests:
-    needs: [deploy-render, deploy-pages]
-    runs-on: ubuntu-latest
-    if: always() && (needs.deploy-render.result == 'success' || needs.deploy-pages.result == 'success')
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Playwright
-        run: npx playwright install chromium --with-deps
-
-      - name: Wait for services to be ready
-        run: sleep 90
-
-      - name: E2E — test send button on GitHub Pages
-        run: node tests/test_e2e_browser.js https://smartmoneymoscow-cell.github.io/AI_Arhitector/
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: /tmp/pw-browsers
-        continue-on-error: true
-
-      - name: E2E — test send button on Render
-        run: node tests/test_e2e_browser.js https://architect-gateway.onrender.com/
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: /tmp/pw-browsers
-        continue-on-error: true
-
-      - name: Upload E2E screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-screenshots
-          path: screenshots/
-          retention-days: 7
-
-  # ─────────────────────────────────────────────────────────────
-  # Notify on completion
-  # ─────────────────────────────────────────────────────────────
-  notify:
-    needs: [docker-push, deploy-render, deploy-pages, smoke-tests, e2e-tests]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deployment summary
+          exit 1
+      - name: Smoke test
         run: |
-          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Docker Push | ${{ needs.docker-push.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Render Deploy | ${{ needs.deploy-render.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| GitHub Pages | ${{ needs.deploy-pages.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Smoke Tests | ${{ needs.smoke-tests.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| E2E Tests | ${{ needs.e2e-tests.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.STAGING_URL }}/health")
+          [ "$CODE" = "200" ] || exit 1
+
+  production:
+    runs-on: ubuntu-latest
+    needs: staging
+    environment:
+      name: production
+      url: ${{ secrets.PRODUCTION_URL }}
+    steps:
+      - run: |
+          curl -s -X POST \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_PROD_SERVICE_ID }}/deploys" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache": false}'

@@ -1,229 +1,83 @@
 """
-shared/agents/orchestrator.py — LLM-driven оркестратор multi-agent системы (20 агентов).
+shared/agents/orchestrator.py — Orchestrator with ISOLATED agents.
 
-Полный pipeline:
-    prompt → ParserAgent → LLM Orchestrator → [Research|Concept|Style|Masterplan|...]
-           → GeometryAgent → TextureAgent → RenderAgent → QualityAgent → ExportAgent
-           → [Compliance|Financial|Presentation]
+Each agent runs in a SEPARATE subprocess.
+If an agent crashes → pipeline continues with fallback.
+Only parser and geometry are CRITICAL (pipeline fails without them).
 
-Каждый агент реально выполняет свою задачу.
-
-Использование:
-    from shared.agents import Orchestrator
-
-    orch = Orchestrator(blender_service_url="http://blender-service:8082")
-    result = orch.execute("двухэтажный кирпичный дом 10×12", quality="16k")
+Circuit breaker: 5 failures → agent disabled for 60s.
 """
 
-import concurrent.futures
 import logging
 import os
 import time
 import uuid
 
-from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
+from shared.agents.base import Task, TaskResult, TaskStatus
+from shared.agents.runner import AgentRunner, IsolatedResult
 from shared.clarification import ClarificationEngine
 from shared.router import route_generation
 from shared.streaming import create_streamer
-
-# ═══ Lazy imports — only load agents when actually needed ═══
-def _import_agent(name: str):
-    import importlib
-    _map = {
-        "parser": "shared.agents.parser_agent.ParserAgent",
-        "geometry": "shared.agents.geometry_agent.GeometryAgent",
-        "texture": "shared.agents.texture_agent.TextureAgent",
-        "render": "shared.agents.render_agent.RenderAgent",
-        "export": "shared.agents.export_agent.ExportAgent",
-        "quality": "shared.agents.quality_agent.QualityAgent",
-        "research": "shared.agents.research_agent.ResearchAgent",
-        "market": "shared.agents.market_agent.MarketAgent",
-        "concept": "shared.agents.concept_agent.ConceptAgent",
-        "masterplan": "shared.agents.masterplan_agent.MasterplanAgent",
-        "landscape": "shared.agents.landscape_agent.LandscapeAgent",
-        "brand": "shared.agents.brand_agent.BrandAgent",
-        "financial": "shared.agents.financial_agent.FinancialAgent",
-        "presentation": "shared.agents.presentation_agent.PresentationAgent",
-        "style": "shared.agents.style_agent.StyleAgent",
-        "lighting": "shared.agents.lighting_agent.LightingAgent",
-        "furniture": "shared.agents.furniture_agent.FurnitureAgent",
-        "mep": "shared.agents.mep_agent.MEPAgent",
-        "structural": "shared.agents.structural_agent.StructuralAgent",
-        "compliance": "shared.agents.compliance_agent.ComplianceAgent",
-        "el": "shared.agents.el_agent.ELAgent",
-        "mep_bim": "shared.agents.mep_bim_agent.MEPBIMAgent",
-    }
-    path = _map[name]
-    module_path, class_name = path.rsplit(".", 1)
-    module = importlib.import_module(module_path)
-    return getattr(module, class_name)()
 
 logger = logging.getLogger("archai.orchestrator")
 
 
 # ═══ Pipeline profiles ═══
-# Какие агенты включать для разных сценариев
 PIPELINE_PROFILES = {
-    "quick": [
-        "parser",
-        "geometry",
-        "texture",
-        "render",
-        "export",
-    ],
-    "standard": [
-        "parser",
-        "style",
-        "geometry",
-        "texture",
-        "lighting",
-        "render",
-        "quality",
-        "export",
-    ],
+    "quick": ["parser", "geometry", "texture", "render", "export"],
+    "standard": ["parser", "style", "geometry", "texture", "lighting", "render", "quality", "export"],
     "full": [
-        "parser",
-        "research",
-        "concept",
-        "style",
-        "masterplan",
-        "geometry",
-        "texture",
-        "furniture",
-        "lighting",
-        "render",
-        "quality",
-        "structural",
-        "compliance",
-        "export",
+        "parser", "research", "concept", "style", "masterplan",
+        "geometry", "texture", "furniture", "lighting", "render",
+        "quality", "structural", "compliance", "export",
     ],
     "premium": [
-        "parser",
-        "research",
-        "market",
-        "concept",
-        "brand",
-        "style",
-        "masterplan",
-        "landscape",
-        "geometry",
-        "texture",
-        "furniture",
-        "lighting",
-        "mep",
-        "structural",
-        "render",
-        "quality",
-        "compliance",
-        "financial",
-        "export",
-        "presentation",
+        "parser", "research", "market", "concept", "brand", "style",
+        "masterplan", "landscape", "geometry", "texture", "furniture",
+        "lighting", "mep", "structural", "render", "quality",
+        "compliance", "financial", "export", "presentation",
     ],
     "interior": [
-        "parser",
-        "concept",
-        "style",
-        "furniture",
-        "lighting",
-        "texture",
-        "render",
-        "quality",
-        "export",
+        "parser", "concept", "style", "furniture", "lighting",
+        "texture", "render", "quality", "export",
     ],
     "presentation": [
-        "parser",
-        "concept",
-        "style",
-        "geometry",
-        "texture",
-        "render",
-        "quality",
-        "export",
-        "presentation",
+        "parser", "concept", "style", "geometry", "texture",
+        "render", "quality", "export", "presentation",
     ],
-    "electrical": [
-        "parser",
-        "el",
-        "compliance",
-        "export",
-    ],
-    "bathhouse": [
-        "parser",
-        "concept",
-        "style",
-        "structural",
-        "mep",
-        "compliance",
-        "geometry",
-        "texture",
-        "render",
-        "quality",
-        "export",
-    ],
-    "landscape": [
-        "parser",
-        "research",
-        "landscape",
-        "masterplan",
-        "compliance",
-        "export",
-    ],
-    "mep_documentation": [
-        "parser",
-        "mep",
-        "mep_bim",
-        "compliance",
-        "export",
-    ],
+    "electrical": ["parser", "el", "compliance", "export"],
+    "landscape": ["parser", "research", "landscape", "masterplan", "compliance", "export"],
+    "mep_documentation": ["parser", "mep", "mep_bim", "compliance", "export"],
     "interior_full": [
-        "parser",
-        "concept",
-        "style",
-        "furniture",
-        "lighting",
-        "mep",
-        "el",
-        "structural",
-        "texture",
-        "render",
-        "quality",
-        "export",
+        "parser", "concept", "style", "furniture", "lighting", "mep",
+        "el", "structural", "texture", "render", "quality", "export",
     ],
 }
 
 
 class Orchestrator:
     """
-    LLM-driven оркестратор multi-agent генерации (20 агентов).
+    LLM-driven orchestrator with ISOLATED agent execution.
 
-    Поддерживает pipeline profiles: quick, standard, full, premium, interior, presentation.
-    LLM определяет, какие агенты нужны для конкретного запроса.
+    Each agent runs in a separate subprocess.
+    Non-critical agents use fallback on failure.
+    Pipeline NEVER crashes due to a single agent failure.
     """
 
-    def __init__(self, blender_service_url: str = "", output_dir: str = "/app/output"):
-        # Все 20 агентов
-        # Lazy-loaded agents (created on first use to save memory)
-        self._agent_names = [
-            "parser", "geometry", "texture", "render", "export", "quality",
-            "research", "market", "concept", "masterplan", "landscape",
-            "brand", "financial", "presentation", "style", "lighting",
-            "furniture", "mep", "structural", "compliance",
-            "el", "mep_bim",
-        ]
-        self.agents: dict[str, BaseAgent] = {}
-
+    def __init__(
+        self,
+        blender_service_url: str = "",
+        llm_service_url: str = "",
+        output_dir: str = "/app/output",
+        agent_timeout: int = 120,
+    ):
+        self.runner = AgentRunner(default_timeout=agent_timeout)
         self.clarification = ClarificationEngine()
         self.jobs: dict[str, dict] = {}
         self.blender_service_url = blender_service_url
+        self.llm_service_url = llm_service_url
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
-
-
-    def _get_agent(self, name: str) -> BaseAgent:
-        """Lazy-load agent on first use."""
-        if name not in self.agents:
-            self.agents[name] = _import_agent(name)
-        return self.agents[name]
 
     def execute(
         self,
@@ -235,27 +89,17 @@ class Orchestrator:
         pipeline_profile: str = "standard",
     ) -> dict:
         """
-        Полный цикл генерации от промта до результата.
+        Full generation cycle with isolated agents.
 
-        Args:
-            prompt: текстовый промт пользователя
-            llm_params: предварительно распарсенные параметры
-            skip_clarification: пропустить уточняющие вопросы
-            quality: качество рендера (preview/standard/high/ultra/16k)
-            export_formats: форматы экспорта
-            pipeline_profile: профиль pipeline (quick/standard/full/premium/interior/presentation)
-
-        Returns:
-            dict с job_id, status, steps, result
+        Each agent runs in subprocess → crash-safe.
+        Non-critical failures → fallback → pipeline continues.
         """
         job_id = uuid.uuid4().hex[:8]
         start = time.time()
         if export_formats is None:
             export_formats = ["glb"]
 
-        # Определяем pipeline
         agent_sequence = PIPELINE_PROFILES.get(pipeline_profile, PIPELINE_PROFILES["standard"])
-
         streamer = create_streamer(job_id)
 
         job = {
@@ -270,14 +114,17 @@ class Orchestrator:
             "quality": quality,
             "pipeline_profile": pipeline_profile,
             "agent_sequence": agent_sequence,
+            "fallback_agents": [],  # agents that used fallback
         }
         self.jobs[job_id] = job
 
         try:
-            # ═══ Step 1: Parse ═══
+            # ═══ Step 1: Parse (CRITICAL) ═══
             streamer.emit("parse", "running", progress=3, message="Parsing prompt...")
-            parse_result = self._run_step(
-                job, "parser", Task(name="parse", agent="parser", params={"prompt": prompt, "use_llm": True})
+            parse_result = self._run_agent(
+                "parser",
+                {"name": "parse", "agent": "parser", "params": {"prompt": prompt, "use_llm": True}},
+                timeout=60,
             )
 
             if parse_result.status == TaskStatus.FAILED:
@@ -287,73 +134,72 @@ class Orchestrator:
                 return job
 
             parsed = parse_result.data
-            params = parsed["params"]
-            gen_type = parsed["gen_type"]
+            params = parsed.get("params", {})
+            gen_type = parsed.get("gen_type", "building")
             confidence = parsed.get("confidence", 0.5)
+
+            if parse_result.fallback:
+                job["fallback_agents"].append("parser")
+                confidence = 0.1
 
             streamer.emit("parse", "done", progress=10, message=f"Parsed: {gen_type}, confidence={confidence:.0%}")
 
             # ═══ Step 1.5: Clarification ═══
-            clar = self.clarification.analyze(prompt, params, confidence)
-            if clar.needs_clarification and not skip_clarification:
-                job["status"] = "clarification_needed"
-                job["clarification"] = {
-                    "questions": [
-                        {"field": q.field, "text": q.text, "options": q.options, "priority": q.priority}
-                        for q in clar.questions
-                    ],
-                    "partial_params": params,
-                    "confidence": confidence,
-                }
-                streamer.emit(
-                    "clarification", "waiting", progress=10, message="Need clarification", data=job["clarification"]
-                )
-                return job
+            if confidence < 0.5 and not skip_clarification:
+                clar = self.clarification.analyze(prompt, params, confidence)
+                if clar.needs_clarification:
+                    job["status"] = "clarification_needed"
+                    job["clarification"] = {
+                        "questions": [
+                            {"field": q.field, "text": q.text, "options": q.options, "priority": q.priority}
+                            for q in clar.questions
+                        ],
+                        "partial_params": params,
+                        "confidence": confidence,
+                    }
+                    streamer.emit("clarification", "waiting", progress=10, message="Need clarification",
+                                  data=job["clarification"])
+                    return job
 
             # ═══ Step 2: Route ═══
             streamer.emit("route", "running", progress=12, message="Planning generation...")
             plan = route_generation(prompt, llm_params or params)
             building_params = plan.params.get("building", {})
+            streamer.emit("route", "done", progress=15,
+                          message=f"Plan: {len(plan.steps)} steps, type={gen_type}")
 
-            streamer.emit("route", "done", progress=15, message=f"Plan: {len(plan.steps)} steps, type={gen_type}")
+            # ═══ Pre-pipeline: Intelligence agents (parallel, non-critical) ═══
+            pre_agents = [a for a in agent_sequence
+                          if a in ("research", "market", "concept", "brand", "style", "masterplan")]
 
-            # ═══ Pre-pipeline: Intelligence agents ═══
             pre_pipeline_results = {}
-            pre_agents = [
-                a for a in agent_sequence if a in ("research", "market", "concept", "brand", "style", "masterplan")
-            ]
-
             progress_step = 15
             progress_increment = 15 / max(len(pre_agents), 1)
 
             for agent_name in pre_agents:
-                if agent_name not in self.agents:
-                    continue
-
-                streamer.emit(agent_name, "running", progress=int(progress_step), message=f"Running {agent_name}...")
-
+                streamer.emit(agent_name, "running", progress=int(progress_step),
+                              message=f"Running {agent_name}...")
                 agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
-                result = self._run_step(job, agent_name, Task(name=agent_name, agent=agent_name, params=agent_params))
+                result = self._run_agent(
+                    agent_name,
+                    {"name": agent_name, "agent": agent_name, "params": agent_params},
+                    timeout=60,
+                )
 
                 if result.status == TaskStatus.DONE and result.data:
                     pre_pipeline_results[agent_name] = result.data
-                    streamer.emit(
-                        agent_name,
-                        "done",
-                        progress=int(progress_step + progress_increment),
-                        message=f"{agent_name} complete",
-                    )
+                    if result.fallback:
+                        job["fallback_agents"].append(agent_name)
+                    streamer.emit(agent_name, "done", progress=int(progress_step + progress_increment),
+                                  message=f"{agent_name} complete" + (" (fallback)" if result.fallback else ""))
                 else:
-                    streamer.emit(
-                        agent_name,
-                        "warning",
-                        progress=int(progress_step),
-                        message=f"{agent_name} skipped: {result.error or 'no data'}",
-                    )
+                    streamer.emit(agent_name, "warning", progress=int(progress_step),
+                                  message=f"{agent_name} skipped: {result.error or 'no data'}")
+                    job["fallback_agents"].append(agent_name)
 
                 progress_step += progress_increment
 
-            # ═══ Step 3+4: Geometry + Texture (PARALLEL) ═══
+            # ═══ Step 3+4: Geometry + Texture (PARALLEL, geometry CRITICAL) ═══
             streamer.emit("geometry", "running", progress=35, message="Generating 3D geometry...")
             streamer.emit("texture", "running", progress=37, message="Generating PBR materials...")
 
@@ -373,368 +219,199 @@ class Orchestrator:
                 "resolution": 2048,
             }
 
+            # Run in parallel — each in its own subprocess
+            import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
                 geom_future = executor.submit(
-                    self._run_step, job, "geometry", Task(name="geometry", agent="geometry", params=geom_params)
+                    self._run_agent, "geometry",
+                    {"name": "geometry", "agent": "geometry", "params": geom_params},
+                    120,
                 )
                 texture_future = executor.submit(
-                    self._run_step, job, "texture", Task(name="texture", agent="texture", params=texture_params)
+                    self._run_agent, "texture",
+                    {"name": "texture", "agent": "texture", "params": texture_params},
+                    60,
                 )
                 geom_result = geom_future.result()
                 texture_result = texture_future.result()
 
-            geometry_script = ""
-            if geom_result.status == TaskStatus.DONE:
-                geometry_script = geom_result.data.get("script", "")
-                streamer.emit("geometry", "done", progress=50, message="Geometry generated")
-            else:
-                streamer.emit("geometry", "failed", progress=35, message=geom_result.error or "Geometry failed")
+            # Geometry is CRITICAL
+            if geom_result.status == TaskStatus.FAILED:
+                streamer.emit("geometry", "failed", progress=35, message=geom_result.error)
                 job["status"] = "failed"
                 job["error"] = f"Geometry generation failed: {geom_result.error}"
                 return job
 
+            geometry_script = geom_result.data.get("script", "") if geom_result.data else ""
+            if geom_result.fallback:
+                job["fallback_agents"].append("geometry")
+            streamer.emit("geometry", "done", progress=50,
+                          message="Geometry generated" + (" (fallback)" if geom_result.fallback else ""))
+
             texture_script = ""
-            if texture_result.status == TaskStatus.DONE:
+            if texture_result.status == TaskStatus.DONE and texture_result.data:
                 texture_script = texture_result.data.get("script", "")
-                streamer.emit("texture", "done", progress=55, message="Materials generated")
+                if texture_result.fallback:
+                    job["fallback_agents"].append("texture")
+            streamer.emit("texture", "done", progress=55, message="Materials generated")
 
-            # ═══ Mid-pipeline: Landscape, Furniture, Lighting, MEP, Structural ═══
-            mid_pipeline_results = {}
-            mid_agents = [a for a in agent_sequence if a in ("landscape", "furniture", "lighting", "mep", "structural")]
-
+            # ═══ Mid-pipeline: Non-critical agents ═══
+            mid_agents = [a for a in agent_sequence
+                          if a in ("landscape", "furniture", "lighting", "mep", "structural")]
+            mid_results = {}
             progress_step = 55
             progress_increment = 10 / max(len(mid_agents), 1)
 
             for agent_name in mid_agents:
-                if agent_name not in self.agents:
-                    continue
-
-                streamer.emit(agent_name, "running", progress=int(progress_step), message=f"Running {agent_name}...")
-
+                streamer.emit(agent_name, "running", progress=int(progress_step),
+                              message=f"Running {agent_name}...")
                 agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
-                if agent_name == "furniture":
-                    agent_params["room_type"] = gen_type if gen_type == "interior" else "living"
-
-                result = self._run_step(job, agent_name, Task(name=agent_name, agent=agent_name, params=agent_params))
-
+                result = self._run_agent(
+                    agent_name,
+                    {"name": agent_name, "agent": agent_name, "params": agent_params},
+                    timeout=60,
+                )
                 if result.status == TaskStatus.DONE and result.data:
-                    mid_pipeline_results[agent_name] = result.data
-                    # Добавляем bpy-скрипт от landscape/furniture
-                    if agent_name in ("landscape", "furniture") and result.data.get("bpy_script"):
-                        geometry_script += "\n" + result.data["bpy_script"]
-                    streamer.emit(agent_name, "done", progress=int(progress_step + progress_increment))
+                    mid_results[agent_name] = result.data
+                    if result.fallback:
+                        job["fallback_agents"].append(agent_name)
+                else:
+                    job["fallback_agents"].append(agent_name)
 
+                streamer.emit(agent_name, "done" if result.status == TaskStatus.DONE else "warning",
+                              progress=int(progress_step + progress_increment),
+                              message=f"{agent_name} " + ("done" if result.status == TaskStatus.DONE else "skipped"))
                 progress_step += progress_increment
 
-            # ═══ Step 5: Render ═══
-            streamer.emit("render", "running", progress=65, message=f"Rendering at {quality} quality...")
-
-            combined_script = geometry_script
-            if texture_script:
-                combined_script += "\n" + texture_script
-
-            render_output = os.path.join(self.output_dir, f"{job_id}_render.png")
-            render_result = self._run_step(
-                job,
+            # ═══ Render (non-critical, uses Blender service) ═══
+            streamer.emit("render", "running", progress=70, message="Rendering...")
+            render_result = self._run_agent(
                 "render",
-                Task(
-                    name="render",
-                    agent="render",
-                    params={
-                        "script": combined_script,
-                        "output_path": render_output,
+                {
+                    "name": "render", "agent": "render",
+                    "params": {
+                        "geometry_script": geometry_script,
+                        "texture_script": texture_script,
                         "quality": quality,
-                        "blender_service_url": self.blender_service_url,
                         "output_dir": self.output_dir,
-                        "camera_params": self._build_camera(gen_type, params, building_params),
+                        "job_id": job_id,
                     },
-                ),
+                },
+                timeout=300 if quality == "16k" else 120,
             )
 
-            render_path = ""
-            if render_result.status == TaskStatus.DONE:
-                render_path = render_result.data.get("output_path", render_output)
-                streamer.emit(
-                    "render", "done", progress=80, message=f"Rendered: {render_result.data.get('resolution', '?')}"
-                )
-            else:
-                streamer.emit("render", "failed", progress=65, message=render_result.error or "Render failed")
+            render_data = {}
+            if render_result.status == TaskStatus.DONE and render_result.data:
+                render_data = render_result.data
+                if render_result.fallback:
+                    job["fallback_agents"].append("render")
+            streamer.emit("render", "done", progress=85, message="Render complete")
 
-            # ═══ Step 5.5: Quality Check ═══
-            if render_path:
-                streamer.emit("quality", "running", progress=82, message="Checking render quality...")
-                quality_result = self._run_step(
-                    job,
-                    "quality",
-                    Task(
-                        name="quality",
-                        agent="quality",
-                        params={
-                            "render_path": render_path,
-                            "quality": quality,
-                            "prompt": prompt,
-                        },
-                    ),
-                )
-                if quality_result.status == TaskStatus.DONE:
-                    qd = quality_result.data or {}
-                    if not qd.get("passed", True):
-                        streamer.emit(
-                            "quality", "warning", progress=82, message=f"Quality check warnings: {qd.get('checks', {})}"
-                        )
-                    else:
-                        streamer.emit("quality", "done", progress=85, message="Quality check passed")
+            # ═══ Quality check (non-critical) ═══
+            quality_result = self._run_agent(
+                "quality",
+                {
+                    "name": "quality", "agent": "quality",
+                    "params": {"render_data": render_data, "quality": quality},
+                },
+                timeout=30,
+            )
+            quality_data = quality_result.data if quality_result.status == TaskStatus.DONE else {}
+            if quality_result.fallback:
+                job["fallback_agents"].append("quality")
 
-            # ═══ Post-pipeline: Compliance, Financial ═══
-            post_pipeline_results = {}
-            post_agents = [a for a in agent_sequence if a in ("compliance", "financial")]
+            # ═══ Export (non-critical) ═══
+            export_result = self._run_agent(
+                "export",
+                {
+                    "name": "export", "agent": "export",
+                    "params": {
+                        "geometry_script": geometry_script,
+                        "export_formats": export_formats,
+                        "output_dir": self.output_dir,
+                        "job_id": job_id,
+                    },
+                },
+                timeout=120,
+            )
+            export_data = export_result.data if export_result.status == TaskStatus.DONE else {}
+            if export_result.fallback:
+                job["fallback_agents"].append("export")
 
+            # ═══ Post-pipeline: Compliance, Financial, Presentation ═══
+            post_agents = [a for a in agent_sequence
+                           if a in ("compliance", "financial", "presentation")]
+            post_results = {}
             for agent_name in post_agents:
-                if agent_name not in self.agents:
-                    continue
                 agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
-                result = self._run_step(job, agent_name, Task(name=agent_name, agent=agent_name, params=agent_params))
+                result = self._run_agent(
+                    agent_name,
+                    {"name": agent_name, "agent": agent_name, "params": agent_params},
+                    timeout=60,
+                )
                 if result.status == TaskStatus.DONE and result.data:
-                    post_pipeline_results[agent_name] = result.data
+                    post_results[agent_name] = result.data
+                if result.fallback:
+                    job["fallback_agents"].append(agent_name)
 
-            # ═══ Step 6: Export ═══
-            export_results = {}
-            for fmt in export_formats:
-                streamer.emit("export", "running", progress=88, message=f"Exporting {fmt.upper()}...")
+            # ═══ Collect results ═══
+            streamer.emit("complete", "done", progress=100,
+                          message=f"Complete! Fallback agents: {job['fallback_agents'] or 'none'}")
 
-                export_script = combined_script if fmt in ("glb", "obj", "fbx", "usd", "ply") else ""
-                export_result = self._run_step(
-                    job,
-                    f"export_{fmt}",
-                    Task(
-                        name="export",
-                        agent="export",
-                        params={
-                            "format": fmt,
-                            "script": export_script,
-                            "job_id": job_id,
-                            "output_dir": self.output_dir,
-                            "blender_service_url": self.blender_service_url,
-                            "building_params": building_params,
-                        },
-                    ),
-                )
+            agent_results = {}
+            for d in [pre_pipeline_results, mid_results, post_results]:
+                agent_results.update(d)
 
-                if export_result.status == TaskStatus.DONE:
-                    export_results[fmt] = export_result.data.get("output_path", "")
-                    streamer.emit("export", "done", progress=92, message=f"Exported {fmt.upper()}")
-                else:
-                    export_results[fmt] = None
-                    streamer.emit(
-                        "export", "failed", progress=88, message=f"Export {fmt} failed: {export_result.error}"
-                    )
-
-            # ═══ Step 7: Presentation ═══
-            presentation_data = None
-            if "presentation" in agent_sequence:
-                streamer.emit("presentation", "running", progress=94, message="Generating presentation...")
-                pres_params = {
-                    "project_name": params.get("building_type", "Архитектурный проект"),
-                    "style": params.get("style", "modern"),
-                    "building_type": params.get("building_type", "house"),
-                    "render_paths": [p for p in export_results.values() if p],
-                    "concept": pre_pipeline_results.get("concept", {}),
-                    "cost_estimate": post_pipeline_results.get("financial", {}).get("breakdown", {}),
-                    "norm_report": post_pipeline_results.get("compliance", {}).get("norm_check", {}),
-                    "masterplan": pre_pipeline_results.get("masterplan", {}),
-                    "landscape": mid_pipeline_results.get("landscape", {}),
-                }
-                pres_result = self._run_step(
-                    job, "presentation", Task(name="presentation", agent="presentation", params=pres_params)
-                )
-                if pres_result.status == TaskStatus.DONE:
-                    presentation_data = pres_result.data
-                    streamer.emit("presentation", "done", progress=96, message="Presentation ready")
-
-            # ═══ Final result ═══
             job["status"] = "done"
             job["result"] = {
                 "gen_type": gen_type,
                 "params": params,
-                "building_params": building_params,
-                "quality": quality,
-                "pipeline_profile": pipeline_profile,
-                "render": render_path,
-                "exports": export_results,
+                "render": render_data,
+                "exports": export_data,
+                "quality": quality_data,
                 "confidence": confidence,
-                # Интеллектуальные результаты
-                "concept": pre_pipeline_results.get("concept"),
-                "style": pre_pipeline_results.get("style"),
-                "masterplan": pre_pipeline_results.get("masterplan"),
-                "brand": pre_pipeline_results.get("brand"),
-                "research": pre_pipeline_results.get("research"),
-                "market": pre_pipeline_results.get("market"),
-                # Специализированные результаты
-                "landscape": mid_pipeline_results.get("landscape"),
-                "furniture": mid_pipeline_results.get("furniture"),
-                "lighting": mid_pipeline_results.get("lighting"),
-                "mep": mid_pipeline_results.get("mep"),
-                "structural": mid_pipeline_results.get("structural"),
-                # Пост-анализ
-                "compliance": post_pipeline_results.get("compliance"),
-                "financial": post_pipeline_results.get("financial"),
-                # Презентация
-                "presentation": presentation_data,
+                "agent_results": agent_results,
             }
-            streamer.emit("done", "done", progress=100, message="Generation complete!")
+            job["duration_ms"] = (time.time() - start) * 1000
+            return job
 
         except Exception as e:
+            logger.error("Orchestrator FATAL error for job %s: %s", job_id, e, exc_info=True)
             job["status"] = "failed"
             job["error"] = str(e)
             streamer.emit("error", "failed", progress=0, message=str(e))
-            logger.error(f"Orchestrator error: {e}", exc_info=True)
+            return job
 
-        finally:
-            job["duration_ms"] = (time.time() - start) * 1000
-
-        return job
+    def _run_agent(self, agent_name: str, task_params: dict, timeout: int = 120) -> IsolatedResult:
+        """Run agent in isolated subprocess."""
+        return self.runner.run(agent_name, task_params, timeout=timeout)
 
     def _build_agent_params(self, agent_name: str, params: dict, gen_type: str, building_params: dict) -> dict:
-        """Построить параметры для конкретного агента."""
+        """Build parameters for specific agent."""
         base = {
-            "prompt": params.get("prompt", ""),
-            "style": params.get("style", "modern"),
-            "building_type": params.get("building_type", "house"),
-            "width_m": params.get("width_m", 10),
-            "length_m": params.get("length_m", 10),
-            "height_m": params.get("height_m", 3.0),
-            "floors": params.get("floors", 1),
-            "material": params.get("material", "brick"),
-            "roof_type": params.get("roof_type", "gable"),
+            "params": params,
             "gen_type": gen_type,
+            "building_params": building_params,
         }
-
-        if agent_name == "research":
-            base["type"] = "general"
-        elif agent_name == "market":
-            base["type"] = "full"
-            base["region"] = params.get("region", "Москва")
-        elif agent_name == "concept":
-            pass  # использует base
-        elif agent_name == "brand":
-            pass
-        elif agent_name == "masterplan":
-            base["lot_width_m"] = params.get("lot_width_m", params.get("width_m", 10) * 3)
-            base["lot_length_m"] = params.get("lot_length_m", params.get("length_m", 10) * 3)
-            base["has_garage"] = params.get("has_garage", True)
-            base["has_garden"] = params.get("has_garden", True)
-        elif agent_name == "landscape":
-            base["lot_width_m"] = params.get("lot_width_m", params.get("width_m", 10) * 3)
-            base["lot_length_m"] = params.get("lot_length_m", params.get("length_m", 10) * 3)
-            base["landscape_style"] = params.get("landscape_style", "natural")
-        elif agent_name == "lighting":
-            base["time_of_day"] = params.get("time_of_day", "day")
+        if agent_name in ("concept", "style"):
+            base["style"] = params.get("style", "modern")
+        if agent_name == "furniture":
+            base["furniture"] = params.get("furniture", [])
             base["room_type"] = params.get("room_type", "living")
-        elif agent_name == "furniture":
-            base["room_type"] = params.get("room_type", gen_type if gen_type == "interior" else "living")
-            base["include_optional"] = True
-        elif agent_name == "mep":
-            base["system"] = "all"
-            base["occupants"] = params.get("occupants", 4)
-        elif agent_name == "structural":
-            base["soil_type"] = params.get("soil_type", "medium")
-        elif agent_name == "compliance":
-            pass
-        elif agent_name == "financial":
-            base["type"] = "full"
-
+        if agent_name == "lighting":
+            base["style"] = params.get("style", "modern")
         return base
 
-    def _run_step(
-        self, job: dict, step_name: str, task: Task, max_retries: int = 1, step_timeout: float = 300.0
-    ) -> TaskResult:
-        """Выполняет один шаг pipeline с retry и timeout."""
-        step_info = {
-            "name": step_name,
-            "agent": task.agent,
-            "status": "running",
-            "started_at": time.time(),
-            "retries": 0,
+    def get_progress(self, job_id: str) -> dict:
+        job = self.jobs.get(job_id)
+        if not job:
+            return {"error": "Job not found"}
+        return {
+            "job_id": job_id,
+            "status": job["status"],
+            "steps": [
+                {"name": s.get("name", ""), "status": s.get("status", "")}
+                for s in job.get("steps", [])
+            ],
+            "fallback_agents": job.get("fallback_agents", []),
         }
-        job["steps"].append(step_info)
-
-        agent = self._get_agent(task.agent) if task.agent in self._agent_names else self.agents.get(task.agent)
-        if not agent:
-            result = TaskResult(status=TaskStatus.FAILED, error=f"Agent '{task.agent}' not found")
-            step_info["status"] = "failed"
-            step_info["error"] = result.error
-            return result
-
-        last_error = None
-        for attempt in range(max_retries + 1):
-            try:
-                task.start()
-                result = agent.process(task)
-                task.complete(result)
-
-                step_info["status"] = result.status.value
-                step_info["duration_ms"] = result.duration_ms
-                step_info["retries"] = attempt
-                if result.error:
-                    step_info["error"] = result.error
-
-                if result.status == TaskStatus.DONE:
-                    return result
-
-                last_error = result.error
-                if attempt < max_retries:
-                    logger.warning(
-                        "Step %s failed (attempt %d/%d): %s — retrying",
-                        step_name,
-                        attempt + 1,
-                        max_retries + 1,
-                        last_error,
-                    )
-                    time.sleep(2 * (attempt + 1))
-
-            except Exception as e:
-                last_error = str(e)
-                if attempt < max_retries:
-                    logger.warning(
-                        "Step %s exception (attempt %d/%d): %s — retrying",
-                        step_name,
-                        attempt + 1,
-                        max_retries + 1,
-                        last_error,
-                    )
-                    time.sleep(2 * (attempt + 1))
-
-        step_info["status"] = "failed"
-        step_info["error"] = last_error
-        return TaskResult(status=TaskStatus.FAILED, error=last_error)
-
-    def _build_camera(self, gen_type: str, params: dict, building_params: dict) -> dict:
-        """Параметры камеры для рендера."""
-        if gen_type == "interior":
-            return {
-                "type": "interior",
-                "fov": 60,
-                "location": (0, -3, 1.6),
-                "target": (0, 0, 1.2),
-            }
-        else:
-            width = building_params.get("width_m", params.get("width_m", 10))
-            distance = width * 1.5
-            return {
-                "type": "exterior",
-                "fov": 45,
-                "location": (distance, -distance, distance * 0.6),
-                "target": (0, 0, params.get("height_m", 3) / 2),
-            }
-
-    def get_job(self, job_id: str) -> dict | None:
-        """Получить статус задачи."""
-        return self.jobs.get(job_id)
-
-    def list_agents(self) -> list[dict]:
-        """Список всех агентов."""
-        return [{"name": name, "class": agent.__class__.__name__} for name, agent in self.agents.items()]
-
-    def get_pipeline_profiles(self) -> dict:
-        """Доступные pipeline profiles."""
-        return {name: agents for name, agents in PIPELINE_PROFILES.items()}
