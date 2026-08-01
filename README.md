@@ -20,7 +20,7 @@ Client → Nginx (:80) → Gateway (:8080) → LLM Service (:8081)
 | **Blender Service** | ~3 GB | 8082 | 3D генерация, рендер (до 16K tiled), экспорт |
 | **Redis** | redis:7-alpine | 6379 | LLM кеш (24h TTL) + Celery broker |
 
-## Multi-Agent Pipeline (20 агентов)
+## Multi-Agent Pipeline (22 агента)
 
 ```
 prompt → ParserAgent → LLM Orchestrator → [20 агентов по pipeline profile]
@@ -60,6 +60,8 @@ prompt → ParserAgent → LLM Orchestrator → [20 агентов по pipeline
 | **MEPAgent** | Инженерные системы (электрика, водоснабжение, HVAC, слаботочка) |
 | **StructuralAgent** | Конструктивный расчёт (фундамент, стены, перекрытия, крыша) |
 | **ComplianceAgent** | Проверка соответствия нормам (СП, ГОСТ, IBC, пожарная безопасность) |
+| **ELAgent** | Квартирная электрика (трассы в стяжке, однолинейная схема, автоматы, УЗО) + умный дом (KNX, Loxone, Zigbee) + распознавание зарисовок |
+| **MEPBIMAgent** | MEP BIM-моделирование (Revit MEP, стадия Р, LOD 300+, 16K-ready, импорт расчётов) |
 
 ### Pipeline Profiles
 
@@ -68,7 +70,7 @@ prompt → ParserAgent → LLM Orchestrator → [20 агентов по pipeline
 | `quick` | 5 | Быстрый preview (parse → geometry → render → export) |
 | `standard` | 8 | Стандартный ( + style, lighting, quality) |
 | `full` | 14 | Полный ( + research, concept, masterplan, furniture, structural, compliance) |
-| `premium` | 20 | Все 20 агентов ( + market, brand, landscape, MEP, financial, presentation) |
+| `premium` | 22 | Все 22 агента ( + market, brand, landscape, MEP, financial, presentation, EL, MEP-BIM) |
 | `interior` | 9 | Интерьер (concept, style, furniture, lighting) |
 | `presentation` | 9 | С презентацией (concept, style + presentation) |
 
@@ -76,8 +78,9 @@ prompt → ParserAgent → LLM Orchestrator → [20 агентов по pipeline
 
 | Движок | Файл | Описание |
 |--------|------|----------|
-| **NormEngine** | `shared/norm_engine.py` | Проверка строительных норм (СП 1.13130, СП 54.13330, ГОСТ 21.501, IBC) |
-| **CostEngine** | `shared/cost_engine.py` | Калькуляция стоимости (материалы, работы, инженерия, ландшафт) |
+| **NormEngine** | `shared/norm_engine.py` | Проверка строительных норм (21 код: СП, ГОСТ, IBC, SNI, ПУЭ, AISI S100) |
+| **CostEngine** | `shared/cost_engine.py` | Калькуляция стоимости (39 регионов, господдержка ФРТ/КДИ/ТОР, валидация) |
+| **InterfaceEngine** | `shared/interface_engine.py` | Границы ответственности между исполнителями (Interface Definition) |
 | **WebSearchEngine** | `shared/web_search.py` | Веб-поиск (DuckDuckGo + SerpAPI) для ResearchAgent и MarketAgent |
 
 ## Что нового в v7.0
@@ -200,9 +203,10 @@ AI_Arhitector/
 │   ├── streaming.py               # SSE прогресс
 │   ├── clarification.py           # Уточняющие вопросы
 │   ├── web_search.py              # Веб-поиск (DuckDuckGo/SerpAPI)
-│   ├── norm_engine.py             # Проверка строительных норм
-│   ├── cost_engine.py             # Калькуляция стоимости
-│   └── agents/                    # Multi-agent система (20 агентов)
+│   ├── norm_engine.py             # Проверка строительных норм (21 код)
+│   ├── cost_engine.py             # Калькуляция стоимости (39 регионов)
+│   ├── interface_engine.py        # Границы ответственности (Interface Definition)
+│   └── agents/                    # Multi-agent система (22 агента)
 │       ├── __init__.py            # Реестр всех агентов
 │       ├── base.py                # BaseAgent, Task, TaskResult
 │       ├── orchestrator.py        # LLM-driven оркестратор
@@ -225,7 +229,9 @@ AI_Arhitector/
 │       ├── furniture_agent.py     # Размещение мебели
 │       ├── mep_agent.py           # Инженерные системы
 │       ├── structural_agent.py    # Конструктивный расчёт
-│       └── compliance_agent.py    # Проверка норм
+│       ├── compliance_agent.py    # Проверка норм
+│       ├── el_agent.py            # Квартирная электрика + умный дом
+│       └── mep_bim_agent.py       # MEP BIM-моделирование (Revit)
 ├── gateway/                       # API Gateway (:8080)
 ├── llm-service/                   # LLM прокси (:8081)
 ├── blender-service/               # Blender CLI (:8082)
@@ -260,8 +266,11 @@ AI_Arhitector/
 | Quality Check | QualityAgent + mimo-omni | ✅ |
 | Auth | API key + rate limiting | ✅ |
 | Multi-Agent | 20 агентов + LLM Orchestrator | ✅ |
-| Norm Check | NormEngine (СП, ГОСТ, IBC) | ✅ |
-| Cost Calc | CostEngine (смета) | ✅ |
+| Norm Check | NormEngine (21 код: СП, ГОСТ, IBC, SNI, ПУЭ, AISI) | ✅ |
+| Cost Calc | CostEngine (39 регионов, господдержка, валидация) | ✅ |
+| Interface Def | InterfaceEngine (границы ответственности) | ✅ |
+| Apartment Electr. | ELAgent (трассы, автоматы, УЗО, умный дом) | ✅ |
+| MEP BIM | MEPBIMAgent (Revit MEP, стадия Р, LOD 300+) | ✅ |
 | Web Search | WebSearchEngine (DDG/SerpAPI) | ✅ |
 
 ## Переменные окружения

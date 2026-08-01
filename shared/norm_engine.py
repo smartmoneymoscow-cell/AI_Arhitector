@@ -41,6 +41,17 @@ class NormCode(StrEnum):
     SP_STAIRS = "СП 1.13130.2019"
     SP_LIGHTING = "СП 52.13330"
     SP_VENTILATION = "СП 60.13330"
+    SP_PLUMBING = "СП 73.13330"  # Внутренние санитарно-технические системы
+    SP_ELECTRICAL = "СП 76.13330"  # Электрооборудование
+    SP_ELECTRICAL_INSTALL = "СП 256.1325800"  # Электроустановки жилых зданий
+    PUE = "ПУЭ"  # Правила устройства электроустановок (7-е изд.)
+    SP_LANDSCAPE = "СП 82.13330"  # Благоустройство территорий
+    SP_URBAN = "СП 42.13330"  # Планировка и застройка
+    GOST_ELECTRICAL_SYMBOLS = "ГОСТ 21.608"  # Условные обозначения электрических схем
+    SP_STOVE = "СП 7.13130"  # Отопление, вентиляция, кондиционирование (печные работы)
+    SNI_SEISMIC = "SNI 1726"  # Сейсмические требования (Индонезия)
+    SNI_BUILDING = "SNI 2847"  # Строительные нормы (Индонезия)
+    AISI_LSTK = "AISI S100"  # ЛСТК конструкции
 
 
 @dataclass
@@ -412,6 +423,180 @@ class NormEngine:
                     recommendation="Добавьте теплоизоляцию или уменьшите остекление",
                 )
             )
+
+    # ═══ Расширения: тропики, бани, электрика, ЛСТК ═══
+
+    def check_tropical(self, params: dict) -> NormReport:
+        """Проверка для тропического климата (Бали, SNI)."""
+        report = NormReport()
+        report.checked_norms = [NormCode.SNI_SEISMIC.value, NormCode.SNI_BUILDING.value]
+
+        # Сейсмика
+        seismic_zone = params.get("seismic_zone", 0)
+        if seismic_zone >= 5:
+            report.add_violation(NormViolation(
+                code=NormCode.SNI_SEISMIC, section="3.2",
+                severity=Severity.CRITICAL,
+                message=f"Сейсмическая зона {seismic_zone} — требуется усиленный конструктив",
+                recommendation="Увеличить армирование, применить сейсмостойкие узлы",
+            ))
+
+        # Вентиляция (тропики: усиленная)
+        ventilation_rate = params.get("ventilation_rate_ach", 0)
+        if ventilation_rate < 3:
+            report.add_violation(NormViolation(
+                code=NormCode.SP_VENTILATION, section="7.2",
+                severity=Severity.WARNING,
+                message=f"Кратность вентиляции {ventilation_rate} < 3 (тропический климат)",
+                recommendation="Увеличить кратность до 3–5 для тропиков",
+            ))
+
+        # Теплозащита (тропики: защита от перегрева)
+        roof_insulation = params.get("roof_insulation_r", 0)
+        if roof_insulation < 3.0:
+            report.add_violation(NormViolation(
+                code=NormCode.SP_THERMAL, section="5.3",
+                severity=Severity.WARNING,
+                message=f"Теплосопротивление крыши R={roof_insulation} < 3.0 (защита от перегрева)",
+                recommendation="Добавить отражающую изоляцию или вентилируемую кровлю",
+            ))
+
+        return report
+
+    def check_bathhouse(self, params: dict) -> NormReport:
+        """Проверка для бани/сауны."""
+        report = NormReport()
+        report.checked_norms = [NormCode.SP_STOVE.value, NormCode.SP_VENTILATION.value]
+
+        # Высота парилки
+        sauna_height = params.get("sauna_height_m", 0)
+        if sauna_height > 0:
+            if sauna_height < 2.1 or sauna_height > 2.4:
+                report.add_violation(NormViolation(
+                    code=NormCode.SP_RESIDENTIAL, section="sauna",
+                    severity=Severity.WARNING,
+                    message=f"Высота парилки {sauna_height}м (оптимально 2.1–2.4м)",
+                    recommendation="При h>2.4м жар уходит вверх, при h<2.1м неудобно",
+                ))
+
+        # Зазор под дверью парилки
+        door_gap = params.get("sauna_door_gap_mm", 0)
+        if door_gap > 0 and door_gap < 50:
+            report.add_violation(NormViolation(
+                code=NormCode.SP_VENTILATION, section="sauna_door",
+                severity=Severity.CRITICAL,
+                message=f"Зазор под дверью парилки {door_gap}мм < 50мм",
+                recommendation="Увеличить зазор до ≥50мм для воздухообмена",
+            ))
+
+        # Вентиляция парилки
+        sauna_vent = params.get("sauna_vent_ach", 0)
+        if sauna_vent > 0 and sauna_vent < 5:
+            report.add_violation(NormViolation(
+                code=NormCode.SP_VENTILATION, section="sauna_vent",
+                severity=Severity.WARNING,
+                message=f"Кратность вентиляции парилки {sauna_vent} < 5",
+                recommendation="Увеличить до 5–6 крат (приток под печью, вытяжка на противоположной стене)",
+            ))
+
+        # Противопожарные расстояния от печи
+        stove_clearance = params.get("stove_clearance_mm", 999)
+        stove_protection = params.get("stove_has_heat_shield", False)
+        if stove_clearance < 500 and not stove_protection:
+            report.add_violation(NormViolation(
+                code=NormCode.SP_STOVE, section="6.2",
+                severity=Severity.CRITICAL,
+                message=f"Расстояние от печи до стены {stove_clearance}мм без защиты < 500мм",
+                recommendation="Установить металлический экран или увеличить расстояние до ≥380мм с экраном",
+            ))
+
+        return report
+
+    def check_electrical_apartment(self, params: dict) -> NormReport:
+        """Проверка квартирной электрики (ПУЭ, СП 76.13330)."""
+        report = NormReport()
+        report.checked_norms = [NormCode.PUE.value, NormCode.SP_ELECTRICAL.value,
+                                NormCode.SP_ELECTRICAL_INSTALL.value]
+
+        # УЗО на розеточные группы
+        has_rcd = params.get("has_rcd_on_outlets", False)
+        if not has_rcd:
+            report.add_violation(NormViolation(
+                code=NormCode.PUE, section="7.1.71",
+                severity=Severity.CRITICAL,
+                message="Отсутствует УЗО на розеточных группах",
+                recommendation="Установить УЗО 30мА на все розеточные группы",
+            ))
+
+        # УЗО в ванной
+        bathroom_rcd_ma = params.get("bathroom_rcd_ma", 0)
+        if bathroom_rcd_ma > 0 and bathroom_rcd_ma > 10:
+            report.add_violation(NormViolation(
+                code=NormCode.PUE, section="7.1.82",
+                severity=Severity.WARNING,
+                message=f"УЗО в ванной {bathroom_rcd_ma}мА > 10мА",
+                recommendation="Рекомендуется УЗО 10мА для ванных комнат",
+            ))
+
+        # Сечение кабелей
+        lighting_cable = params.get("lighting_cable_mm2", 0)
+        if lighting_cable > 0 and lighting_cable < 1.5:
+            report.add_violation(NormViolation(
+                code=NormCode.PUE, section="1.3.4",
+                severity=Severity.CRITICAL,
+                message=f"Сечение кабеля освещения {lighting_cable}мм² < 1.5мм²",
+                recommendation="Увеличить сечение до ≥1.5мм² (ВВгнг-LS)",
+            ))
+
+        outlet_cable = params.get("outlet_cable_mm2", 0)
+        if outlet_cable > 0 and outlet_cable < 2.5:
+            report.add_violation(NormViolation(
+                code=NormCode.PUE, section="1.3.5",
+                severity=Severity.CRITICAL,
+                message=f"Сечение кабеля розеток {outlet_cable}мм² < 2.5мм²",
+                recommendation="Увеличить сечение до ≥2.5мм²",
+            ))
+
+        # Расстояние силовых и слаботочных
+        power_data_gap = params.get("power_data_gap_mm", 999)
+        if power_data_gap < 50:
+            report.add_violation(NormViolation(
+                code=NormCode.PUE, section="2.1.16",
+                severity=Severity.WARNING,
+                message=f"Расстояние силовых и слаботочных кабелей {power_data_gap}мм < 50мм",
+                recommendation="Увеличить расстояние до ≥50мм или разделить трассы",
+            ))
+
+        return report
+
+    def check_lstk(self, params: dict) -> NormReport:
+        """Проверка ЛСТК-конструкций (AISI S100)."""
+        report = NormReport()
+        report.checked_norms = [NormCode.AISI_LSTK.value]
+
+        # Толщина стенки профиля
+        wall_thickness = params.get("lstk_wall_thickness_mm", 0)
+        if wall_thickness > 0 and wall_thickness < 0.8:
+            report.add_violation(NormViolation(
+                code=NormCode.AISI_LSTK, section="B2",
+                severity=Severity.WARNING,
+                message=f"Толщина стенки ЛСТК-профиля {wall_thickness}мм < 0.8мм",
+                recommendation="Увеличить толщину для конструкционных элементов",
+            ))
+
+        # Стык ЖБК + ЛСТК
+        hybrid_joint = params.get("hybrid_rbc_lstk_joint", False)
+        if hybrid_joint:
+            joint_type = params.get("joint_type", "")
+            if joint_type not in ("bolted", "welded", "chemical_anchor"):
+                report.add_violation(NormViolation(
+                    code=NormCode.AISI_LSTK, section="connection",
+                    severity=Severity.WARNING,
+                    message="Тип стыка ЖБК/ЛСТК не определён",
+                    recommendation="Использовать болтовое, сварное или химическое соединение",
+                ))
+
+        return report
 
     def get_norm_reference(self, code: NormCode) -> dict:
         """Получить справочную информацию по нормативному документу."""

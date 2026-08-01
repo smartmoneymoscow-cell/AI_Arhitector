@@ -402,19 +402,110 @@ class CostEngine:
 
         return estimate
 
+    # ═══ Расширенная база региональных коэффициентов ═══
+    REGION_MULTIPLIERS = {
+        # Россия — базовые
+        "moscow": 1.0, "москва": 1.0,
+        "spb": 0.85, "петербург": 0.85, "санкт-петербург": 0.85,
+        "russia": 0.7, "россия": 0.7,
+        # Россия — север и удалённые регионы
+        "мурманская": 1.35, "murmansk": 1.35,
+        "якутия": 1.5, "yakutia": 1.5,
+        "камчатка": 1.6, "kamchatka": 1.6,
+        "чукотка": 1.8, "chukotka": 1.8,
+        "арктика": 1.5, "arctic": 1.5,
+        # Россия — юг
+        "краснодар": 0.8, "krasnodar": 0.8,
+        "крым": 0.75, "crimea": 0.75,
+        "сочи": 0.9, "sochi": 0.9,
+        # Международные
+        "europe": 1.3, "европа": 1.3,
+        "usa": 1.5, "сша": 1.5,
+        "бали": 0.75, "bali": 0.75, "индонезия": 0.75, "indonesia": 0.75,
+        "турция": 0.65, "turkey": 0.65,
+        "грузия": 0.55, "georgia": 0.55,
+        "норвегия": 1.8, "norway": 1.8,
+        "финляндия": 1.4, "finland": 1.4,
+    }
+
+    # Дополнительные коэффициенты удорожания
+    SEASONAL_MULTIPLIERS = {
+        "winter_construction": 1.15,  # Зимнее строительство
+        "remote_logistics": 1.25,     # Доставка в удалённые районы
+        "northern_allowance": 1.30,   # Северные надбавки к зарплатам
+    }
+
     def _get_region_multiplier(self, region: str) -> float:
         """Коэффициент региона (Москва = 1.0)."""
-        multipliers = {
-            "moscow": 1.0,
-            "москва": 1.0,
-            "spb": 0.85,
-            "петербург": 0.85,
-            "санкт-петербург": 0.85,
-            "russia": 0.7,
-            "россия": 0.7,
-            "europe": 1.3,
-            "европа": 1.3,
-            "usa": 1.5,
-            "сша": 1.5,
+        return self.REGION_MULTIPLIERS.get(region.lower(), 1.0)
+
+    def _get_total_multiplier(self, region: str, params: dict = None) -> float:
+        """Итоговый коэффициент с учётом региона и сезонных факторов."""
+        base = self._get_region_multiplier(region)
+        if params:
+            if params.get("winter_construction", False):
+                base *= self.SEASONAL_MULTIPLIERS["winter_construction"]
+            if params.get("remote_logistics", False):
+                base *= self.SEASONAL_MULTIPLIERS["remote_logistics"]
+            if params.get("northern_allowance", False):
+                base *= self.SEASONAL_MULTIPLIERS["northern_allowance"]
+        return base
+
+    def validate_estimate(self, estimate: CostEstimate, params: dict = None) -> dict:
+        """Валидация сметы: benchmark comparison + sanity checks."""
+        warnings = []
+        if estimate.area_m2 > 0:
+            cost_m2 = estimate.cost_per_m2
+            # Типичные диапазоны (руб/м², 2026)
+            if cost_m2 < 30000:
+                warnings.append(f"⚠️ Стоимость {cost_m2:,.0f} ₽/м² ниже типичного минимума (30 000 ₽/м²)")
+            elif cost_m2 > 300000:
+                warnings.append(f"⚠️ Стоимость {cost_m2:,.0f} ₽/м² выше типичного максимума (300 000 ₽/м²)")
+        return {
+            "valid": len(warnings) == 0,
+            "warnings": warnings,
+            "cost_per_m2": round(estimate.cost_per_m2),
         }
-        return multipliers.get(region.lower(), 1.0)
+
+    # ═══ Господдержка ═══
+    GOV_SUPPORT_PROGRAMS = {
+        "frt": {
+            "name": "ФРТ (Фонд развития территорий)",
+            "subsidy_pct": 80,
+            "description": "Субсидия до 80% на инженерную инфраструктуру",
+            "max_amount_rub": 500_000_000,
+        },
+        "kdi": {
+            "name": "КДИ (Корпорация развития Дальнего Востока)",
+            "interest_rate_pct": 2,
+            "description": "Льготный кредит от 2% для инвестиционных проектов",
+        },
+        "tor_barents": {
+            "name": "ТОР «Баренцев регион»",
+            "tax_benefits": ["НДС", "Налог на прибыль", "Налог на имущество"],
+            "description": "Налоговые льготы для резидентов ТОР",
+        },
+        "arctic_zone": {
+            "name": "Арктическая зона РФ",
+            "tax_benefits": ["Налог на прибыль 0% на 5 лет", "Ускоренная амортизация"],
+            "description": "Льготные условия для инвестиций в Арктике",
+        },
+    }
+
+    def calculate_gov_support_impact(self, capex: float, program: str) -> dict:
+        """Расчёт влияния господдержки на CAPEX."""
+        prog = self.GOV_SUPPORT_PROGRAMS.get(program)
+        if not prog:
+            return {"error": f"Программа {program} не найдена"}
+
+        subsidy_pct = prog.get("subsidy_pct", 0)
+        subsidy = min(capex * subsidy_pct / 100, prog.get("max_amount_rub", float("inf")))
+
+        return {
+            "program": prog["name"],
+            "original_capex": round(capex),
+            "subsidy": round(subsidy),
+            "reduced_capex": round(capex - subsidy),
+            "savings_pct": subsidy_pct,
+            "description": prog["description"],
+        }

@@ -336,3 +336,162 @@ class StructuralAgent(BaseAgent):
             "passed": not any("❌" in c for c in checks),
             "checks": checks,
         }
+
+    # ═══ Расширения: ЛСТК, гибридные конструкции, фундамент под печь ═══
+
+    LSTK_PROFILES = {
+        "C75": {"thickness_mm": 0.8, "width_mm": 75, "load_kg_m": 150, "max_span_m": 4.5},
+        "C100": {"thickness_mm": 1.0, "width_mm": 100, "load_kg_m": 250, "max_span_m": 6.0},
+        "C150": {"thickness_mm": 1.2, "width_mm": 150, "load_kg_m": 400, "max_span_m": 8.0},
+        "U50": {"thickness_mm": 0.8, "width_mm": 50, "load_kg_m": 80, "max_span_m": 3.0},
+        "U75": {"thickness_mm": 1.0, "width_mm": 75, "load_kg_m": 120, "max_span_m": 4.0},
+    }
+
+    def design_lstk(self, params: dict) -> dict:
+        """Проектирование ЛСТК-каркаса."""
+        width = params.get("width_m", 10)
+        length = params.get("length_m", 10)
+        floors = params.get("floors", 1)
+        height = params.get("height_m", 3.0)
+
+        # Подбор профилей
+        wall_profile = "C100" if floors <= 2 else "C150"
+        floor_profile = "C150" if floors > 1 else None
+
+        wall_spec = self.LSTK_PROFILES[wall_profile]
+        floor_spec = self.LSTK_PROFILES.get(floor_profile, {})
+
+        # Шаг стоек
+        stud_spacing = 0.6  # м (600 мм)
+        wall_perimeter = 2 * (width + length)
+        studs_count = int(wall_perimeter / stud_spacing) + 4  # +4 угловых
+
+        # Обрешётка
+        purlin_spacing = 0.6
+        roof_area = width * length * 1.3
+        purlins_count = int(roof_area / purlin_spacing)
+
+        return {
+            "type": "ЛСТК каркас",
+            "wall_studs": {
+                "profile": wall_profile,
+                "thickness_mm": wall_spec["thickness_mm"],
+                "spacing_mm": int(stud_spacing * 1000),
+                "count": studs_count,
+                "height_m": height * floors,
+                "material": "Оцинкованная сталь S350GD, Z275",
+            },
+            "floor_joists": {
+                "profile": floor_profile or "N/A",
+                "spacing_mm": 400 if floor_profile else 0,
+                "count": int(length / 0.4) * floors if floor_profile else 0,
+                "max_span_m": floor_spec.get("max_span_m", 0),
+            },
+            "roof_purlins": {
+                "profile": "C100",
+                "spacing_mm": int(purlin_spacing * 1000),
+                "count": purlins_count,
+            },
+            "wall_buildup": [
+                "ГКЛ 12.5мм (внутренний)",
+                f"Стойки {wall_profile}×{wall_spec['thickness_mm']}мм с утеплителем 100мм",
+                "Пароизоляция",
+                "ОСП 9мм (наружный)",
+                "Вентзазор 30мм",
+                "Фасад (сайдинг / штукатурка)",
+            ],
+            "connections": {
+                "stud_to_track": "Саморез LN 4.2×19",
+                "sheet_to_frame": "Саморез TN 4.2×25, шаг 200мм",
+                "splice": "Саморез LN 4.2×13, 4 шт",
+            },
+            "estimated_weight_kg_m2": round(wall_spec["load_kg_m"] * height / 1000, 1),
+            "compliance": "AISI S100 / СП 16.13330",
+        }
+
+    def design_hybrid_rbc_lstk(self, params: dict) -> dict:
+        """Проектирование гибридной конструкции: ЖБК низ + ЛСТК верх."""
+        lower_floors = params.get("lower_floors", 1)
+        upper_floors = params.get("upper_floors", 1)
+        width = params.get("width_m", 10)
+        length = params.get("length_m", 10)
+
+        lstk_params = dict(params, floors=upper_floors)
+        lstk_design = self.design_lstk(lstk_params)
+
+        # Узел стыка ЖБК/ЛСТК
+        joint = {
+            "type": "Болтовое соединение + химический анкер",
+            "anchor_type": "Химический анкер M12",
+            "anchor_spacing_mm": 600,
+            "base_plate": "Стальная пластина 200×200×8мм, оцинкованная",
+            "sealant": "Герметик полиуретановый",
+            "gap_mm": 20,  # Деформационный шов
+            "load_transfer": "Вертикальная нагрузка через базовую пластину, горизонтальная — через болты",
+        }
+
+        return {
+            "type": "Гибридная конструкция: ЖБК + ЛСТК",
+            "lower_level": {
+                "material": "Монолитный железобетон",
+                "floors": lower_floors,
+                "description": "Несущие стены и перекрытия из монолитного ЖБК",
+            },
+            "upper_level": {
+                "material": "ЛСТК каркас",
+                "floors": upper_floors,
+                "description": "Каркас из ЛСТК-профилей с утеплителем",
+                "design": lstk_design,
+            },
+            "interface": joint,
+            "critical_details": [
+                "Гидроизоляция стыка ЖБК/ЛСТК (отсечка влаги)",
+                "Деформационный шов ≥20мм",
+                "Прокладка инженерных коммуникаций через стык",
+                "Огнезащита стыка (предел огнестойкости ≥60 мин)",
+            ],
+        }
+
+    def design_stove_foundation(self, params: dict) -> dict:
+        """Проектирование отдельного фундамента под печь."""
+        stove_type = params.get("stove_type", "metal")
+        stove_weight_kg = params.get("stove_weight_kg", 200)
+
+        if stove_type == "brick":
+            stove_weight_kg = max(500, stove_weight_kg)
+            foundation = {
+                "type": "Монолитная плита",
+                "dimensions_m": "1.2×1.2×0.3",
+                "reinforcement": "АIII Ø12, шаг 150мм, 2 слоя",
+                "concrete": "B15 (М200)",
+                "depth_m": 0.5,
+                "isolation": "Отдельный от общего фундамента (деформационный шов ≥50мм)",
+                "heat_resistant_layer": "Жаростойкий бетон 50мм сверху",
+            }
+        else:
+            foundation = {
+                "type": "Усиленное основание",
+                "dimensions_m": "0.8×0.8×0.2",
+                "reinforcement": "Сетка сварная Ø6, шаг 100мм",
+                "concrete": "B15 (М200)",
+                "depth_m": 0.3,
+                "note": "Для металлической печи до 200кг",
+            }
+
+        # Дымоход — проход через конструкции
+        chimney = {
+            "sandwich_diameter_mm": params.get("chimney_diameter_mm", 150),
+            "clearance_to_combustibles_mm": 250,  # Сэндвич-дымоход
+            "clearance_to_non_combustibles_mm": 50,
+            "passage_through_floor": "Проходной узел с термоизоляцией",
+            "passage_through_roof": "Разделка + выдра + оголовок",
+            "height_above_roof": "≥0.5м от конька (при расстоянии ≤1.5м)",
+        }
+
+        return {
+            "stove_type": stove_type,
+            "stove_weight_kg": stove_weight_kg,
+            "foundation": foundation,
+            "chimney": chimney,
+            "compliance": "СП 7.13130.2013, Правила пожарной безопасности",
+        }

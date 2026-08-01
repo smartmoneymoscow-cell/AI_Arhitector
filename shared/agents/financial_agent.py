@@ -307,3 +307,209 @@ class FinancialAgent(BaseAgent):
                 }
             )
         return cash_flow
+
+    # ═══ Расширения: DCF, sensitivity, stress test, господдержка ═══
+
+    def calculate_dcf(self, params: dict) -> dict:
+        """DCF-анализ (Discounted Cash Flow) на 10–15 лет."""
+        capex = params.get("capex_rub", 100_000_000)
+        annual_revenue = params.get("annual_revenue_rub", 30_000_000)
+        annual_opex = params.get("annual_opex_rub", 15_000_000)
+        discount_rate = params.get("discount_rate_pct", 10) / 100
+        years = params.get("years", 12)
+        revenue_growth = params.get("revenue_growth_pct", 5) / 100
+        opex_growth = params.get("opex_growth_pct", 3) / 100
+        ramp_up = params.get("ramp_up_years", 3)  # Годы выхода на мощность
+        ramp_up_pcts = [0.3, 0.55, 0.75, 0.85, 0.90, 0.95]  # Загрузка по годам
+
+        cash_flows = [-capex]
+        details = []
+        cumulative = -capex
+
+        for year in range(1, years + 1):
+            # Ramp-up factor
+            if year <= ramp_up:
+                load_factor = ramp_up_pcts[year - 1]
+            else:
+                load_factor = min(1.0, ramp_up_pcts[-1] + (year - ramp_up) * 0.02)
+
+            rev = annual_revenue * load_factor * (1 + revenue_growth) ** (year - 1)
+            opex = annual_opex * (1 + opex_growth) ** (year - 1)
+            ebitda = rev - opex
+
+            # Амортизация (линейная, 20 лет)
+            depreciation = capex / 20
+            profit_before_tax = ebitda - depreciation
+            tax = max(0, profit_before_tax * 0.20)  # Налог на прибыль 20%
+            net_profit = profit_before_tax - tax
+
+            # FCF = EBITDA - Tax (упрощённо)
+            fcf = ebitda - tax
+            discounted = fcf / (1 + discount_rate) ** year
+            cash_flows.append(round(discounted))
+            cumulative += discounted
+
+            details.append({
+                "year": year,
+                "load_pct": round(load_factor * 100),
+                "revenue": round(rev),
+                "opex": round(opex),
+                "ebitda": round(ebitda),
+                "depreciation": round(depreciation),
+                "net_profit": round(net_profit),
+                "fcf": round(fcf),
+                "discounted_fcf": round(discounted),
+                "cumulative_npv": round(cumulative),
+            })
+
+        # NPV
+        npv = sum(cash_flows)
+
+        # IRR (бинарный поиск)
+        irr = self._calculate_irr(cash_flows)
+
+        # Payback period
+        payback = None
+        for d in details:
+            if d["cumulative_npv"] >= 0:
+                payback = d["year"]
+                break
+
+        # DSCR (Debt Service Coverage Ratio)
+        annual_debt_service = capex * 0.10  # Примерно 10% от CAPEX в год
+        dscr = details[-1]["ebitda"] / annual_debt_service if annual_debt_service > 0 else 0
+
+        return {
+            "npv": round(npv),
+            "irr_pct": round(irr * 100, 2),
+            "payback_years": payback,
+            "dscr": round(dscr, 2),
+            "cash_flows": details,
+            "wacc_pct": round(discount_rate * 100),
+            "recommendation": "✅ Проект эффективен" if npv > 0 and irr > discount_rate else "❌ Проект неэффективен",
+        }
+
+    def sensitivity_analysis(self, params: dict) -> dict:
+        """Sensitivity analysis: ключевые параметры ±20%."""
+        base_params = dict(params)
+        base_result = self.calculate_dcf(base_params)
+        base_npv = base_result["npv"]
+        base_irr = base_result["irr_pct"]
+
+        variations = [-20, -10, 0, 10, 20]
+        factors = ["revenue", "opex", "capex"]
+
+        results = {}
+        for factor in factors:
+            factor_results = []
+            for pct in variations:
+                test_params = dict(base_params)
+                if factor == "revenue":
+                    test_params["annual_revenue_rub"] = base_params["annual_revenue_rub"] * (1 + pct / 100)
+                elif factor == "opex":
+                    test_params["annual_opex_rub"] = base_params["annual_opex_rub"] * (1 + pct / 100)
+                elif factor == "capex":
+                    test_params["capex_rub"] = base_params["capex_rub"] * (1 + pct / 100)
+
+                r = self.calculate_dcf(test_params)
+                factor_results.append({
+                    "change_pct": pct,
+                    "npv": r["npv"],
+                    "irr_pct": r["irr_pct"],
+                    "payback_years": r["payback_years"],
+                })
+            results[factor] = factor_results
+
+        return {
+            "base_npv": base_npv,
+            "base_irr": base_irr,
+            "sensitivity": results,
+            "most_sensitive": max(results.keys(), key=lambda k: abs(results[k][-1]["npv"] - results[k][0]["npv"])),
+        }
+
+    def stress_test(self, params: dict) -> dict:
+        """Стресс-тест: экстремальные сценарии."""
+        scenarios = {
+            "base": dict(params),
+            "low_occupancy": dict(params, **{"annual_revenue_rub": params["annual_revenue_rub"] * 0.4}),
+            "high_capex": dict(params, **{"capex_rub": params["capex_rub"] * 1.5}),
+            "revenue_stagnation": dict(params, **{"revenue_growth_pct": 0}),
+            "combined_stress": dict(params, **{
+                "annual_revenue_rub": params["annual_revenue_rub"] * 0.4,
+                "capex_rub": params["capex_rub"] * 1.3,
+                "revenue_growth_pct": 0,
+            }),
+        }
+
+        results = {}
+        for name, p in scenarios.items():
+            r = self.calculate_dcf(p)
+            results[name] = {
+                "npv": r["npv"],
+                "irr_pct": r["irr_pct"],
+                "payback_years": r["payback_years"],
+                "viable": r["npv"] > 0,
+            }
+
+        return {
+            "scenarios": results,
+            "survives_stress": results["combined_stress"]["viable"],
+            "recommendation": (
+                "✅ Проект устойчив к стрессам" if results["combined_stress"]["viable"]
+                else "⚠️ Проект уязвим — рассмотрите снижение CAPEX или увеличение загрузки"
+            ),
+        }
+
+    def _calculate_irr(self, cash_flows: list[float], tolerance: float = 0.0001) -> float:
+        """IRR методом бинарного поиска."""
+        low, high = -0.5, 1.0
+        for _ in range(100):
+            mid = (low + high) / 2
+            npv = sum(cf / (1 + mid) ** i for i, cf in enumerate(cash_flows))
+            if abs(npv) < tolerance:
+                return mid
+            if npv > 0:
+                low = mid
+            else:
+                high = mid
+        return (low + high) / 2
+
+    def validate_model(self, params: dict) -> dict:
+        """Валидация финансовой модели: проверка ключевых метрик."""
+        result = self.calculate_dcf(params)
+        checks = []
+        passed = True
+
+        # NPV > 0
+        if result["npv"] <= 0:
+            checks.append(f"❌ NPV = {result['npv']:,.0f} ₽ ≤ 0 — проект неэффективен")
+            passed = False
+        else:
+            checks.append(f"✅ NPV = {result['npv']:,.0f} ₽ > 0")
+
+        # IRR > WACC
+        wacc = params.get("discount_rate_pct", 10)
+        if result["irr_pct"] <= wacc:
+            checks.append(f"❌ IRR {result['irr_pct']}% ≤ WACC {wacc}%")
+            passed = False
+        else:
+            checks.append(f"✅ IRR {result['irr_pct']}% > WACC {wacc}%")
+
+        # DSCR > 1.2
+        if result["dscr"] < 1.2:
+            checks.append(f"⚠️ DSCR {result['dscr']} < 1.2 — кредит может не обслуживаться")
+        else:
+            checks.append(f"✅ DSCR {result['dscr']} > 1.2")
+
+        # Payback < 10 лет
+        payback = result.get("payback_years")
+        if payback and payback > 10:
+            checks.append(f"⚠️ Окупаемость {payback} лет > 10 лет")
+        elif payback:
+            checks.append(f"✅ Окупаемость {payback} лет")
+
+        return {
+            "passed": passed,
+            "checks": checks,
+            "metrics": {"npv": result["npv"], "irr": result["irr_pct"], "dscr": result["dscr"], "payback": result["payback_years"]},
+        }

@@ -233,6 +233,208 @@ class MEPAgent(BaseAgent):
             "estimated_cost": round(params.get("width_m", 10) * params.get("length_m", 10) * 800),
         }
 
+    # ═══ Расширения: квартирная электрика, умный дом, зарисовки ═══
+
+    def design_apartment_electrical(self, params: dict) -> dict:
+        """Детальное проектирование квартирной электрики (трассы в стяжке)."""
+        rooms = params.get("rooms", [])
+        total_area = params.get("area_m2", 80)
+
+        # Расчёт нагрузок по группам
+        groups = []
+        group_num = 1
+        total_load_w = 0
+
+        for room in rooms:
+            rtype = room.get("type", "living")
+            rarea = room.get("area_m2", 15)
+
+            # Освещение (LED)
+            light_load = max(5, int(rarea * 10))  # 10 Вт/м² LED
+            light_outlets = max(1, int(rarea / 5))
+            groups.append({
+                "group": group_num, "name": f"{rtype} — освещение",
+                "breaker_type": "B10", "breaker_poles": "1P",
+                "cable": "ВВГнг-LS 3×1.5", "cable_section_mm2": 1.5,
+                "load_w": light_load, "points": light_outlets,
+                "route": f"ЩК → РК{group_num} → выключатели/светильники",
+            })
+            total_load_w += light_load
+            group_num += 1
+
+            # Розетки
+            outlet_count = max(2, int(rarea / 3))
+            outlet_load = min(3500, outlet_count * 400)
+            groups.append({
+                "group": group_num, "name": f"{rtype} — розетки",
+                "breaker_type": "B16", "breaker_poles": "1P",
+                "cable": "ВВГнг-LS 3×2.5", "cable_section_mm2": 2.5,
+                "load_w": outlet_load, "points": outlet_count,
+                "route": f"ЩК → РК{group_num} → розетки",
+            })
+            total_load_w += outlet_load
+            group_num += 1
+
+        # Силовые группы (отдельные линии)
+        power_groups = [
+            {"name": "Электроплита", "breaker": "B32", "cable": "ВВГнг-LS 3×6", "load_w": 7000, "rcd": "30mA"},
+            {"name": "Духовка", "breaker": "B16", "cable": "ВВГнг-LS 3×2.5", "load_w": 2500},
+            {"name": "Стиральная машина", "breaker": "B16", "cable": "ВВГнг-LS 3×2.5", "load_w": 2500, "rcd": "30mA"},
+            {"name": "Посудомоечная машина", "breaker": "B16", "cable": "ВВГнг-LS 3×2.5", "load_w": 2000, "rcd": "30mA"},
+            {"name": "Кондиционер", "breaker": "B16", "cable": "ВВГнг-LS 3×2.5", "load_w": 2000},
+            {"name": "Водонагреватель", "breaker": "B16", "cable": "ВВГнг-LS 3×2.5", "load_w": 2500, "rcd": "30mA"},
+        ]
+        for pg in power_groups:
+            groups.append({
+                "group": group_num, "name": pg["name"],
+                "breaker_type": pg["breaker"], "breaker_poles": "1P",
+                "cable": pg["cable"], "load_w": pg["load_w"],
+                "rcd": pg.get("rcd"),
+            })
+            total_load_w += pg["load_w"]
+            group_num += 1
+
+        # Вводной щит
+        main_breaker_a = max(25, math.ceil(total_load_w / 220))
+
+        # Однолинейная схема (текстовая)
+        single_line = {
+            "main_breaker": f"QF0 — ВА47-29 — {main_breaker_a}A — 2P",
+            "rcd_main": "RCD1 — ВДТ — 63A/30мА — 2P (если не дифавтоматы)",
+            "groups": [{"num": g["group"], "name": g["name"], "breaker": g["breaker_type"],
+                         "cable": g["cable"]} for g in groups],
+        }
+
+        return {
+            "total_load_w": total_load_w,
+            "total_load_kw": round(total_load_w / 1000, 1),
+            "main_breaker_a": main_breaker_a,
+            "phases": 1 if total_load_w < 10000 else 3,
+            "voltage": "220V" if total_load_w < 10000 else "380V",
+            "groups": groups,
+            "groups_count": len(groups),
+            "single_line_diagram": single_line,
+            "cable_spec": self._generate_cable_spec(groups),
+            "panel_spec": self._generate_panel_spec(groups, main_breaker_a),
+            "grounding": "TN-C-S",
+            "estimated_cost_rub": round(total_area * 2500),
+        }
+
+    def design_smart_home(self, params: dict) -> dict:
+        """Проектирование системы умного дома."""
+        system = params.get("smart_home_system", "zigbee")
+        rooms = params.get("rooms", [])
+        area_m2 = params.get("area_m2", 80)
+        budget = params.get("smart_home_budget", "medium")
+
+        systems = {
+            "knx": {
+                "name": "KNX", "type": "проводной", "cable": "KNX TP 2×2×0.8",
+                "cost_per_point": 35000, "reliability": "высокая",
+                "features": ["Полная интеграция", "Промышленная надёжность", "Масштабируемость"],
+            },
+            "loxone": {
+                "name": "Loxone", "type": "проводной", "cable": "Cat5e/6",
+                "cost_per_point": 20000, "reliability": "высокая",
+                "features": ["Компактный контроллер", "Красивый UI", "Средняя цена"],
+            },
+            "zigbee": {
+                "name": "Zigbee 3.0", "type": "беспроводной", "cable": "только питание 220V",
+                "cost_per_point": 8000, "reliability": "средняя",
+                "features": ["Дёшево", "Не нужно штробить", "Ограниченный функционал"],
+            },
+            "yandex": {
+                "name": "Яндекс/Алиса", "type": "беспроводной", "cable": "Wi-Fi",
+                "cost_per_point": 3000, "reliability": "низкая",
+                "features": ["Голосовое управление", "Бюджетно", "Очень ограниченный функционал"],
+            },
+        }
+        sel = systems.get(system, systems["zigbee"])
+
+        # Датчики
+        sensors = [
+            {"type": "Датчик движения", "qty": max(2, len(rooms)), "location": "Коридор, лестница"},
+            {"type": "Датчик температуры", "qty": max(1, len(rooms) // 2), "location": "Гостиная, спальня"},
+            {"type": "Датчик протечки", "qty": 3, "location": "Кухня, ванная, котельная"},
+            {"type": "Датчик дыма", "qty": max(2, len(rooms) // 2), "location": "Кухня, коридор"},
+            {"type": "Датчик открытия двери", "qty": 2, "location": "Входная дверь, балкон"},
+        ]
+
+        # Актуаторы
+        actuators = [
+            {"type": "Реле освещения", "qty": max(4, len(rooms) * 2), "location": "Щит"},
+            {"type": "Привод штор", "qty": max(2, len(rooms) // 2), "location": "Окна"},
+            {"type": "Термоголовка", "qty": max(2, len(rooms) // 2), "location": "Радиаторы"},
+        ]
+
+        # Сценарии
+        scenarios = [
+            {"name": "Утро", "actions": ["Открытие штор", "Включение света в кухне", "Музыка"]},
+            {"name": "Уход", "actions": ["Выключение всего", "Закрытие штор", "Охрана"]},
+            {"name": "Кино", "actions": ["Приглушение света", "Закрытие штор", "ТВ"]},
+            {"name": "Ночь", "actions": ["Выключение всего", "Ночной свет 10%", "Охрана"]},
+            {"name": "Гость", "actions": ["Приветственный свет", "Комфортная температура"]},
+        ]
+
+        total_points = sum(s["qty"] for s in sensors) + sum(a["qty"] for a in actuators)
+
+        return {
+            "system": sel,
+            "sensors": sensors,
+            "actuators": actuators,
+            "scenarios": scenarios,
+            "total_points": total_points,
+            "estimated_cost_rub": round(total_points * sel["cost_per_point"] * 0.7),  # с оптом
+            "cable_routing": self._smart_home_cable_routing(sel, rooms),
+        }
+
+    def recognize_sketch(self, image_data: dict) -> dict:
+        """Распознавание электрической зарисовки (заглушка — требуется omni API)."""
+        # В реальной реализации: mimo-omni API для распознавания
+        return {
+            "status": "requires_omni_api",
+            "message": "Для распознавания зарисовок требуется интеграция с mimo-omni API",
+            "detected_elements": [],
+            "graph": {},
+        }
+
+    def _generate_cable_spec(self, groups: list) -> list[dict]:
+        """Спецификация кабелей."""
+        spec = {}
+        for g in groups:
+            cable = g.get("cable", "ВВгнг-LS 3×2.5")
+            if cable not in spec:
+                spec[cable] = {"cable": cable, "length_m": 0, "groups": []}
+            spec[cable]["length_m"] += 15  # Примерная длина трассы
+            spec[cable]["groups"].append(g["name"])
+        return list(spec.values())
+
+    def _generate_panel_spec(self, groups: list, main_breaker_a: int) -> dict:
+        """Спецификация щитового оборудования."""
+        modules = 2 + len(groups)  # вводной + УЗО + автоматы
+        return {
+            "panel_type": f"Щит квартирный на {max(24, modules + 4)} модулей",
+            "main_breaker": f"ВА47-29 — {main_breaker_a}A — 2P",
+            "rcd": "ВДТ — 63A/30мА — 2P",
+            "breakers": [{"group": g["name"], "type": g["breaker_type"]} for g in groups],
+            "busbars": ["N (нейтраль) — синяя", "PE (земля) — зелёно-жёлтая"],
+            "total_modules": modules,
+        }
+
+    def _smart_home_cable_routing(self, system: dict, rooms: list) -> list[dict]:
+        """Трассы кабелей умного дома."""
+        if system["type"] == "беспроводной":
+            return [{"note": "Только питание 220V для актуаторов в щите"}]
+        routes = []
+        for room in rooms:
+            routes.append({
+                "from": "Щит УД",
+                "to": room.get("name", "комната"),
+                "cable": system["cable"],
+                "note": f"Отдельная трасса от силовых (≥50мм)",
+            })
+        return routes
+
     def _create_electrical_groups(self, rooms: list) -> list[dict]:
         """Создать электрические группы."""
         groups = []
