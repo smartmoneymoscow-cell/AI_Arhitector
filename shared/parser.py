@@ -38,7 +38,7 @@ class LLMParsedResponse(BaseModel):
     floors: int = Field(2, ge=1, le=20)
     width_m: int = Field(10, ge=1, le=200)
     length_m: int = Field(12, ge=1, le=200)
-    height_m: float = Field(3.0, ge=1.0, le=10.0)
+    height_m: float = Field(3.0, ge=1.0, le=50.0)
     style: str = Field("modern")
     material: str = Field("plaster")
     roof_type: str = Field("gabled")
@@ -503,6 +503,17 @@ def _validate(raw: dict) -> dict:
     # Auto-fill furniture if room_type is set but furniture is empty
     if result.get("room_type") and not result.get("furniture"):
         result["furniture"] = _FURNITURE.get(result["room_type"], ["sofa", "table"])
+
+    # Auto-detect complexity if LLM didn't provide it
+    if result.get("complexity", "simple") == "simple" and not result.get("deliverables"):
+        prompt_text = raw.get("_prompt_text", "")
+        if prompt_text:
+            detected = _detect_complexity(prompt_text)
+            if detected:
+                for key, val in detected.items():
+                    if key not in result or not result[key] or result[key] == _DEFAULTS.get(key):
+                        result[key] = val
+
     return result
 
 
