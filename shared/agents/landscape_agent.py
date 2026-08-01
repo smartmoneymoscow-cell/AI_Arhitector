@@ -89,13 +89,13 @@ class LandscapeAgent(BaseAgent):
         zones = self._design_zones(lot_width, lot_length, params)
 
         # Деревья
-        trees = self._place_trees(lot_width, lot_length, zones, style)
+        trees = self._place_trees(lot_width, lot_length, zones, style, params)
 
         # Кустарники
         shrubs = self._place_shrubs(lot_width, lot_length, zones, style)
 
         # Газон и покрытия
-        groundcover = self._design_groundcover(lot_width, lot_length, zones)
+        groundcover = self._design_groundcover(lot_width, lot_length, zones, params)
 
         # Дорожки
         pathways = self._design_pathways(lot_width, lot_length, zones, style)
@@ -183,7 +183,7 @@ class LandscapeAgent(BaseAgent):
 
         return zones
 
-    def _place_trees(self, lot_w, lot_l, zones, style) -> list[dict]:
+    def _place_trees(self, lot_w, lot_l, zones, style, params=None) ->list[dict]:
         """Размещение деревьев."""
         trees = []
         tree_type = "deciduous" if style in ("natural", "природный", "english") else "coniferous"
@@ -204,7 +204,7 @@ class LandscapeAgent(BaseAgent):
             )
 
         # Фруктовые деревья в саду
-        if params := {"has_garden": True}:
+        if (params or {}).get("has_garden", True):
             for x in range(3, min(15, int(lot_w)), 5):
                 for y in range(3, min(10, int(lot_l)), 5):
                     species = random.choice(self.PLANTS["trees"]["fruit"])
@@ -238,10 +238,10 @@ class LandscapeAgent(BaseAgent):
             )
         return shrubs
 
-    def _design_groundcover(self, lot_w, lot_l, zones) -> list[dict]:
+    def _design_groundcover(self, lot_w, lot_l, zones, params=None) -> list[dict]:
         """Покрытия (газон, клевер)."""
         total_area = lot_w * lot_l
-        building_area = params.get("width_m", 10) * params.get("length_m", 12) if isinstance(params, dict) else 120
+        building_area = (params or {}).get("width_m", 10) * (params or {}).get("length_m", 12) if isinstance(params, dict) else 120
         lawn_area = total_area - building_area - 50  # минус дорожки и площадки
 
         return [
