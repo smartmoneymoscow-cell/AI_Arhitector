@@ -47,6 +47,8 @@ def _import_agent(name: str):
         "mep": "shared.agents.mep_agent.MEPAgent",
         "structural": "shared.agents.structural_agent.StructuralAgent",
         "compliance": "shared.agents.compliance_agent.ComplianceAgent",
+        "el": "shared.agents.el_agent.ELAgent",
+        "mep_bim": "shared.agents.mep_bim_agent.MEPBIMAgent",
     }
     path = _map[name]
     module_path, class_name = path.rsplit(".", 1)
@@ -203,6 +205,7 @@ class Orchestrator:
             "research", "market", "concept", "masterplan", "landscape",
             "brand", "financial", "presentation", "style", "lighting",
             "furniture", "mep", "structural", "compliance",
+            "el", "mep_bim",
         ]
         self.agents: dict[str, BaseAgent] = {}
 
