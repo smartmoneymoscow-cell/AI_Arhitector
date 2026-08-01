@@ -410,7 +410,10 @@ function parseLocal(text){
   if(/офис|office/.test(t))p.type='office';
   else if(/коттедж|cottage/.test(t))p.type='cottage';
   else if(/таунхаус|modern/.test(t))p.type='modern';
-  else if(/база|гостиниц|отель|хостел|санаторий|пансионат|resort|hotel/.test(t))p.type='cottage';
+  else if(/база отдыха/.test(t))p.type='cottage';
+  else if(/гостиниц|отель|хостел|санаторий|пансионат|resort|hotel/.test(t))p.type='hotel';
+  else if(/туристическ|курорт|resort complex/.test(t))p.type='tourism_complex';
+  else if(/баня|саун/.test(t))p.type='bathhouse';
   else p.type='house';
   // Architectural style
   if(/хай-?тек|hi-?tech|hightech/.test(t)){p.style='hitech';p.facade_material=p.facade_material||'glass';p.roof_type=p.roof_type||'flat';}
@@ -2270,18 +2273,14 @@ async function _sendInner(){
         addThink(['🧠 AI анализирует описание…']);
         const raw=await callAI(text,
           'Ты — парсер архитектурных описаний для 3D-генератора. Отвечай ТОЛЬКО валидным JSON, без markdown. '+
-          'Формат: {"type":"house|office|cottage|modern","floors":2,"width":10,"length":12,"roof_type":"gabled|flat|hip","facade_material":"brick|wood|glass|plaster|stone","facade_color":null,"has_balcony":false,"has_terrace":false,"has_garage":false} '+
+          'Формат: {"type":"house|office|cottage|villa|hotel|tourism_complex|bathhouse|warehouse|school|apartment|townhouse","floors":2,"width":10,"length":12,"roof_type":"gabled|flat|hip","facade_material":"brick|wood|glass|plaster|stone","facade_color":null,"has_balcony":false,"has_terrace":false,"has_garage":false} '+
           'Правила: null = не упомянуто. «база отдыха», «гостиница», «отель», «курорт» → type="hotel". «туристический комплекс», «мастер-план» → type="tourism_complex". «премиальный", "элитный" → facade_material="stone". '+
           '"64 кв метра" → width=8, length=8. Только JSON, ничего больше.',
           300);
         const j=JSON.parse(raw.replace(/```json|```/g,'').trim());
         if(j&&j.type){
-          // Map hotel/tourism types
-          let mappedType = j.type;
-          if(j.type==='hotel'||j.type==='tourism_complex'||j.type==='resort') mappedType = j.type;
-          if(j.type==='cottage' && /отель|гостиниц|курорт|туристическ/i.test(text)) mappedType = 'hotel';
           parsed={
-            type: mappedType||'house',
+            type: j.type||'house',
             floors: j.floors||2,
             width: j.width||10,
             length: j.length||12,
