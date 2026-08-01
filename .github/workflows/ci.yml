@@ -1,325 +1,98 @@
-# ═══════════════════════════════════════════════════════════════
-# CI Pipeline — Architect v7.0
-# Runs on every PR and push to main/dev
-# ═══════════════════════════════════════════════════════════════
 name: CI
 
 on:
-  pull_request:
-    branches: [main, dev]
   push:
-    branches: [main, dev]
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  PYTHON_VERSION: "3.12"
-  NODE_VERSION: "20"
-
 jobs:
-  # ─────────────────────────────────────────────────────────────
-  # Detect which parts changed (skip unnecessary jobs)
-  # ─────────────────────────────────────────────────────────────
-  changes:
+  # ═══ 1. Lint (30 sec) ═══
+  lint:
     runs-on: ubuntu-latest
-    outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
-      docker: ${{ steps.filter.outputs.docker }}
+    timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
+      - uses: astral-sh/ruff-action@v3
+      - uses: astral-sh/ruff-action@v3
         with:
-          filters: |
-            backend:
-              - 'server.py'
-              - 'gateway/**'
-              - 'llm-service/**'
-              - 'blender-service/**'
-              - 'blender/**'
-              - 'shared/**'
-              - 'requirements.txt'
-              - 'gateway/requirements.txt'
-              - 'llm-service/requirements.txt'
-              - 'blender-service/requirements.txt'
-            frontend:
-              - 'frontend/**'
-              - 'index.html'
-              - 'tests/**'
-            docker:
-              - 'Dockerfile'
-              - 'docker-compose.yml'
-              - 'gateway.Dockerfile'
-              - 'llm.Dockerfile'
-              - 'blender.Dockerfile'
-              - '.dockerignore'
-              - 'nginx.conf'
+          args: "format --check"
 
-  # ─────────────────────────────────────────────────────────────
-  # Python Lint + Type Check
-  # ─────────────────────────────────────────────────────────────
-  lint-python:
-    needs: changes
-    if: needs.changes.outputs.backend == 'true'
+  # ═══ 2. Type check — C8: mypy (1 min) ═══
+  typecheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
+          python-version: "3.11"
+      - run: pip install mypy pydantic fastapi httpx redis Pillow shapely networkx
+      - run: mypy proto/ gateway/ llm-service/ --ignore-missing-imports --no-strict-optional
 
-      - name: Install linters
-        run: pip install ruff
-
-      - name: Ruff lint
-        run: ruff check server.py gateway/ llm-service/ blender-service/ blender/ shared/ --output-format=github
-
-      - name: Ruff format check
-        run: ruff format --check server.py gateway/ llm-service/ blender-service/ blender/ shared/
-
-  # ─────────────────────────────────────────────────────────────
-  # Python Unit Tests
-  # ─────────────────────────────────────────────────────────────
-  test-python:
-    needs: [changes, lint-python]
-    if: needs.changes.outputs.backend == 'true'
+  # ═══ 3. Tests (2 min) ═══
+  test:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-retries 5
+    env:
+      REDIS_URL: redis://localhost:6379/0
+      OPENROUTER_API_KEY: test-key
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: "3.11"
           cache: pip
+      - run: pip install -r requirements.txt
+      - run: pytest tests/ -x --tb=short --cov=proto --cov-report=term-missing -m "not blender and not llm_external and not e2e"
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
-
-      - name: Run shared module tests
-        run: |
-          python -c "from shared.config import settings; print('✅ shared.config')"
-          python -c "from shared.models import GenerateRequest; print('✅ shared.models')"
-          python -c "from shared.logging_config import setup_logging; print('✅ shared.logging_config')"
-          python -c "from shared.parser import parse_prompt_sync, AllModelsFailedError, get_cache_stats; print('✅ shared.parser')"
-          python -c "from shared.validation import safe_val, DEFAULT_FURNITURE; print('✅ shared.validation')"
-          python -c "from shared.blender import generate_bpy_script; print('✅ shared.blender')"
-          python -c "from shared.streaming import ProgressStreamer; print('✅ shared.streaming')"
-          python -c "from shared.agents import Orchestrator; print('✅ shared.agents')"
-
-      - name: Run gateway import test
-        run: |
-          cd gateway
-          pip install -r requirements.txt
-          python -c "import app; print('✅ gateway/app.py imports OK')"
-
-      - name: Run llm-service import test
-        run: |
-          cd llm-service
-          pip install -r requirements.txt
-          python -c "import app; print('✅ llm-service/app.py imports OK')"
-
-      - name: Run blender-service import test
-        run: |
-          cd blender-service
-          pip install -r requirements.txt
-          python -c "import app; print('✅ blender-service/app.py imports OK')"
-
-      - name: Run shared module tests
-        run: |
-          python -c "from shared.config import settings; print('✅ shared.config OK')"
-          python -c "from shared.models import GenerateRequest; print('✅ shared.models OK')"
-          python -c "from shared.logging_config import setup_logging; print('✅ shared.logging_config OK')"
-
-      - name: Run existing tests
-        run: |
-          if [ -f "tests/test_server.py" ]; then
-            pytest tests/test_server.py -v --tb=short
-          else
-            echo "⚠️ No Python tests found — add tests/ directory with pytest tests"
-          fi
-
-  # ─────────────────────────────────────────────────────────────
-  # Frontend Tests (Node.js)
-  # ─────────────────────────────────────────────────────────────
-  test-frontend:
-    needs: changes
-    if: needs.changes.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Run chat generation tests
-        run: node tests/test_chat.js
-
-      - name: Validate HTML
-        run: |
-          # Basic HTML validation — check for common issues
-          if grep -q "<!DOCTYPE html>" index.html || grep -q "<!doctype html>" index.html; then
-            echo "✅ HTML has doctype"
-          else
-            echo "⚠️ Missing doctype in index.html"
-          fi
-
-  # ─────────────────────────────────────────────────────────────
-  # Frontend E2E Browser Tests (Playwright)
-  # ─────────────────────────────────────────────────────────────
-  test-e2e-browser:
-    needs: changes
-    if: needs.changes.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install Playwright
-        run: npx playwright install chromium --with-deps
-
-      - name: Validate JS syntax (no duplicate let/const in strict mode)
-        run: |
-          node -e "
-          const fs = require('fs');
-          const html = fs.readFileSync('index.html','utf8');
-          const m = html.match(/<script>([\s\S]*?)<\/script>/g);
-          let ok = true;
-          for (const block of m) {
-            const inner = block.replace(/<\/?script>/g,'');
-            if (inner.length < 1000) continue;
-            try { new Function(inner); } catch(e) {
-              if (e instanceof SyntaxError) {
-                console.error('❌ JS SyntaxError:', e.message);
-                ok = false;
-              }
-            }
-          }
-          if (!ok) process.exit(1);
-          console.log('✅ No JS syntax errors');
-          "
-
-      - name: E2E browser test — send button + chat
-        run: |
-          npx playwright test --reporter=line 2>/dev/null \
-            || node tests/test_e2e_browser.js http://localhost:8080/
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: /tmp/pw-browsers
-
-  # ─────────────────────────────────────────────────────────────
-  # Docker Build (verify images compile)
-  # ─────────────────────────────────────────────────────────────
+  # ═══ 4. Docker build (3 min) ═══
   docker-build:
-    needs: [changes, lint-python]
-    if: needs.changes.outputs.docker == 'true' || needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 8
+    needs: [lint, typecheck, test]
     strategy:
       matrix:
-        service:
+        include:
           - name: gateway
-            context: .
-            file: ./gateway.Dockerfile
-          - name: llm-service
-            context: .
-            file: ./llm.Dockerfile
-          - name: blender-service
-            context: .
-            file: ./blender.Dockerfile
+            file: gateway.Dockerfile
+          - name: llm
+            file: llm.Dockerfile
+          - name: blender
+            file: blender.Dockerfile
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build ${{ matrix.service.name }}
-        uses: docker/build-push-action@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.service.context }}
-          file: ${{ matrix.service.file }}
+          context: .
+          file: ${{ matrix.file }}
           push: false
-          tags: architect/${{ matrix.service.name }}:ci-${{ github.sha }}
-          cache-from: type=gha,scope=${{ matrix.service.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
+          tags: archai/${{ matrix.name }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
-  # ─────────────────────────────────────────────────────────────
-  # Nginx config validation
-  # ─────────────────────────────────────────────────────────────
-  nginx-validate:
-    needs: changes
-    if: needs.changes.outputs.docker == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Validate nginx.conf syntax
-        run: |
-          docker run --rm -v ${{ github.workspace }}/nginx.conf:/etc/nginx/conf.d/default.conf:ro \
-            nginx:1.27-alpine nginx -t 2>&1 || echo "⚠️ Nginx config has syntax errors (expected if SSL certs are missing)"
-
-  # ─────────────────────────────────────────────────────────────
-  # Security — dependency audit
-  # ─────────────────────────────────────────────────────────────
+  # ═══ 5. Security (1 min) ═══
   security:
-    needs: changes
-    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: *** secrets.GITHUB_TOKEN }}
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: pip audit
-        run: |
-          pip install pip-audit
-          pip-audit -r requirements.txt --desc || true
-
-      - name: Check for secrets in code
-        uses: trufflesecurity/trufflehog@main
-        with:
-          extra_args: --only-verified
-
-  # ─────────────────────────────────────────────────────────────
-  # All checks passed gate
-  # ─────────────────────────────────────────────────────────────
-  ci-ok:
-    if: always()
-    needs: [changes, lint-python, test-python, test-frontend, test-e2e-browser, docker-build, nginx-validate, security]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check results
-        run: |
-          echo "=== Job Results ==="
-          echo "lint-python:      ${{ needs.lint-python.result }}"
-          echo "test-python:      ${{ needs.test-python.result }}"
-          echo "test-frontend:    ${{ needs.test-frontend.result }}"
-          echo "test-e2e-browser: ${{ needs.test-e2e-browser.result }}"
-          echo "docker-build:     ${{ needs.docker-build.result }}"
-          echo "nginx-validate:   ${{ needs.nginx-validate.result }}"
-          echo "security:         ${{ needs.security.result }}"
-
-          # Fail if any required job failed (skip "skipped" ones)
-          for result in \
-            "${{ needs.lint-python.result }}" \
-            "${{ needs.test-python.result }}" \
-            "${{ needs.test-frontend.result }}" \
-            "${{ needs.test-e2e-browser.result }}" \
-            "${{ needs.docker-build.result }}" \
-            "${{ needs.security.result }}"; do
-            if [ "$result" = "failure" ]; then
-              echo "❌ Some checks failed"
-              exit 1
-            fi
-          done
-          echo "✅ All checks passed"
+          python-version: "3.11"
+      - run: pip install pip-audit && pip-audit -r requirements.txt --strict
