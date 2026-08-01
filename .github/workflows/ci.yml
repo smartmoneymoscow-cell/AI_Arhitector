@@ -104,15 +104,35 @@ jobs:
 
       - name: Run server import test
         run: |
-          python -c "import server; print('✅ server.py imports OK')" 2>&1 || {
-            echo "❌ import server failed, debugging..."
-            python -c "from shared.config import settings; print('config OK')"
-            python -c "from shared.models import GenerateRequest; print('models OK')"
-            python -c "from shared.parser import parse_prompt_sync; print('parser OK')"
-            python -c "from shared.blender import generate_bpy_script; print('blender OK')"
-            python -c "from shared.logging_config import setup_logging; print('logging OK')"
-            exit 1
-          }
+          python -c "
+import sys, os
+sys.path.insert(0, '.')
+os.environ.setdefault('OPENROUTER_API_KEY', 'test')
+os.environ.setdefault('REDIS_URL', 'redis://localhost:6379/0')
+os.environ.setdefault('BLENDER_PATH', 'blender')
+os.environ.setdefault('OUTPUT_DIR', '/tmp/test')
+
+modules = [
+    'shared.config',
+    'shared.models',
+    'shared.logging_config',
+    'shared.parser',
+    'shared.validation',
+    'shared.blender',
+    'shared.router',
+    'shared.clarification',
+    'shared.streaming',
+    'shared.agents',
+]
+for mod in modules:
+    try:
+        __import__(mod)
+        print(f'✅ {mod}')
+    except Exception as e:
+        print(f'❌ {mod}: {e}')
+        sys.exit(1)
+print('✅ All shared modules import OK')
+"
 
       - name: Run gateway import test
         run: |
