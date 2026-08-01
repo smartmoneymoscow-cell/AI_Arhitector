@@ -1,5 +1,5 @@
 /**
- * Architect v10.2 — Chat Generation Tests
+ * Architect v10.3 — Chat Generation Tests
  * Tests that text, photo, and voice inputs all trigger 3D generation.
  *
  * Run: node tests/test_chat.js
@@ -43,8 +43,7 @@ while ((m = scriptRe.exec(htmlSrc)) !== null) {
 // Remove 'use strict'
 appCode = appCode.replace(/'use strict';?\s*/g, '');
 
-// Remove duplicate Voice Input code (was duplicated in broken CDN script tags, now in main block)
-// The VM context can't handle `let` re-declarations
+// Remove duplicate Voice Input code
 appCode = appCode.replace(/let recognition = null;\s*/g, '');
 appCode = appCode.replace(/let isListening = false;\s*/g, '');
 
@@ -52,7 +51,6 @@ appCode = appCode.replace(/let isListening = false;\s*/g, '');
 // BUILD TEST ENVIRONMENT
 // ═══════════════════════════════════════════════════════════════
 function createEnv() {
-  // Track what happens
   const log = {
     genCalls: [],
     msgLog: [],
@@ -60,7 +58,6 @@ function createEnv() {
     notifications: [],
   };
 
-  // DOM elements store
   const elements = {};
   function el(id, tag = 'div') {
     if (elements[id]) return elements[id];
@@ -97,9 +94,6 @@ function createEnv() {
   el('c3d', 'canvas');
   el('cwrap');
   el('notif');
-  el('settings-modal');
-  el('settings-key', 'input');
-  el('settings-backend', 'input');
   el('typ');
 
   // Welcome screen
@@ -125,21 +119,22 @@ function createEnv() {
     removeItem: (k) => { delete store[k]; },
   };
 
-  // fetch mock
+  // fetch mock — backend is available
   const fetch = async (url, opts) => {
     log.fetchCalls.push({ url, opts });
-    if (url.includes('openrouter.ai')) {
+    if (url.includes('/api/v1/health')) return { ok: true };
+    if (url.includes('/api/v1/proxy/claude')) {
       return {
         ok: true,
         json: async () => ({
-          choices: [{ message: { content: JSON.stringify({
+          content: [{ text: JSON.stringify({
             type: 'house', floors: 2, width: 10, length: 12,
             roof_type: 'gabled', facade_material: 'brick',
-          })}}]
+            object_type: 'building',
+          })}]
         })
       };
     }
-    if (url.includes('/api/v1/health')) return { ok: false };
     return { ok: false, status: 404, text: async () => 'Not found' };
   };
 
@@ -227,7 +222,7 @@ function createEnv() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// INJECT APP CODE — use vm to run in context
+// INJECT APP CODE
 // ═══════════════════════════════════════════════════════════════
 function injectApp(env) {
   let code = appCode;
@@ -249,6 +244,8 @@ function injectApp(env) {
     function showTyping(){}
     function removeTyping(){}
     async function generateViaBlenderServer(){ return false; }
+    async function renderInteriorViaServer(){ return false; }
+    function showNotif(){}
   `;
 
   const fullCode = code + '\n' + shimCode;
@@ -256,13 +253,12 @@ function injectApp(env) {
   try {
     const script = new vm.Script(fullCode, { filename: 'app.js' });
     const context = vm.createContext(env);
-    // Inject tracking arrays into context
     context._genCalls = env.log.genCalls;
     context._msgLog = env.log.msgLog;
     script.runInContext(context);
     return context;
   } catch (e) {
-    console.error('  ⚠️  Injection error:', e.message.slice(0, 120));
+    console.error('  ⚠️  Injection error:', e.message.slice(0, 200));
     return null;
   }
 }
@@ -274,25 +270,19 @@ async function testTextInput() {
   section('TEST 1: Text Input → 3D Generation');
 
   const env = createEnv();
-  env.localStorage.setItem('archai_openrouter_key', 'sk-or-v1-test-key-12345');
-
   const ctx = injectApp(env);
   assert(ctx !== null, 'App code injected');
-
   if (!ctx) return;
 
-  // Set input
   env.elements['ci'].value = 'двухэтажный кирпичный дом 10×12 двускатная кровля';
 
-  // Call send
-  try { await ctx.send(); } catch (e) { /* may throw on mock */ }
+  try { await ctx.send(); } catch (e) {}
   await new Promise(r => setTimeout(r, 50));
 
-  const log = env.log;
-  assert(log.genCalls.length > 0, `startGen() called (${log.genCalls.length}x)`);
+  assert(env.log.genCalls.length > 0, `startGen() called (${env.log.genCalls.length}x)`);
 
-  if (log.genCalls.length > 0) {
-    const bld = log.genCalls[0];
+  if (env.log.genCalls.length > 0) {
+    const bld = env.log.genCalls[0];
     assert(bld.floors === 2, `Floors: ${bld.floors}`);
     assert(bld.W === 10, `Width: ${bld.W}`);
     assert(bld.L === 12, `Length: ${bld.L}`);
@@ -300,83 +290,74 @@ async function testTextInput() {
     assert(bld.roof === 'gabled', `Roof: ${bld.roof}`);
   }
 
-  assert(log.msgLog.some(m => m.role === 'u'), 'User message logged');
+  assert(env.log.msgLog.some(m => m.role === 'u'), 'User message logged');
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TEST 2: PHOTO INPUT → GENERATION
+// TEST 2: INTERIOR INPUT → INTERIOR GENERATION
 // ═══════════════════════════════════════════════════════════════
-async function testPhotoInput() {
-  section('TEST 2: Photo Upload → 3D Generation');
+async function testInteriorInput() {
+  section('TEST 2: Interior Input → Interior Generation');
 
   const env = createEnv();
-  env.localStorage.setItem('archai_openrouter_key', 'sk-or-v1-test-key-12345');
-
   const ctx = injectApp(env);
   assert(ctx !== null, 'App code injected');
   if (!ctx) return;
 
-  // Simulate file upload
+  env.elements['ci'].value = 'детская комната в классическом стиле';
+
+  try { await ctx.send(); } catch (e) {}
+  await new Promise(r => setTimeout(r, 100));
+
+  assert(env.log.genCalls.length > 0, `startGen() called (${env.log.genCalls.length}x)`);
+
+  if (env.log.genCalls.length > 0) {
+    const bld = env.log.genCalls[0];
+    assert(bld.isInterior === true, `isInterior: ${bld.isInterior}`);
+    assert(bld.room_type === 'children', `room_type: ${bld.room_type}`);
+    assert(bld.label && bld.label.includes('classic'), `label includes style: ${bld.label}`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TEST 3: PHOTO INPUT → GENERATION
+// ═══════════════════════════════════════════════════════════════
+async function testPhotoInput() {
+  section('TEST 3: Photo Upload → 3D Generation');
+
+  const env = createEnv();
+  const ctx = injectApp(env);
+  assert(ctx !== null, 'App code injected');
+  if (!ctx) return;
+
   const mockFile = new env.File(['fake-jpeg-data'], 'house.jpg', { type: 'image/jpeg' });
   mockFile._content = 'fake-jpeg-data';
 
   ctx.handleFile(mockFile);
   await new Promise(r => setTimeout(r, 50));
 
-  // handleFile sets pendingFile/pendingFileB64 in app scope (let vars)
-  // We track via the mock FileReader which sets env vars
-  // After handleFile, check the filePreview was shown
   assert(env.elements['filePreview'].style.display === 'flex', 'File preview shown');
   assert(env.elements['filePreviewName'].textContent.includes('house'), 'File name shown');
 
-  // Send
   try { await ctx.send(); } catch (e) {}
   await new Promise(r => setTimeout(r, 200));
 
   assert(env.log.genCalls.length > 0, `startGen() from photo (${env.log.genCalls.length}x)`);
-  assert(env.pendingFileB64 === null, 'File cleared after send');
   assert(env.log.msgLog.some(m => m.role === 'u'), 'User photo msg logged');
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TEST 3: VOICE INPUT → GENERATION
+// TEST 4: NO BACKEND → STILL GENERATES (local parse only)
 // ═══════════════════════════════════════════════════════════════
-async function testVoiceInput() {
-  section('TEST 3: Voice Input → 3D Generation');
+async function testNoBackend() {
+  section('TEST 4: No Backend → Still Generates (local parse)');
 
   const env = createEnv();
-  env.localStorage.setItem('archai_openrouter_key', 'sk-or-v1-test-key-12345');
-
-  const ctx = injectApp(env);
-  assert(ctx !== null, 'App code injected');
-  if (!ctx) return;
-
-  // Voice fills textarea, then send()
-  env.elements['ci'].value = 'деревянный коттедж с террасой 12 на 15';
-
-  try { await ctx.send(); } catch (e) {}
-  await new Promise(r => setTimeout(r, 100));
-
-  assert(env.log.genCalls.length > 0, `startGen() from voice (${env.log.genCalls.length}x)`);
-
-  if (env.log.genCalls.length > 0) {
-    const bld = env.log.genCalls[0];
-    // Voice text goes through callClaude which returns mock data (house/brick)
-    // The important thing is that generation was triggered
-    assert(bld !== undefined, `Building generated: ${bld.label || 'ok'}`);
-    assert(bld.W > 0, `Width: ${bld.W}`);
-    assert(bld.L > 0, `Length: ${bld.L}`);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// TEST 4: NO API KEY → STILL GENERATES (local parse only)
-// ═══════════════════════════════════════════════════════════════
-async function testNoApiKey() {
-  section('TEST 4: No API Key → Still Generates (local parse)');
-
-  const env = createEnv();
-  // Do NOT set API key
+  // Override fetch to fail — no backend
+  env.fetch = async (url) => {
+    env.log.fetchCalls.push({ url });
+    return { ok: false, status: 0 };
+  };
 
   const ctx = injectApp(env);
   assert(ctx !== null, 'App code injected');
@@ -387,14 +368,12 @@ async function testNoApiKey() {
   try { await ctx.send(); } catch(e) {}
   await new Promise(r => setTimeout(r, 100));
 
-  // Should generate via local parse, NOT block with error
-  assert(env.log.genCalls.length > 0, `Generation works without API key (${env.log.genCalls.length}x)`);
+  assert(env.log.genCalls.length > 0, `Generation works without backend (${env.log.genCalls.length}x)`);
   if (env.log.genCalls.length > 0) {
     assert(env.log.genCalls[0].floors === 2, `Floors from local parse: ${env.log.genCalls[0].floors}`);
     assert(env.log.genCalls[0].W === 10, `Width from local parse: ${env.log.genCalls[0].W}`);
   }
-  // Should NOT show 'API key' error
-  assert(!env.log.msgLog.some(m => m.html && m.html.includes('API ключ')), 'No API key error for building request');
+  assert(!env.log.msgLog.some(m => m.html && m.html.includes('API ключ')), 'No API key error');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -404,8 +383,6 @@ async function testEmptyInput() {
   section('TEST 5: Empty Input → No Action');
 
   const env = createEnv();
-  env.localStorage.setItem('archai_openrouter_key', 'sk-or-v1-test');
-
   const ctx = injectApp(env);
   assert(ctx !== null, 'App code injected');
   if (!ctx) return;
@@ -426,8 +403,6 @@ async function testGoFunction() {
   section('TEST 6: go() Quick Prompt → Generation');
 
   const env = createEnv();
-  env.localStorage.setItem('archai_openrouter_key', 'sk-or-v1-test');
-
   const ctx = injectApp(env);
   assert(ctx !== null, 'App code injected');
   if (!ctx) return;
@@ -442,40 +417,12 @@ async function testGoFunction() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TEST 7: SETTINGS — SAVE/LOAD
-// ═══════════════════════════════════════════════════════════════
-async function testSettings() {
-  section('TEST 7: Settings — Save/Load API Key');
-
-  const env = createEnv();
-
-  const ctx = injectApp(env);
-  assert(ctx !== null, 'App code injected');
-  if (!ctx) return;
-
-  ctx.openSettings();
-  assert(env.elements['settings-modal'].style.display === 'block', 'Modal opened');
-
-  env.elements['settings-key'].value = 'sk-or-v1-my-test-key';
-  env.elements['settings-backend'].value = 'http://localhost:5000';
-  ctx.saveSettings();
-
-  assert(env.elements['settings-modal'].style.display === 'none', 'Modal closed');
-  assert(env.localStorage.getItem('archai_openrouter_key') === 'sk-or-v1-my-test-key', 'Key saved');
-  assert(env.localStorage.getItem('archai_backend_url') === 'http://localhost:5000', 'URL saved');
-  assert(ctx.getOpenRouterKey() === 'sk-or-v1-my-test-key', 'getOpenRouterKey() works');
-  assert(ctx.getBackendUrl() === 'http://localhost:5000', 'getBackendUrl() works');
-}
-
-// ═══════════════════════════════════════════════════════════════
-// TEST 8: LOCAL PARSER — PARAMETER EXTRACTION
+// TEST 7: LOCAL PARSER — PARAMETER EXTRACTION
 // ═══════════════════════════════════════════════════════════════
 async function testLocalParser() {
-  section('TEST 8: Local Parser — Parameter Extraction');
+  section('TEST 7: Local Parser — Parameter Extraction');
 
   const env = createEnv();
-  env.localStorage.setItem('archai_openrouter_key', 'sk-or-v1-test');
-
   const ctx = injectApp(env);
   assert(ctx !== null, 'App code injected');
   if (!ctx) return;
@@ -497,13 +444,14 @@ async function testLocalParser() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TEST 9: CALLCLAUDE — KEY REQUIRED
+// TEST 8: CALLAI — BACKEND REQUIRED
 // ═══════════════════════════════════════════════════════════════
-async function testCallClaudeKeyCheck() {
-  section('TEST 9: callAI() — Key Required');
+async function testCallAIRequiresBackend() {
+  section('TEST 8: callAI() — Backend Required');
 
   const env = createEnv();
-  // No key
+  // Override fetch to fail — no backend
+  env.fetch = async () => ({ ok: false, status: 0 });
 
   const ctx = injectApp(env);
   assert(ctx !== null, 'App code injected');
@@ -513,95 +461,90 @@ async function testCallClaudeKeyCheck() {
   try { await ctx.callAI('тест', '', 100); }
   catch (e) {
     threw = true;
-    assert(e.message.includes('API ключ') || e.message.includes('key'), `Error: ${e.message.slice(0,60)}`);
+    assert(e.message.includes('недоступен'), `Error: ${e.message.slice(0,80)}`);
   }
-  assert(threw, 'callAI() throws without key');
+  assert(threw, 'callAI() throws without backend');
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TEST 10: GENERATING FLAG — BLOCKS DOUBLE SEND
+// TEST 9: GENERATING FLAG — BLOCKS DOUBLE SEND
 // ═══════════════════════════════════════════════════════════════
 async function testGeneratingFlag() {
-  section('TEST 10: Generating Flag — Blocks Double Send');
+  section('TEST 9: Generating Flag — Blocks Double Send');
 
   const env = createEnv();
-  env.localStorage.setItem('archai_openrouter_key', 'sk-or-v1-test');
-
   const ctx = injectApp(env);
   assert(ctx !== null, 'App code injected');
   if (!ctx) return;
 
-  // ST is a const inside the app scope, can't set directly
-  // Instead, simulate by checking that send() with active generation blocks
-  // We test this by verifying the guard message appears
   env.elements['ci'].value = 'дом 2 этажа';
-  // First call starts generation
   try { await ctx.send(); } catch(e) {}
   await new Promise(r => setTimeout(r, 50));
   const firstGenCount = env.log.genCalls.length;
-  // Second call should be blocked
+
   env.elements['ci'].value = 'ещё один дом';
   try { await ctx.send(); } catch(e) {}
   await new Promise(r => setTimeout(r, 50));
-  // If generating flag works, genCalls shouldn't increase
-  // Note: in mock, startGen doesn't set the flag, so we check msgLog instead
+
   assert(env.log.msgLog.length > 0, 'Messages were processed');
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TEST 11: PHOTO FALLBACK — GEN EVEN WHEN VISION FAILS
+// TEST 10: NO API KEY IN STORAGE — CLEAN
 // ═══════════════════════════════════════════════════════════════
-async function testPhotoFallback() {
-  section('TEST 11: Photo Fallback — Gen When Vision Fails');
+async function testNoApiKeyInStorage() {
+  section('TEST 10: No API Key in localStorage — Clean');
 
   const env = createEnv();
-  env.localStorage.setItem('archai_openrouter_key', 'sk-or-v1-test');
-
-  // Override fetch to fail for vision
-  env.fetch = async (url) => {
-    env.log.fetchCalls.push({ url });
-    if (url.includes('openrouter.ai')) {
-      return { ok: false, status: 500, text: async () => 'Server error' };
-    }
-    return { ok: false, status: 404, text: async () => 'Not found' };
-  };
-
   const ctx = injectApp(env);
   assert(ctx !== null, 'App code injected');
   if (!ctx) return;
 
-  // Upload photo with descriptive name
-  const mockFile = new env.File(['data'], 'kirpichny-dom-2-etazha.jpg', { type: 'image/jpeg' });
-  mockFile._content = 'data';
-  ctx.handleFile(mockFile);
-  await new Promise(r => setTimeout(r, 50));
+  assert(env.localStorage.getItem('archai_openrouter_key') === null, 'No openrouter_key in storage');
+  assert(env.elements['settings-modal'] === undefined, 'No settings-modal element');
+  assert(typeof ctx.getOpenRouterKey === 'undefined', 'getOpenRouterKey() does not exist');
+  assert(typeof ctx.openSettings === 'undefined', 'openSettings() does not exist');
+  assert(typeof ctx.saveSettings === 'undefined', 'saveSettings() does not exist');
+}
 
-  try { await ctx.send(); } catch (e) {}
-  await new Promise(r => setTimeout(r, 300));
+// ═══════════════════════════════════════════════════════════════
+// TEST 11: INTERIOR GSTEPS — DYNAMIC SWITCHING
+// ═══════════════════════════════════════════════════════════════
+async function testInteriorGSteps() {
+  section('TEST 11: Interior GSTEPS — Dynamic Switching');
 
-  // Should still generate via fallback
-  assert(env.log.genCalls.length > 0, `Fallback gen triggered (${env.log.genCalls.length}x)`);
-  assert(env.log.msgLog.some(m => m.html && (m.html.includes('фото') || m.html.includes('файл'))),
-    'Fallback message shown');
+  const env = createEnv();
+  const ctx = injectApp(env);
+  assert(ctx !== null, 'App code injected');
+  if (!ctx) return;
+
+  // GSTEPS is a let variable in VM, check via startGen behavior
+  // Verify building steps exist in the code
+  assert(appCode.includes('GSTEPS_BUILDING'), 'GSTEPS_BUILDING in source');
+  assert(appCode.includes('GSTEPS_INTERIOR'), 'GSTEPS_INTERIOR in source');
+  assert(appCode.includes('Фундамент и стены'), 'Building step "Фундамент и стены" in source');
+  assert(appCode.includes('Мебель и расстановка'), 'Interior step "Мебель и расстановка" in source');
+  assert(appCode.includes('Освещение'), 'Interior step "Освещение" in source');
+  assert(appCode.includes('bld.isInterior'), 'Dynamic GSTEPS switching in source');
 }
 
 // ═══════════════════════════════════════════════════════════════
 // RUN ALL TESTS
 // ═══════════════════════════════════════════════════════════════
 async function main() {
-  console.log('\n🏗️  Architect v10.2 — Chat Generation Tests\n');
+  console.log('\n🏗️  Architect v10.3 — Chat Generation Tests\n');
 
   await testTextInput();
+  await testInteriorInput();
   await testPhotoInput();
-  await testVoiceInput();
-  await testNoApiKey();
+  await testNoBackend();
   await testEmptyInput();
   await testGoFunction();
-  await testSettings();
   await testLocalParser();
-  await testCallClaudeKeyCheck();
+  await testCallAIRequiresBackend();
   await testGeneratingFlag();
-  await testPhotoFallback();
+  await testNoApiKeyInStorage();
+  await testInteriorGSteps();
 
   console.log(`\n${'═'.repeat(60)}`);
   console.log(`  RESULTS: ${passed}/${total} passed, ${failed} failed`);

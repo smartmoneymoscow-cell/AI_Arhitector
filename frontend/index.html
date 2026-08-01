@@ -2173,6 +2173,7 @@ async function _sendInner(){
     const bld=applyParams(text,parsed);
     bld.label='Интерьер: '+ip.style+' ('+parsed.room_type+')';
     bld.isInterior = true;
+    bld.room_type = parsed.room_type;
     bld.furniture = ip.furniture;
     setTimeout(()=>startGen(bld),300);
     return;
@@ -2262,6 +2263,7 @@ async function _sendInner(){
       const bld=applyParams(text,rParsed);
       bld.label='Интерьер: '+style+' ('+roomType+')';
       bld.isInterior=true;
+      bld.room_type=roomType;
       bld.furniture=furniture;
       setTimeout(()=>startGen(bld),300);
       return;
@@ -2873,9 +2875,6 @@ function toggleMic() {
   recognition.start();
 }
 
-// ═══════════════════ SETTINGS ═══════════════════════════════
-
-}
 
 </script>
 
