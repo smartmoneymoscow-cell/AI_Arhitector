@@ -497,3 +497,21 @@ def parse_prompt_sync(text: str) -> dict:
         return loop.run_until_complete(parse_prompt_async(text))
     except RuntimeError:
         return asyncio.run(parse_prompt_async(text))
+
+# ═══════════════════ BACKWARD COMPAT ALIASES ═══════════════════
+# v8.0.0 renamed internal functions; these aliases keep tests + router working
+parse_prompt = parse_prompt_sync
+_call_llm = _call_openrouter
+
+def get_generation_type(params: dict) -> str:
+    """Determine generation type from parsed params."""
+    obj = (params.get("object_type") or "").lower()
+    if obj in ("room", "interior"):
+        return "interior"
+    return "building"
+
+def _validate(params: dict) -> dict:
+    """Validate and sanitize parsed parameters."""
+    if not isinstance(params, dict):
+        return {}
+    return params

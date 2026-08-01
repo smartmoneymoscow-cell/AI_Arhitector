@@ -81,15 +81,18 @@ MOCK_LLM_RESPONSES = {
 }
 
 
-def _mock_call_llm(text, cfg):
-    """Мок _call_llm — возвращает предопределённый ответ."""
+async def _mock_call_openrouter(model, prompt, timeout, api_key):
+    """Мок _call_openrouter — возвращает предопределённый ответ."""
     for prompt_key, response in MOCK_LLM_RESPONSES.items():
-        if prompt_key in text or text in prompt_key:
+        if prompt_key in prompt or prompt in prompt_key:
             return response
     # Дефолтный ответ
     return {"object_type": "building", "building_type": "house", "floors": 2,
             "width_m": 10, "length_m": 12, "style": "modern", "material": "plaster",
             "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.5}
+
+# Backward compat alias
+_mock_call_llm = _mock_call_openrouter
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -125,8 +128,9 @@ class TestPromptParsing:
     """Тесты парсинга промтов с моками LLM."""
 
     @pytest.mark.parametrize("text,obj_type,subtype,style,features", HALLUCINATION_MATRIX)
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_parse_returns_correct_types(self, mock_llm, text, obj_type, subtype, style, features):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_llm)
+    def test_parse_returns_correct_types(self, mock_keys, mock_llm, text, obj_type, subtype, style, features):
         """Парсер возвращает корректные типы."""
         p = parse_prompt(text)
 
@@ -143,16 +147,18 @@ class TestPromptParsing:
         for feat in features:
             assert feat in p["features"], f"'{text}' → features={p['features']}, ожидали '{feat}'"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_no_hallucinated_dimensions(self, mock_llm):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_llm)
+    def test_no_hallucinated_dimensions(self, mock_keys, mock_llm):
         p = parse_prompt("построй что-нибудь красивое")
         assert isinstance(p["width_m"], (int, float))
         assert isinstance(p["length_m"], (int, float))
         assert 1 <= p["width_m"] <= 200
         assert 1 <= p["length_m"] <= 200
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_no_hallucinated_features(self, mock_llm):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_llm)
+    def test_no_hallucinated_features(self, mock_keys, mock_llm):
         p = parse_prompt("построй что-нибудь красивое")
         assert isinstance(p["features"], list)
 
@@ -173,13 +179,13 @@ class TestPromptParsing:
 class TestAllModelsFailed:
     """Тесты поведения при недоступности всех моделей."""
 
-    @patch("shared.parser._call_llm", return_value=None)
+    @patch("shared.parser._call_openrouter", return_value=None)
     @patch("shared.parser._l2_get", return_value=None)
     def test_raises_when_all_models_fail(self, mock_redis, mock_llm):
         with pytest.raises(AllModelsFailedError):
             parse_prompt("двухэтажный дом")
 
-    @patch("shared.parser._call_llm", return_value=None)
+    @patch("shared.parser._call_openrouter", return_value=None)
     def test_uses_cache_when_models_fail(self, mock_llm):
         # Populate L1 cache
         _l1_set("test cached prompt", {"object_type": "building", "building_type": "house",
@@ -384,16 +390,18 @@ class TestRobustness:
         assert isinstance(result, dict)
         assert result["object_type"] == "building"
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_llm)
     @pytest.mark.parametrize("text", ["asdfghjkl", "12345", "🤖💀"])
-    def test_garbage_input_with_mock(self, mock_llm, text):
+    def test_garbage_input_with_mock(self, mock_keys, mock_llm, text):
         result = parse_prompt(text)
         assert isinstance(result, dict)
         assert "object_type" in result
         assert result["object_type"] in VALID_OBJECT_TYPES
 
-    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
-    def test_long_prompt(self, mock_llm):
+    @patch("shared.parser._get_api_keys", return_value=["test-key"])
+    @patch("shared.parser._call_openrouter", side_effect=_mock_call_llm)
+    def test_long_prompt(self, mock_keys, mock_llm):
         result = parse_prompt("а" * 5000)
         assert isinstance(result, dict)
 
