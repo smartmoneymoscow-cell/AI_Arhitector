@@ -8,8 +8,9 @@ shared/agents/research_agent.py — Агент исследований.
     - Сбор информации о материалах и технологиях
 """
 
-import time
 import logging
+import time
+
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ class ResearchAgent(BaseAgent):
     def _find_references(self, prompt: str, params: dict) -> dict:
         """Найти архитектурные референсы по описанию."""
         from shared.web_search import get_search_engine
+
         engine = get_search_engine()
 
         style = params.get("style", "")
@@ -60,12 +62,14 @@ class ResearchAgent(BaseAgent):
 
         references = []
         for r in results.results:
-            references.append({
-                "title": r.title,
-                "url": r.url,
-                "snippet": r.snippet,
-                "source": r.source,
-            })
+            references.append(
+                {
+                    "title": r.title,
+                    "url": r.url,
+                    "snippet": r.snippet,
+                    "source": r.source,
+                }
+            )
 
         return {
             "type": "references",
@@ -78,6 +82,7 @@ class ResearchAgent(BaseAgent):
     def _analyze_trends(self, prompt: str, params: dict) -> dict:
         """Анализ трендов в архитектуре."""
         from shared.web_search import get_search_engine
+
         engine = get_search_engine()
 
         queries = [
@@ -89,25 +94,34 @@ class ResearchAgent(BaseAgent):
         for q in queries:
             results = engine.search_trends(q, max_results=5)
             for r in results.results:
-                all_trends.append({
-                    "title": r.title,
-                    "url": r.url,
-                    "snippet": r.snippet,
-                })
+                all_trends.append(
+                    {
+                        "title": r.title,
+                        "url": r.url,
+                        "snippet": r.snippet,
+                    }
+                )
 
         return {
             "type": "trends",
             "trends": all_trends[:15],
             "categories": {
-                "sustainability": [t for t in all_trends if any(kw in t["title"].lower() for kw in ["eco", "green", "устойчив"])],
-                "technology": [t for t in all_trends if any(kw in t["title"].lower() for kw in ["smart", "tech", "digital"])],
-                "materials": [t for t in all_trends if any(kw in t["title"].lower() for kw in ["material", "материал"])],
+                "sustainability": [
+                    t for t in all_trends if any(kw in t["title"].lower() for kw in ["eco", "green", "устойчив"])
+                ],
+                "technology": [
+                    t for t in all_trends if any(kw in t["title"].lower() for kw in ["smart", "tech", "digital"])
+                ],
+                "materials": [
+                    t for t in all_trends if any(kw in t["title"].lower() for kw in ["material", "материал"])
+                ],
             },
         }
 
     def _research_materials(self, prompt: str, params: dict) -> dict:
         """Исследование строительных материалов."""
         from shared.web_search import get_search_engine
+
         engine = get_search_engine()
 
         material = params.get("material", "кирпич")
@@ -117,16 +131,14 @@ class ResearchAgent(BaseAgent):
         return {
             "type": "materials",
             "material": material,
-            "sources": [
-                {"title": r.title, "url": r.url, "snippet": r.snippet}
-                for r in results.results
-            ],
+            "sources": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in results.results],
             "properties": self._infer_material_properties(material),
         }
 
     def _research_technologies(self, prompt: str, params: dict) -> dict:
         """Исследование строительных технологий."""
         from shared.web_search import get_search_engine
+
         engine = get_search_engine()
 
         query = f"современные строительные технологии {prompt}"
@@ -134,15 +146,13 @@ class ResearchAgent(BaseAgent):
 
         return {
             "type": "technologies",
-            "technologies": [
-                {"title": r.title, "url": r.url, "snippet": r.snippet}
-                for r in results.results
-            ],
+            "technologies": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in results.results],
         }
 
     def _general_research(self, prompt: str, params: dict) -> dict:
         """Общее исследование по запросу."""
         from shared.web_search import get_search_engine
+
         engine = get_search_engine()
 
         results = engine.search(prompt, max_results=10)
@@ -150,18 +160,11 @@ class ResearchAgent(BaseAgent):
 
         return {
             "type": "general",
-            "general_results": [
-                {"title": r.title, "url": r.url, "snippet": r.snippet}
-                for r in results.results
-            ],
+            "general_results": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in results.results],
             "architecture_results": [
-                {"title": r.title, "url": r.url, "snippet": r.snippet}
-                for r in arch_results.results
+                {"title": r.title, "url": r.url, "snippet": r.snippet} for r in arch_results.results
             ],
-            "insights": self._extract_insights([
-                {"title": r.title, "snippet": r.snippet}
-                for r in results.results
-            ]),
+            "insights": self._extract_insights([{"title": r.title, "snippet": r.snippet} for r in results.results]),
         }
 
     def _extract_insights(self, references: list[dict]) -> list[str]:
@@ -171,8 +174,16 @@ class ResearchAgent(BaseAgent):
 
         for ref in references:
             text = (ref.get("title", "") + " " + ref.get("snippet", "")).lower()
-            for kw in ["современный", "минимализм", "экологичный", "энергоэффективный",
-                        "smart", "модульный", "параметрический", "биофильный"]:
+            for kw in [
+                "современный",
+                "минимализм",
+                "экологичный",
+                "энергоэффективный",
+                "smart",
+                "модульный",
+                "параметрический",
+                "биофильный",
+            ]:
                 if kw in text:
                     keywords_count[kw] = keywords_count.get(kw, 0) + 1
 

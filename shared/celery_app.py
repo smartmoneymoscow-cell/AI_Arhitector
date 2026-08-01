@@ -21,7 +21,6 @@ shared/celery_app.py — Celery-конфигурация для async задач
 """
 
 import os
-from typing import Any
 
 # Конфигурация из env
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
@@ -60,6 +59,7 @@ try:
     def generate_building_task(self, params: dict) -> dict:
         """Async задача: генерация GLB здания через Blender."""
         import uuid
+
         from shared.blender import generate_bpy_script, run_blender
         from shared.config import settings
 
@@ -88,11 +88,11 @@ try:
             }
         return {"status": "error", "error": "Output file not created", "job_id": job_id}
 
-
     @celery_app.task(bind=True, name="render_interior")
     def render_interior_task(self, params: dict) -> dict:
         """Async задача: рендеринг интерьера через Blender."""
         import uuid
+
         from shared.blender import generate_interior_script, run_blender
         from shared.config import settings
         from shared.validation import DEFAULT_FURNITURE
@@ -140,13 +140,13 @@ try:
             }
         return {"status": "error", "error": "Render failed", "job_id": job_id}
 
-
     @celery_app.task(bind=True, name="generate_ifc")
     def generate_ifc_task(self, params: dict) -> dict:
         """Async задача: генерация IFC-файла."""
         import uuid
-        from shared.ifc_generator import generate_ifc_building
+
         from shared.config import settings
+        from shared.ifc_generator import generate_ifc_building
 
         job_id = uuid.uuid4().hex[:8]
         output_file = os.path.join(settings.OUTPUT_DIR, f"{job_id}.ifc")
@@ -170,11 +170,11 @@ try:
             }
         return {"status": "error", "error": "IFC generation failed", "job_id": job_id}
 
-
     @celery_app.task(bind=True, name="upscale_image")
     def upscale_image_task(self, input_path: str, scale: int = 4) -> dict:
         """Async задача: апскейл изображения через Real-ESRGAN."""
         import uuid
+
         from shared.config import settings
 
         job_id = uuid.uuid4().hex[:8]
@@ -184,6 +184,7 @@ try:
 
         try:
             from shared.upscaler import upscale_image
+
             result = upscale_image(input_path, output_path, scale)
             return {
                 "status": "ok",
@@ -193,7 +194,6 @@ try:
             }
         except Exception as e:
             return {"status": "error", "error": str(e), "job_id": job_id}
-
 
     @celery_app.task(name="generate_floorplan")
     def generate_floorplan_task(params: dict, floor: int = 1) -> dict:
@@ -211,6 +211,7 @@ except ImportError:
     # Celery не установлен — создаём заглушки
     class _FakeTask:
         """Заглушка для задач, когда Celery не установлен."""
+
         def delay(self, *args, **kwargs):
             raise RuntimeError(
                 "Celery не установлен. Установите: pip install celery redis\n"

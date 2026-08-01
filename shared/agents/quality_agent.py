@@ -12,7 +12,6 @@ shared/agents/quality_agent.py — Агент проверки качества 
 
 import os
 import time
-from typing import Optional
 
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
@@ -61,11 +60,7 @@ class QualityAgent(BaseAgent):
                 checks["ai_analysis"] = ai_check
 
             # Overall verdict
-            all_ok = all(
-                c.get("passed", False)
-                for c in checks.values()
-                if c.get("required", True)
-            )
+            all_ok = all(c.get("passed", False) for c in checks.values() if c.get("required", True))
 
             return TaskResult(
                 status=TaskStatus.DONE,
@@ -88,6 +83,7 @@ class QualityAgent(BaseAgent):
         """Проверяет разрешение рендера."""
         try:
             from PIL import Image
+
             img = Image.open(image_path)
             w, h = img.size
         except Exception as e:
@@ -126,6 +122,7 @@ class QualityAgent(BaseAgent):
         """AI-анализ рендера через mimo-omni (опционально)."""
         try:
             from shared.preview import analyze_render, detect_visual_bugs
+
             analysis = analyze_render(image_path)
             bugs = detect_visual_bugs(image_path)
 

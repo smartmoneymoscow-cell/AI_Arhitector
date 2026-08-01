@@ -13,12 +13,12 @@ Usage:
     bridge.run_in_blender(bpy_script, "output/building.glb")
 """
 
+import json
+import logging
 import os
 import re
-import json
 import subprocess
 import tempfile
-import logging
 
 logger = logging.getLogger("archai.blenderllm")
 
@@ -54,8 +54,13 @@ Rules:
 class BlenderLLMBridge:
     """Bridge between user prompts and Blender 3D generation."""
 
-    def __init__(self, model_path="FreedomIntelligence/BlenderLLM", blender_path="blender",
-                 anthropic_key=None, anthropic_base=None):
+    def __init__(
+        self,
+        model_path="FreedomIntelligence/BlenderLLM",
+        blender_path="blender",
+        anthropic_key=None,
+        anthropic_base=None,
+    ):
         self.model_path = model_path
         self.blender_path = blender_path
         self.anthropic_key = anthropic_key or os.environ.get("ANTHROPIC_API_KEY", "")
@@ -91,7 +96,7 @@ class BlenderLLMBridge:
     # ── Script Generation ──────────────────────────────────────
     def generate(self, prompt, max_tokens=2048):
         """Generate bpy script from natural language prompt.
-        
+
         Tries BlenderLLM first, falls back to Claude API.
         Returns: str (bpy Python script)
         """
@@ -117,13 +122,8 @@ class BlenderLLMBridge:
         """Generate using BlenderLLM (Qwen2.5-Coder-7B fine-tuned)."""
         import torch
 
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt}
-        ]
-        text = self._tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}]
+        text = self._tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = self._tokenizer([text], return_tensors="pt").to(self._model.device)
 
         with torch.no_grad():
@@ -135,7 +135,7 @@ class BlenderLLMBridge:
                 top_p=0.9,
             )
 
-        generated = output_ids[0][len(inputs.input_ids[0]):]
+        generated = output_ids[0][len(inputs.input_ids[0]) :]
         response = self._tokenizer.decode(generated, skip_special_tokens=True)
         return self._clean_script(response)
 
@@ -143,9 +143,7 @@ class BlenderLLMBridge:
         """Generate using Claude API as fallback."""
         import httpx
 
-        messages = [
-            {"role": "user", "content": f"Generate a complete bpy script for: {prompt}"}
-        ]
+        messages = [{"role": "user", "content": f"Generate a complete bpy script for: {prompt}"}]
 
         r = httpx.post(
             f"{self.anthropic_base}/v1/messages",
@@ -305,20 +303,19 @@ if bg:
 '''
 
     # ── Blender Execution ──────────────────────────────────────
-    def run_in_blender(self, bpy_script, output_path, export_format="glb",
-                       render_preview=False, preview_path=None):
+    def run_in_blender(self, bpy_script, output_path, export_format="glb", render_preview=False, preview_path=None):
         """Execute bpy script in Blender and export result.
-        
+
         Args:
             bpy_script: Python script to execute
             output_path: Path to save the exported model
             export_format: glb, fbx, obj, blend
             render_preview: Also render a preview image
             preview_path: Path for preview image
-            
+
         Returns: dict with paths to generated files
         """
-        os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
         # Build full script
         full_script = "import bpy\nimport os\nimport math\n\n"
@@ -326,18 +323,18 @@ if bg:
 
         # Export
         ext = export_format.lower()
-        if ext in ('glb', 'gltf'):
+        if ext in ("glb", "gltf"):
             full_script += f"\nbpy.ops.export_scene.gltf(filepath=r'{output_path}', export_format='GLB')\n"
-        elif ext == 'fbx':
+        elif ext == "fbx":
             full_script += f"\nbpy.ops.export_scene.fbx(filepath=r'{output_path}')\n"
-        elif ext == 'obj':
+        elif ext == "obj":
             full_script += f"\nbpy.ops.wm.obj_export(filepath=r'{output_path}')\n"
-        elif ext == 'blend':
+        elif ext == "blend":
             full_script += f"\nbpy.ops.wm.save_as_mainfile(filepath=r'{output_path}')\n"
 
         # Render preview
         if render_preview:
-            pp = preview_path or output_path.rsplit('.', 1)[0] + '_preview.png'
+            pp = preview_path or output_path.rsplit(".", 1)[0] + "_preview.png"
             full_script += f"""
 # Render preview
 scene = bpy.context.scene
@@ -351,16 +348,18 @@ bpy.ops.render.render(write_still=True)
 """
 
         # Write temp script and run
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py',
-                                         dir=os.path.dirname(output_path) or '.') as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".py", dir=os.path.dirname(output_path) or "."
+        ) as f:
             f.write(full_script)
             script_path = f.name
 
         try:
             result = subprocess.run(
-                [self.blender_path, '--background', '--factory-startup',
-                 '--python', script_path],
-                capture_output=True, text=True, timeout=300
+                [self.blender_path, "--background", "--factory-startup", "--python", script_path],
+                capture_output=True,
+                text=True,
+                timeout=300,
             )
             logger.info(f"Blender exit code: {result.returncode}")
             if result.returncode != 0:
@@ -379,48 +378,53 @@ bpy.ops.render.render(write_still=True)
     def _clean_script(self, raw):
         """Clean generated script: remove markdown, fix common issues."""
         # Remove markdown code blocks
-        raw = re.sub(r'```python\s*', '', raw)
-        raw = re.sub(r'```\s*', '', raw)
+        raw = re.sub(r"```python\s*", "", raw)
+        raw = re.sub(r"```\s*", "", raw)
         # Remove leading/trailing whitespace
         raw = raw.strip()
         # Ensure it starts with import
-        if not raw.startswith('import') and not raw.startswith('bpy'):
+        if not raw.startswith("import") and not raw.startswith("bpy"):
             # Try to find the start of actual code
-            match = re.search(r'(import bpy|bpy\.)', raw)
+            match = re.search(r"(import bpy|bpy\.)", raw)
             if match:
-                raw = raw[match.start():]
+                raw = raw[match.start() :]
         return raw
 
     def _parse_params(self, text):
         """Extract building parameters from Russian text."""
         p = {
-            "width": 10, "length": 12, "floors": 2,
-            "roof_type": "gabled", "roof_h": 2.5,
-            "wall_r": 0.91, "wall_g": 0.88, "wall_b": 0.83,
+            "width": 10,
+            "length": 12,
+            "floors": 2,
+            "roof_type": "gabled",
+            "roof_h": 2.5,
+            "wall_r": 0.91,
+            "wall_g": 0.88,
+            "wall_b": 0.83,
         }
         # Dimensions
-        dm = re.search(r'(\d+)\s*[×xх]\s*(\d+)', text)
+        dm = re.search(r"(\d+)\s*[×xх]\s*(\d+)", text)
         if dm:
             p["width"] = int(dm.group(1))
             p["length"] = int(dm.group(2))
         # Floors
-        fm = re.search(r'(\d+)\s*(?:этаж|floor)', text)
+        fm = re.search(r"(\d+)\s*(?:этаж|floor)", text)
         if fm:
             p["floors"] = int(fm.group(1))
-        for w, n in [('двух',2),('трех',3),('четыр',4),('пяти',5)]:
+        for w, n in [("двух", 2), ("трех", 3), ("четыр", 4), ("пяти", 5)]:
             if w in text:
                 p["floors"] = n
         # Roof
-        if 'плоск' in text:
+        if "плоск" in text:
             p["roof_type"] = "flat"
-        elif 'вальм' in text:
+        elif "вальм" in text:
             p["roof_type"] = "hip"
         # Material colors
-        if 'кирпич' in text:
+        if "кирпич" in text:
             p["wall_r"], p["wall_g"], p["wall_b"] = 0.71, 0.40, 0.12
-        elif 'дерев' in text:
+        elif "дерев" in text:
             p["wall_r"], p["wall_g"], p["wall_b"] = 0.55, 0.41, 0.13
-        elif 'стекл' in text:
+        elif "стекл" in text:
             p["wall_r"], p["wall_g"], p["wall_b"] = 0.53, 0.81, 0.92
         return p
 

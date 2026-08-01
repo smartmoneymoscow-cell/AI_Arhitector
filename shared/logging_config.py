@@ -6,10 +6,10 @@ Usage:
     setup_logging("gateway")
 """
 
-import logging
 import json
-import sys
+import logging
 import os
+import sys
 import time
 import traceback
 
@@ -27,8 +27,7 @@ class JSONFormatter(logging.Formatter):
         }
 
         # Add extra fields from record
-        for key in ("request_id", "job_id", "client_ip", "method", "path",
-                     "status_code", "duration_ms", "user_agent"):
+        for key in ("request_id", "job_id", "client_ip", "method", "path", "status_code", "duration_ms", "user_agent"):
             val = getattr(record, key, None)
             if val is not None:
                 log_entry[key] = val
@@ -46,6 +45,7 @@ class JSONFormatter(logging.Formatter):
 
 class RequestIDFilter(logging.Filter):
     """Adds request_id to log records if available in context."""
+
     def filter(self, record):
         if not hasattr(record, "request_id"):
             record.request_id = ""

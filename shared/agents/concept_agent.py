@@ -8,8 +8,9 @@ shared/agents/concept_agent.py — Агент концептуального д�
     - Формирование дизайн-концепции
 """
 
-import time
 import logging
+import time
+
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
 logger = logging.getLogger(__name__)
@@ -91,9 +92,9 @@ class ConceptAgent(BaseAgent):
         style_data = self.STYLE_DB.get(style_lower, self.STYLE_DB["modern"])
 
         building_type = params.get("building_type", "house")
-        floors = params.get("floors", 2)
-        width = params.get("width_m", 10)
-        length = params.get("length_m", 10)
+        params.get("floors", 2)
+        params.get("width_m", 10)
+        params.get("length_m", 10)
 
         # Генерация концепции
         concept_name = self._generate_name(style, building_type)
@@ -133,6 +134,7 @@ class ConceptAgent(BaseAgent):
             "хай-тек": ["Технологии будущего", "Умный дом", "Футуристический дизайн"],
         }
         import random
+
         style_names = names.get(style.lower(), names["modern"])
         return random.choice(style_names)
 
@@ -154,10 +156,7 @@ class ConceptAgent(BaseAgent):
     def _create_moodboard(self, style_data: dict, params: dict) -> dict:
         """Создать мудборд (текстовое представление)."""
         return {
-            "colors": [
-                {"name": c, "hex": self._color_to_hex(c)}
-                for c in style_data["colors"]
-            ],
+            "colors": [{"name": c, "hex": self._color_to_hex(c)} for c in style_data["colors"]],
             "materials": style_data["materials"],
             "textures": self._suggest_textures(style_data),
             "lighting": self._suggest_lighting(style_data),
@@ -199,10 +198,19 @@ class ConceptAgent(BaseAgent):
     def _color_to_hex(self, color_name: str) -> str:
         """Название цвета → HEX код."""
         colors = {
-            "белый": "#FFFFFF", "чёрный": "#1A1A1A", "серый": "#808080",
-            "бежевый": "#F5F5DC", "коричневый": "#8B4513", "натуральное дерево": "#DEB887",
-            "светлое дерево": "#F5DEB3", "кирпичный": "#CB4154", "терракотовый": "#E2725B",
-            "зелёный": "#228B22", "голубой": "#87CEEB", "синий": "#4169E1",
-            "серебристый": "#C0C0C0", "земляные тона": "#D2B48C",
+            "белый": "#FFFFFF",
+            "чёрный": "#1A1A1A",
+            "серый": "#808080",
+            "бежевый": "#F5F5DC",
+            "коричневый": "#8B4513",
+            "натуральное дерево": "#DEB887",
+            "светлое дерево": "#F5DEB3",
+            "кирпичный": "#CB4154",
+            "терракотовый": "#E2725B",
+            "зелёный": "#228B22",
+            "голубой": "#87CEEB",
+            "синий": "#4169E1",
+            "серебристый": "#C0C0C0",
+            "земляные тона": "#D2B48C",
         }
         return colors.get(color_name.lower(), "#808080")

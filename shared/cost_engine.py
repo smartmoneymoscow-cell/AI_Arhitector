@@ -18,7 +18,6 @@ shared/cost_engine.py — Движок калькуляции стоимости
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +25,14 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CostLineItem:
     """Одна позиция сметы."""
-    category: str         # "materials", "labor", "engineering", "landscape"
-    item: str             # "Кирпичная кладка стен"
-    unit: str             # "м²", "м³", "шт"
-    quantity: float       # Количество
-    unit_price: float     # Цена за единицу (руб)
-    total: float = 0      # quantity * unit_price
-    source: str = ""      # Источник цены
+
+    category: str  # "materials", "labor", "engineering", "landscape"
+    item: str  # "Кирпичная кладка стен"
+    unit: str  # "м²", "м³", "шт"
+    quantity: float  # Количество
+    unit_price: float  # Цена за единицу (руб)
+    total: float = 0  # quantity * unit_price
+    source: str = ""  # Источник цены
 
     def __post_init__(self):
         self.total = self.quantity * self.unit_price
@@ -41,6 +41,7 @@ class CostLineItem:
 @dataclass
 class CostEstimate:
     """Итоговая смета."""
+
     currency: str = "RUB"
     items: list[CostLineItem] = field(default_factory=list)
     materials_cost: float = 0
@@ -151,9 +152,9 @@ class CostEngine:
 
     # Фундамент (руб/м² площади застройки)
     FOUNDATION_COSTS = {
-        "slab": 5500,       # Плитный
-        "strip": 4000,      # Ленточный
-        "pile": 7000,       # Свайный
+        "slab": 5500,  # Плитный
+        "strip": 4000,  # Ленточный
+        "pile": 7000,  # Свайный
         "плитный": 5500,
         "ленточный": 4000,
         "свайный": 7000,
@@ -186,7 +187,7 @@ class CostEngine:
         "planting": 800,
         "paving": 1500,
         "fencing": 2500,  # за погонный метр
-        "pool": 50000,    # за штуку
+        "pool": 50000,  # за штуку
         "total_per_m2": 1200,
     }
 
@@ -232,69 +233,100 @@ class CostEngine:
 
         # ── Материалы ──
         mat = self.MATERIAL_COSTS.get(material, self.MATERIAL_COSTS["default"])
-        estimate.add_item(CostLineItem(
-            category="materials", item=f"Стены ({mat['name']})",
-            unit="м²", quantity=wall_area,
-            unit_price=mat["wall_m2"] * self._region_multiplier,
-        ))
-        estimate.add_item(CostLineItem(
-            category="materials", item=f"Отделка фасада",
-            unit="м²", quantity=wall_area,
-            unit_price=mat["finish_m2"] * self._region_multiplier,
-        ))
+        estimate.add_item(
+            CostLineItem(
+                category="materials",
+                item=f"Стены ({mat['name']})",
+                unit="м²",
+                quantity=wall_area,
+                unit_price=mat["wall_m2"] * self._region_multiplier,
+            )
+        )
+        estimate.add_item(
+            CostLineItem(
+                category="materials",
+                item="Отделка фасада",
+                unit="м²",
+                quantity=wall_area,
+                unit_price=mat["finish_m2"] * self._region_multiplier,
+            )
+        )
 
         roof_price = self.ROOF_COSTS.get(roof_type, self.ROOF_COSTS["default"])
-        estimate.add_item(CostLineItem(
-            category="materials", item=f"Крыша ({roof_type})",
-            unit="м²", quantity=roof_area,
-            unit_price=roof_price * self._region_multiplier,
-        ))
+        estimate.add_item(
+            CostLineItem(
+                category="materials",
+                item=f"Крыша ({roof_type})",
+                unit="м²",
+                quantity=roof_area,
+                unit_price=roof_price * self._region_multiplier,
+            )
+        )
 
         found_price = self.FOUNDATION_COSTS.get(foundation_type, self.FOUNDATION_COSTS["default"])
-        estimate.add_item(CostLineItem(
-            category="materials", item=f"Фундамент ({foundation_type})",
-            unit="м²", quantity=footprint,
-            unit_price=found_price * self._region_multiplier,
-        ))
+        estimate.add_item(
+            CostLineItem(
+                category="materials",
+                item=f"Фундамент ({foundation_type})",
+                unit="м²",
+                quantity=footprint,
+                unit_price=found_price * self._region_multiplier,
+            )
+        )
 
         # Перекрытия (если >1 этажа)
         if floors > 1:
-            estimate.add_item(CostLineItem(
-                category="materials", item="Перекрытия",
-                unit="м²", quantity=footprint * (floors - 1),
-                unit_price=3500 * self._region_multiplier,
-            ))
+            estimate.add_item(
+                CostLineItem(
+                    category="materials",
+                    item="Перекрытия",
+                    unit="м²",
+                    quantity=footprint * (floors - 1),
+                    unit_price=3500 * self._region_multiplier,
+                )
+            )
 
         # ── Работы ──
         labor_rate = self.LABOR_COSTS["default"] * self._region_multiplier
-        estimate.add_item(CostLineItem(
-            category="labor", item="Общестроительные работы",
-            unit="м²", quantity=total_area,
-            unit_price=labor_rate,
-        ))
+        estimate.add_item(
+            CostLineItem(
+                category="labor",
+                item="Общестроительные работы",
+                unit="м²",
+                quantity=total_area,
+                unit_price=labor_rate,
+            )
+        )
 
         # ── Инженерные системы ──
         if has_engineering:
-            eng_total = self.ENGINEERING_COSTS["total"]
+            self.ENGINEERING_COSTS["total"]
             for system, price in self.ENGINEERING_COSTS.items():
                 if system == "total":
                     continue
-                estimate.add_item(CostLineItem(
-                    category="engineering",
-                    item=system.replace("_", " ").title(),
-                    unit="м²", quantity=total_area,
-                    unit_price=price * self._region_multiplier,
-                ))
+                estimate.add_item(
+                    CostLineItem(
+                        category="engineering",
+                        item=system.replace("_", " ").title(),
+                        unit="м²",
+                        quantity=total_area,
+                        unit_price=price * self._region_multiplier,
+                    )
+                )
 
         # ── Ландшафт ──
         if has_landscape:
             landscape_area = lot_area - footprint
             if landscape_area > 0:
-                estimate.add_item(CostLineItem(
-                    category="landscape", item="Благоустройство территории",
-                    unit="м²", quantity=landscape_area,
-                    unit_price=self.LANDSCAPE_COSTS["total_per_m2"] * self._region_multiplier,
-                ))
+                estimate.add_item(
+                    CostLineItem(
+                        category="landscape",
+                        item="Благоустройство территории",
+                        unit="м²",
+                        quantity=landscape_area,
+                        unit_price=self.LANDSCAPE_COSTS["total_per_m2"] * self._region_multiplier,
+                    )
+                )
 
         return estimate
 
@@ -311,49 +343,78 @@ class CostEngine:
 
         # Стиль → цена
         style_multipliers = {
-            "minimalist": 1.0, "минимализм": 1.0,
-            "modern": 1.2, "современный": 1.2,
-            "classic": 1.5, "классический": 1.5,
-            "loft": 1.1, "лофт": 1.1,
-            "scandinavian": 1.1, "скандинавский": 1.1,
-            "luxury": 2.5, "люкс": 2.5, "премиум": 2.5,
+            "minimalist": 1.0,
+            "минимализм": 1.0,
+            "modern": 1.2,
+            "современный": 1.2,
+            "classic": 1.5,
+            "классический": 1.5,
+            "loft": 1.1,
+            "лофт": 1.1,
+            "scandinavian": 1.1,
+            "скандинавский": 1.1,
+            "luxury": 2.5,
+            "люкс": 2.5,
+            "премиум": 2.5,
         }
         mult = style_multipliers.get(style, 1.2)
 
         # Пол
-        estimate.add_item(CostLineItem(
-            category="materials", item="Напольное покрытие",
-            unit="м²", quantity=area,
-            unit_price=2500 * mult * self._region_multiplier,
-        ))
+        estimate.add_item(
+            CostLineItem(
+                category="materials",
+                item="Напольное покрытие",
+                unit="м²",
+                quantity=area,
+                unit_price=2500 * mult * self._region_multiplier,
+            )
+        )
         # Стены
-        estimate.add_item(CostLineItem(
-            category="materials", item="Отделка стен",
-            unit="м²", quantity=wall_area,
-            unit_price=1200 * mult * self._region_multiplier,
-        ))
+        estimate.add_item(
+            CostLineItem(
+                category="materials",
+                item="Отделка стен",
+                unit="м²",
+                quantity=wall_area,
+                unit_price=1200 * mult * self._region_multiplier,
+            )
+        )
         # Потолок
-        estimate.add_item(CostLineItem(
-            category="materials", item="Потолок",
-            unit="м²", quantity=area,
-            unit_price=1800 * mult * self._region_multiplier,
-        ))
+        estimate.add_item(
+            CostLineItem(
+                category="materials",
+                item="Потолок",
+                unit="м²",
+                quantity=area,
+                unit_price=1800 * mult * self._region_multiplier,
+            )
+        )
         # Работы
-        estimate.add_item(CostLineItem(
-            category="labor", item="Отделочные работы",
-            unit="м²", quantity=area,
-            unit_price=3000 * mult * self._region_multiplier,
-        ))
+        estimate.add_item(
+            CostLineItem(
+                category="labor",
+                item="Отделочные работы",
+                unit="м²",
+                quantity=area,
+                unit_price=3000 * mult * self._region_multiplier,
+            )
+        )
 
         return estimate
 
     def _get_region_multiplier(self, region: str) -> float:
         """Коэффициент региона (Москва = 1.0)."""
         multipliers = {
-            "moscow": 1.0, "москва": 1.0,
-            "spb": 0.85, "петербург": 0.85, "санкт-петербург": 0.85,
-            "russia": 0.7, "россия": 0.7,
-            "europe": 1.3, "европа": 1.3,
-            "usa": 1.5, "сша": 1.5,
+            "moscow": 1.0,
+            "москва": 1.0,
+            "spb": 0.85,
+            "петербург": 0.85,
+            "санкт-петербург": 0.85,
+            "russia": 0.7,
+            "россия": 0.7,
+            "europe": 1.3,
+            "европа": 1.3,
+            "usa": 1.5,
+            "сша": 1.5,
         }
         return multipliers.get(region.lower(), 1.0)

@@ -8,8 +8,9 @@ shared/agents/market_agent.py — Агент анализа рынка.
     - Ценовые ориентиры
 """
 
-import time
 import logging
+import time
+
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ class MarketAgent(BaseAgent):
     def _full_analysis(self, prompt: str, params: dict) -> dict:
         """Полный рыночный анализ."""
         from shared.web_search import get_search_engine
+
         engine = get_search_engine()
 
         building_type = params.get("building_type", "house")
@@ -70,18 +72,9 @@ class MarketAgent(BaseAgent):
             "type": "full_market_analysis",
             "region": region,
             "building_type": building_type,
-            "market_overview": [
-                {"title": r.title, "url": r.url, "snippet": r.snippet}
-                for r in market_results.results
-            ],
-            "pricing_data": [
-                {"title": r.title, "url": r.url, "snippet": r.snippet}
-                for r in price_results.results
-            ],
-            "competitors": [
-                {"title": r.title, "url": r.url, "snippet": r.snippet}
-                for r in comp_results.results
-            ],
+            "market_overview": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in market_results.results],
+            "pricing_data": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in price_results.results],
+            "competitors": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in comp_results.results],
             "market_signals": self._analyze_market_signals(market_results.results),
             "recommendations": self._generate_recommendations(params),
         }
@@ -89,6 +82,7 @@ class MarketAgent(BaseAgent):
     def _analyze_competition(self, prompt: str, params: dict) -> dict:
         """Анализ конкурентных проектов."""
         from shared.web_search import get_search_engine
+
         engine = get_search_engine()
 
         style = params.get("style", "modern")
@@ -98,12 +92,14 @@ class MarketAgent(BaseAgent):
 
         competitors = []
         for r in results.results:
-            competitors.append({
-                "name": r.title,
-                "url": r.url,
-                "description": r.snippet,
-                "strengths": self._infer_strengths(r.snippet),
-            })
+            competitors.append(
+                {
+                    "name": r.title,
+                    "url": r.url,
+                    "description": r.snippet,
+                    "strengths": self._infer_strengths(r.snippet),
+                }
+            )
 
         return {
             "type": "competition",
@@ -114,6 +110,7 @@ class MarketAgent(BaseAgent):
     def _analyze_demand(self, prompt: str, params: dict) -> dict:
         """Анализ спроса."""
         from shared.web_search import get_search_engine
+
         engine = get_search_engine()
 
         building_type = params.get("building_type", "house")
@@ -122,10 +119,7 @@ class MarketAgent(BaseAgent):
 
         return {
             "type": "demand",
-            "demand_data": [
-                {"title": r.title, "url": r.url, "snippet": r.snippet}
-                for r in results.results
-            ],
+            "demand_data": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in results.results],
             "demand_score": self._estimate_demand_score(params),
             "target_audience": self._identify_target_audience(params),
         }
@@ -133,6 +127,7 @@ class MarketAgent(BaseAgent):
     def _analyze_pricing(self, prompt: str, params: dict) -> dict:
         """Анализ цен."""
         from shared.cost_engine import CostEngine
+
         engine = CostEngine()
         estimate = engine.calculate(params)
 

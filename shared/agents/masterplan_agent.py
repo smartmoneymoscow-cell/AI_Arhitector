@@ -9,9 +9,9 @@ shared/agents/masterplan_agent.py — Агент генерации мастер
     - Расчёт площадей и отступов
 """
 
-import time
-import math
 import logging
+import time
+
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
 logger = logging.getLogger(__name__)
@@ -21,11 +21,11 @@ class MasterplanAgent(BaseAgent):
     name = "masterplan"
 
     # Нормативные отступы (м)
-    SETBACK_FRONT = 5.0      # Отступ от красной линии
-    SETBACK_SIDE = 3.0       # Боковой отступ
-    SETBACK_REAR = 3.0       # Задний отступ
-    MIN_ROAD_WIDTH = 3.5     # Мин. ширина проезда
-    FIRE_DISTANCE = 8.0      # Расстояние для пожарного проезда
+    SETBACK_FRONT = 5.0  # Отступ от красной линии
+    SETBACK_SIDE = 3.0  # Боковой отступ
+    SETBACK_REAR = 3.0  # Задний отступ
+    MIN_ROAD_WIDTH = 3.5  # Мин. ширина проезда
+    FIRE_DISTANCE = 8.0  # Расстояние для пожарного проезда
 
     def process(self, task: Task) -> TaskResult:
         start = time.time()
@@ -52,7 +52,7 @@ class MasterplanAgent(BaseAgent):
         lot_length = params.get("lot_length_m", 40)
         building_width = params.get("width_m", 10)
         building_length = params.get("length_m", 12)
-        building_type = params.get("building_type", "house")
+        params.get("building_type", "house")
         has_garage = params.get("has_garage", True)
         has_garden = params.get("has_garden", True)
         has_pool = params.get("has_pool", False)
@@ -68,8 +68,7 @@ class MasterplanAgent(BaseAgent):
 
         # Зонирование
         zones = self._create_zones(
-            lot_width, lot_length, building_position,
-            building_width, building_length, has_garage, has_garden, has_pool
+            lot_width, lot_length, building_position, building_width, building_length, has_garage, has_garden, has_pool
         )
 
         # Дороги и проезды
@@ -99,10 +98,10 @@ class MasterplanAgent(BaseAgent):
                 "side": self.SETBACK_SIDE,
                 "rear": self.SETBACK_REAR,
             },
-            "compliance": self._check_compliance(lot_width, lot_length, building_position,
-                                                  building_width, building_length),
-            "svg": self._generate_svg(lot_width, lot_length, building_position,
-                                       building_width, building_length, zones),
+            "compliance": self._check_compliance(
+                lot_width, lot_length, building_position, building_width, building_length
+            ),
+            "svg": self._generate_svg(lot_width, lot_length, building_position, building_width, building_length, zones),
         }
 
     def _calculate_position(self, lot_w, lot_l, bld_w, bld_l, orientation) -> dict:
@@ -137,40 +136,51 @@ class MasterplanAgent(BaseAgent):
             "distance_to_right": round(lot_w - x - bld_w, 1),
         }
 
-    def _create_zones(self, lot_w, lot_l, pos, bld_w, bld_l,
-                       has_garage, has_garden, has_pool) -> list[dict]:
+    def _create_zones(self, lot_w, lot_l, pos, bld_w, bld_l, has_garage, has_garden, has_pool) -> list[dict]:
         """Зонирование участка."""
         zones = []
 
         # Зона застройки
-        zones.append({
-            "name": "building",
-            "label": "Здание",
-            "x": pos["x"], "y": pos["y"],
-            "width": bld_w, "height": bld_l,
-            "color": "#E74C3C",
-        })
+        zones.append(
+            {
+                "name": "building",
+                "label": "Здание",
+                "x": pos["x"],
+                "y": pos["y"],
+                "width": bld_w,
+                "height": bld_l,
+                "color": "#E74C3C",
+            }
+        )
 
         # Входная зона
-        zones.append({
-            "name": "entrance",
-            "label": "Входная зона",
-            "x": pos["x"], "y": pos["y"] + bld_l,
-            "width": bld_w, "height": min(5, lot_l - pos["y"] - bld_l),
-            "color": "#F39C12",
-        })
+        zones.append(
+            {
+                "name": "entrance",
+                "label": "Входная зона",
+                "x": pos["x"],
+                "y": pos["y"] + bld_l,
+                "width": bld_w,
+                "height": min(5, lot_l - pos["y"] - bld_l),
+                "color": "#F39C12",
+            }
+        )
 
         # Гараж
         if has_garage:
             garage_w = min(6, lot_w - pos["x"] - bld_w - 1)
             if garage_w >= 3:
-                zones.append({
-                    "name": "garage",
-                    "label": "Гараж",
-                    "x": pos["x"] + bld_w + 1, "y": pos["y"],
-                    "width": garage_w, "height": 6,
-                    "color": "#95A5A6",
-                })
+                zones.append(
+                    {
+                        "name": "garage",
+                        "label": "Гараж",
+                        "x": pos["x"] + bld_w + 1,
+                        "y": pos["y"],
+                        "width": garage_w,
+                        "height": 6,
+                        "color": "#95A5A6",
+                    }
+                )
 
         # Сад
         if has_garden:
@@ -179,34 +189,46 @@ class MasterplanAgent(BaseAgent):
             garden_w = lot_w
             garden_l = pos["y"] - self.SETBACK_REAR
             if garden_l > 3:
-                zones.append({
-                    "name": "garden",
-                    "label": "Сад",
-                    "x": garden_x, "y": garden_y,
-                    "width": garden_w, "height": garden_l,
-                    "color": "#27AE60",
-                })
+                zones.append(
+                    {
+                        "name": "garden",
+                        "label": "Сад",
+                        "x": garden_x,
+                        "y": garden_y,
+                        "width": garden_w,
+                        "height": garden_l,
+                        "color": "#27AE60",
+                    }
+                )
 
         # Бассейн
         if has_pool:
             pool_w = min(8, lot_w * 0.3)
             pool_l = min(4, lot_l * 0.1)
-            zones.append({
-                "name": "pool",
-                "label": "Бассейн",
-                "x": self.SETBACK_SIDE, "y": self.SETBACK_REAR,
-                "width": pool_w, "height": pool_l,
-                "color": "#3498DB",
-            })
+            zones.append(
+                {
+                    "name": "pool",
+                    "label": "Бассейн",
+                    "x": self.SETBACK_SIDE,
+                    "y": self.SETBACK_REAR,
+                    "width": pool_w,
+                    "height": pool_l,
+                    "color": "#3498DB",
+                }
+            )
 
         # Парковка
-        zones.append({
-            "name": "parking",
-            "label": "Парковка",
-            "x": pos["x"], "y": pos["y"] + bld_l + 2,
-            "width": min(bld_w, 12), "height": 3,
-            "color": "#7F8C8D",
-        })
+        zones.append(
+            {
+                "name": "parking",
+                "label": "Парковка",
+                "x": pos["x"],
+                "y": pos["y"] + bld_l + 2,
+                "width": min(bld_w, 12),
+                "height": 3,
+                "color": "#7F8C8D",
+            }
+        )
 
         return zones
 
@@ -214,13 +236,15 @@ class MasterplanAgent(BaseAgent):
         """Планировка дорог."""
         roads = []
         # Подъездная дорога от входа
-        roads.append({
-            "name": "main_access",
-            "label": "Подъезд",
-            "start": {"x": pos["x"] + pos["width"] / 2, "y": lot_l},
-            "end": {"x": pos["x"] + pos["width"] / 2, "y": pos["y"] + pos["length"]},
-            "width": self.MIN_ROAD_WIDTH,
-        })
+        roads.append(
+            {
+                "name": "main_access",
+                "label": "Подъезд",
+                "start": {"x": pos["x"] + pos["width"] / 2, "y": lot_l},
+                "end": {"x": pos["x"] + pos["width"] / 2, "y": pos["y"] + pos["length"]},
+                "width": self.MIN_ROAD_WIDTH,
+            }
+        )
         return roads
 
     def _plan_greenery(self, lot_w, lot_l, zones) -> list[dict]:
@@ -229,12 +253,15 @@ class MasterplanAgent(BaseAgent):
         # Деревья по периметру
         tree_spacing = 4.0
         for x in range(int(self.SETBACK_SIDE), int(lot_w - self.SETBACK_SIDE), int(tree_spacing)):
-            greenery.append({
-                "type": "tree",
-                "x": x, "y": self.SETBACK_REAR / 2,
-                "radius": 1.5,
-                "species": "deciduous",
-            })
+            greenery.append(
+                {
+                    "type": "tree",
+                    "x": x,
+                    "y": self.SETBACK_REAR / 2,
+                    "radius": 1.5,
+                    "species": "deciduous",
+                }
+            )
         return greenery
 
     def _calculate_areas(self, lot_area, building_area, zones) -> dict:
@@ -296,8 +323,10 @@ class MasterplanAgent(BaseAgent):
         svg_l = lot_l * scale
 
         svg_parts = [
-            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_l}" '
-            f'width="{svg_w}" height="{svg_l}">',
+            (
+                f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_l}" '
+                f'width="{svg_w}" height="{svg_l}">'
+            ),
             f'<rect x="0" y="0" width="{svg_w}" height="{svg_l}" fill="#F5F5DC" stroke="#333" stroke-width="2"/>',
         ]
 
@@ -313,9 +342,9 @@ class MasterplanAgent(BaseAgent):
             )
             # Label
             svg_parts.append(
-                f'<text x="{x + w/2}" y="{y + h/2}" text-anchor="middle" '
+                f'<text x="{x + w / 2}" y="{y + h / 2}" text-anchor="middle" '
                 f'font-size="10" fill="#333">{zone.get("label", zone["name"])}</text>'
             )
 
-        svg_parts.append('</svg>')
+        svg_parts.append("</svg>")
         return "\n".join(svg_parts)

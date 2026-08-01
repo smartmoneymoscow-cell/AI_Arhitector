@@ -20,15 +20,17 @@ from dataclasses import dataclass, field
 @dataclass
 class ClarificationQuestion:
     """Один уточняющий вопрос."""
+
     field: str  # Какое поле уточняем
-    text: str   # Текст вопроса
+    text: str  # Текст вопроса
     options: list[str] = field(default_factory=list)  # Варианты ответа
-    priority: int = 1  #1=обязательно,2=желательно,3=опционально
+    priority: int = 1  # 1=обязательно,2=желательно,3=опционально
 
 
 @dataclass
 class ClarificationResult:
     """Результат анализа на необходимость уточнений."""
+
     needs_clarification: bool = False
     questions: list[ClarificationQuestion] = field(default_factory=list)
     confidence: float = 1.0
@@ -96,32 +98,38 @@ class ClarificationEngine:
                 if not val or val == "house":  # house = дефолт, возможно не определено
                     # Проверяем, было ли что-то в промте
                     if not self._field_mentioned(field_name, prompt):
-                        questions.append(ClarificationQuestion(
-                            field=field_name,
-                            text=config["question"],
-                            options=config["options"],
-                            priority=1,
-                        ))
+                        questions.append(
+                            ClarificationQuestion(
+                                field=field_name,
+                                text=config["question"],
+                                options=config["options"],
+                                priority=1,
+                            )
+                        )
 
         # При низкой уверенности — больше вопросов
         if confidence < self.MIN_CONFIDENCE:
             for field_name, config in self.REQUIRED_FIELDS.items():
                 if not parsed_params.get(field_name):
-                    questions.append(ClarificationQuestion(
-                        field=field_name,
-                        text=config["question"],
-                        options=config["options"],
-                        priority=1,
-                    ))
+                    questions.append(
+                        ClarificationQuestion(
+                            field=field_name,
+                            text=config["question"],
+                            options=config["options"],
+                            priority=1,
+                        )
+                    )
 
             for field_name, config in self.OPTIONAL_FIELDS.items():
                 if not self._field_mentioned(field_name, prompt):
-                    questions.append(ClarificationQuestion(
-                        field=field_name,
-                        text=config["question"],
-                        options=config.get("options", []),
-                        priority=2,
-                    ))
+                    questions.append(
+                        ClarificationQuestion(
+                            field=field_name,
+                            text=config["question"],
+                            options=config.get("options", []),
+                            priority=2,
+                        )
+                    )
 
         # Сортируем по приоритету
         questions.sort(key=lambda q: q.priority)
@@ -156,35 +164,39 @@ class ClarificationEngine:
                 result["object_type"] = self._match_answer(
                     answer_lower,
                     {"дом": "house", "офис": "office", "коттедж": "cottage", "таунхаус": "townhouse", "вилл": "villa"},
-                    "house"
+                    "house",
                 )
                 result["building_type"] = result["object_type"]
 
             elif field_name == "building_type":
                 result["building_type"] = self._match_answer(
-                    answer_lower,
-                    {"дом": "house", "офис": "office", "коттедж": "cottage", "вилл": "villa"},
-                    "house"
+                    answer_lower, {"дом": "house", "офис": "office", "коттедж": "cottage", "вилл": "villa"}, "house"
                 )
 
             elif field_name == "floors":
                 import re
-                m = re.search(r'\d+', answer)
+
+                m = re.search(r"\d+", answer)
                 if m:
                     result["floors"] = int(m.group())
 
             elif field_name == "material":
                 result["material"] = self._match_answer(
                     answer_lower,
-                    {"кирпич": "brick", "дерев": "wood", "камен": "stone", "штукатурк": "plaster", "стекл": "glass", "бетон": "concrete"},
-                    "plaster"
+                    {
+                        "кирпич": "brick",
+                        "дерев": "wood",
+                        "камен": "stone",
+                        "штукатурк": "plaster",
+                        "стекл": "glass",
+                        "бетон": "concrete",
+                    },
+                    "plaster",
                 )
 
             elif field_name == "roof_type":
                 result["roof_type"] = self._match_answer(
-                    answer_lower,
-                    {"двускат": "gabled", "плоск": "flat", "вальм": "hip"},
-                    "gabled"
+                    answer_lower, {"двускат": "gabled", "плоск": "flat", "вальм": "hip"}, "gabled"
                 )
 
         return result

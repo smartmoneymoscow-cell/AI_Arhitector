@@ -7,9 +7,9 @@ v6.0 — БЕЗ REGEX FALLBACK.
 Если все модели недоступны → HTTP 503.
 """
 
-import sys
-import os
 import logging
+import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -18,15 +18,20 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from shared.config import settings
+from shared.logging_config import setup_logging
 from shared.models import (
-    ChatMessage, ChatRequest, ChatResponse,
-    ParseRequest, ParsedParams, HealthResponse,
+    ChatRequest,
+    ChatResponse,
+    HealthResponse,
+    ParsedParams,
+    ParseRequest,
 )
 from shared.parser import (
-    parse_prompt_async, AllModelsFailedError,
-    get_cache_stats, LLM_CASCADE,
+    LLM_CASCADE,
+    AllModelsFailedError,
+    get_cache_stats,
+    parse_prompt_async,
 )
-from shared.logging_config import setup_logging
 
 setup_logging("llm-service")
 logger = logging.getLogger("archai.llm")
@@ -131,6 +136,7 @@ async def cache_stats():
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.environ.get("PORT", 8081))
     print(f"LLM Service starting on port {port}")
     print(f"Cascade: {[m['model'] for m in LLM_CASCADE]}")

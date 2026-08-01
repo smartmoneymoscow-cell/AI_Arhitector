@@ -9,10 +9,10 @@ shared/agents/landscape_agent.py — Агент ландшафтного диз�
     - Озеленение фасада
 """
 
-import time
-import math
-import random
 import logging
+import random
+import time
+
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
 logger = logging.getLogger(__name__)
@@ -82,8 +82,8 @@ class LandscapeAgent(BaseAgent):
         lot_length = params.get("lot_length_m", 40)
         style = params.get("landscape_style", "natural")
         has_pool = params.get("has_pool", False)
-        has_garden = params.get("has_garden", True)
-        climate = params.get("climate", "moscow")
+        params.get("has_garden", True)
+        params.get("climate", "moscow")
 
         # Зоны ландшафта
         zones = self._design_zones(lot_width, lot_length, params)
@@ -133,45 +133,53 @@ class LandscapeAgent(BaseAgent):
     def _design_zones(self, lot_w, lot_l, params) -> list[dict]:
         """Зонирование ландшафта."""
         zones = []
-        style = params.get("landscape_style", "natural")
+        params.get("landscape_style", "natural")
 
         # Парадная зона (перед домом)
-        zones.append({
-            "name": "front_garden",
-            "label": "Парадная зона",
-            "description": "Декоративные клумбы, мощение, освещение",
-            "priority": "high",
-            "features": ["цветники", "мощение", "фонари"],
-        })
+        zones.append(
+            {
+                "name": "front_garden",
+                "label": "Парадная зона",
+                "description": "Декоративные клумбы, мощение, освещение",
+                "priority": "high",
+                "features": ["цветники", "мощение", "фонари"],
+            }
+        )
 
         # Зона отдыха (за домом)
-        zones.append({
-            "name": "recreation",
-            "label": "Зона отдыха",
-            "description": "Терраса, мангал, места для сидения",
-            "priority": "high",
-            "features": ["терраса", "пергола", "мангал"],
-        })
+        zones.append(
+            {
+                "name": "recreation",
+                "label": "Зона отдыха",
+                "description": "Терраса, мангал, места для сидения",
+                "priority": "high",
+                "features": ["терраса", "пергола", "мангал"],
+            }
+        )
 
         # Сад
         if params.get("has_garden", True):
-            zones.append({
-                "name": "garden",
-                "label": "Сад",
-                "description": "Плодовые деревья, ягодные кустарники",
-                "priority": "medium",
-                "features": ["фруктовые деревья", "грядки", "теплица"],
-            })
+            zones.append(
+                {
+                    "name": "garden",
+                    "label": "Сад",
+                    "description": "Плодовые деревья, ягодные кустарники",
+                    "priority": "medium",
+                    "features": ["фруктовые деревья", "грядки", "теплица"],
+                }
+            )
 
         # Детская площадка
         if params.get("has_playground", False):
-            zones.append({
-                "name": "playground",
-                "label": "Детская площадка",
-                "description": "Песочница, качели, горка",
-                "priority": "medium",
-                "features": ["песочница", "качели", "горка", "мягкое покрытие"],
-            })
+            zones.append(
+                {
+                    "name": "playground",
+                    "label": "Детская площадка",
+                    "description": "Песочница, качели, горка",
+                    "priority": "medium",
+                    "features": ["песочница", "качели", "горка", "мягкое покрытие"],
+                }
+            )
 
         return zones
 
@@ -184,28 +192,32 @@ class LandscapeAgent(BaseAgent):
         spacing = 5.0
         for x in range(2, int(lot_w) - 2, int(spacing)):
             species = random.choice(self.PLANTS["trees"][tree_type])
-            trees.append({
-                "name": species["name"],
-                "x": x,
-                "y": 2,
-                "height": species["height"],
-                "spread": species["spread"],
-                "type": "perimeter",
-            })
+            trees.append(
+                {
+                    "name": species["name"],
+                    "x": x,
+                    "y": 2,
+                    "height": species["height"],
+                    "spread": species["spread"],
+                    "type": "perimeter",
+                }
+            )
 
         # Фруктовые деревья в саду
         if params := {"has_garden": True}:
             for x in range(3, min(15, int(lot_w)), 5):
                 for y in range(3, min(10, int(lot_l)), 5):
                     species = random.choice(self.PLANTS["trees"]["fruit"])
-                    trees.append({
-                        "name": species["name"],
-                        "x": x,
-                        "y": y,
-                        "height": species["height"],
-                        "spread": species["spread"],
-                        "type": "fruit",
-                    })
+                    trees.append(
+                        {
+                            "name": species["name"],
+                            "x": x,
+                            "y": y,
+                            "height": species["height"],
+                            "spread": species["spread"],
+                            "type": "fruit",
+                        }
+                    )
 
         return trees
 
@@ -214,14 +226,16 @@ class LandscapeAgent(BaseAgent):
         shrubs = []
         # Кустарники вдоль дорожек и забора
         for i, species in enumerate(self.PLANTS["shrubs"]):
-            shrubs.append({
-                "name": species["name"],
-                "x": 2 + i * 3,
-                "y": lot_l - 3,
-                "height": species["height"],
-                "spread": species["spread"],
-                "bloom": species["bloom"],
-            })
+            shrubs.append(
+                {
+                    "name": species["name"],
+                    "x": 2 + i * 3,
+                    "y": lot_l - 3,
+                    "height": species["height"],
+                    "spread": species["spread"],
+                    "bloom": species["bloom"],
+                }
+            )
         return shrubs
 
     def _design_groundcover(self, lot_w, lot_l, zones) -> list[dict]:
@@ -230,40 +244,46 @@ class LandscapeAgent(BaseAgent):
         building_area = params.get("width_m", 10) * params.get("length_m", 12) if isinstance(params, dict) else 120
         lawn_area = total_area - building_area - 50  # минус дорожки и площадки
 
-        return [{
-            "type": "lawn",
-            "name": "Газон (мятлик луговой)",
-            "area_m2": max(0, lawn_area),
-            "mowing_frequency": "1 раз в неделю",
-        }]
+        return [
+            {
+                "type": "lawn",
+                "name": "Газон (мятлик луговой)",
+                "area_m2": max(0, lawn_area),
+                "mowing_frequency": "1 раз в неделю",
+            }
+        ]
 
     def _design_pathways(self, lot_w, lot_l, zones, style) -> list[dict]:
         """Дорожки."""
         pathways = []
 
         # Главная дорожка от входа
-        pathways.append({
-            "name": "main_path",
-            "label": "Главная дорожка",
-            "material": "тротуарная плитка" if style != "japanese" else "ступени из камня",
-            "width": 1.2,
-            "points": [
-                {"x": lot_w / 2, "y": lot_l},
-                {"x": lot_w / 2, "y": lot_l - 8},
-            ],
-        })
+        pathways.append(
+            {
+                "name": "main_path",
+                "label": "Главная дорожка",
+                "material": "тротуарная плитка" if style != "japanese" else "ступени из камня",
+                "width": 1.2,
+                "points": [
+                    {"x": lot_w / 2, "y": lot_l},
+                    {"x": lot_w / 2, "y": lot_l - 8},
+                ],
+            }
+        )
 
         # Боковая дорожка
-        pathways.append({
-            "name": "side_path",
-            "label": "Боковая дорожка",
-            "material": "гравий" if style in ("natural", "природный") else "плитка",
-            "width": 0.8,
-            "points": [
-                {"x": lot_w / 2, "y": lot_l - 8},
-                {"x": 3, "y": 3},
-            ],
-        })
+        pathways.append(
+            {
+                "name": "side_path",
+                "label": "Боковая дорожка",
+                "material": "гравий" if style in ("natural", "природный") else "плитка",
+                "width": 0.8,
+                "points": [
+                    {"x": lot_w / 2, "y": lot_l - 8},
+                    {"x": 3, "y": 3},
+                ],
+            }
+        )
 
         return pathways
 
@@ -287,12 +307,15 @@ class LandscapeAgent(BaseAgent):
         lights = []
         # Дорожные фонари
         for x in range(5, int(lot_w), 8):
-            lights.append({
-                "type": "path_light",
-                "x": x, "y": lot_l - 2,
-                "height": 0.8,
-                "style": "modern" if style != "classic" else "classic",
-            })
+            lights.append(
+                {
+                    "type": "path_light",
+                    "x": x,
+                    "y": lot_l - 2,
+                    "height": 0.8,
+                    "style": "modern" if style != "classic" else "classic",
+                }
+            )
         # Подсветка дома
         lights.append({"type": "wall_light", "target": "building", "warm": True})
         # Декоративная подсветка
@@ -317,7 +340,9 @@ class LandscapeAgent(BaseAgent):
         # Деревья как низкополигональные объекты
         for i, tree in enumerate(trees[:20]):  # ограничим 20 деревьями
             lines.append(f"# Tree: {tree['name']}")
-            lines.append(f"bpy.ops.mesh.primitive_cone_add(radius1={tree['spread']/2}, depth={tree['height']}, location=({tree['x']-15}, {tree['y']-15}, {tree['height']/2}))")
+            lines.append(
+                f"bpy.ops.mesh.primitive_cone_add(radius1={tree['spread'] / 2}, depth={tree['height']}, location=({tree['x'] - 15}, {tree['y'] - 15}, {tree['height'] / 2}))"
+            )
             lines.append(f"tree_{i} = bpy.context.active_object")
             lines.append(f"tree_{i}.name = 'Tree_{tree['name']}_{i}'")
             lines.append("")

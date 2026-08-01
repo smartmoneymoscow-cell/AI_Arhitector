@@ -8,23 +8,24 @@ v7.0:
 - Удалён sys.path hack
 """
 
-import os
-import sys
-import json
-import uuid
 import asyncio
-import time
+import json
 import logging
+import os
+import uuid
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
+from shared.auth import (
+    get_api_key_optional,
+    rate_limit_middleware,
+)
 from shared.config import settings
-from shared.models import GenerateRequest, ParseRequest, HealthResponse
 from shared.logging_config import setup_logging
-from shared.auth import get_api_key_optional, get_api_key_required, rate_limit_middleware
+from shared.models import GenerateRequest, ParseRequest
 
 # Setup structured logging
 setup_logging("gateway")
@@ -65,6 +66,7 @@ def _get_redis():
         return _redis
     try:
         import redis
+
         _redis = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_timeout=3)
         _redis.ping()
         logger.info("Redis connected for jobs storage")
@@ -107,8 +109,13 @@ def _get_job(job_id: str) -> dict | None:
 # RETRY HELPER
 # ═══════════════════════════════════════════════════════════════
 
+
 async def request_with_retry(
-    method: str, url: str, max_retries: int = 2, timeout: float = 120, **kwargs,
+    method: str,
+    url: str,
+    max_retries: int = 2,
+    timeout: float = 120,
+    **kwargs,
 ) -> httpx.Response:
     last_error = None
     async with httpx.AsyncClient() as client:
@@ -129,6 +136,7 @@ async def request_with_retry(
 # ═══════════════════════════════════════════════════════════════
 # HEALTH
 # ═══════════════════════════════════════════════════════════════
+
 
 @app.get("/health")
 @app.get("/api/v1/health")
@@ -168,15 +176,24 @@ async def health():
 # ORCHESTRATOR
 # ═══════════════════════════════════════════════════════════════
 
+
 @app.post("/api/v1/orchestrator/execute")
 async def orchestrator_execute(
     req: dict,
     api_key: str = Depends(get_api_key_optional),
     _rl: None = Depends(rate_limit_middleware),
 ):
-    """Полный pipeline: LLM parse → geometry → texture → render → quality → export."""
+    """
+    Полный pipeline через 20 LLM-агентов.
+
+    Body:
+        prompt: str — описание здания/интерьера
+        quality: str — preview/standard/high/ultra/16k
+        pipeline_profile: str — quick/standard/full/premium/interior/presentation
+        export_formats: list[str] — glb/ifc/obj/svg
+        skip_clarification: bool — пропустить уточняющие вопросы
+    """
     from shared.agents import Orchestrator
-    from shared.parser import AllModelsFailedError
 
     prompt = req.get("prompt", "")
     if not prompt:
@@ -185,9 +202,20 @@ async def orchestrator_execute(
     quality = req.get("quality", "standard")
     export_formats = req.get("export_formats", ["glb"])
     skip_clarification = req.get("skip_clarification", False)
+    pipeline_profile = req.get("pipeline_profile", "standard")
+
+    valid_profiles = ["quick", "standard", "full", "premium", "interior", "presentation"]
+    if pipeline_profile not in valid_profiles:
+        raise HTTPException(400, f"Invalid pipeline_profile. Valid: {valid_profiles}")
 
     job_id = uuid.uuid4().hex[:8]
-    logger.info("Orchestrator execute: job=%s quality=%s prompt=%s...", job_id, quality, prompt[:50])
+    logger.info(
+        "Orchestrator execute: job=%s quality=%s profile=%s prompt=%s...",
+        job_id,
+        quality,
+        pipeline_profile,
+        prompt[:50],
+    )
 
     orch = Orchestrator(
         blender_service_url=settings.BLENDER_SERVICE_URL,
@@ -203,38 +231,164 @@ async def orchestrator_execute(
                 quality=quality,
                 export_formats=export_formats,
                 skip_clarification=skip_clarification,
+                pipeline_profile=pipeline_profile,
             ),
         )
     except Exception as e:
         if "AllModelsFailed" in type(e).__name__ or "all_models_failed" in str(e):
             logger.error("All LLM models failed for job %s", job_id)
-            raise HTTPException(503, detail={
-                "error": "all_models_failed",
-                "message": "Все LLM-модели недоступны. Проверьте OPENROUTER_API_KEY.",
-            })
+            raise HTTPException(
+                503,
+                detail={
+                    "error": "all_models_failed",
+                    "message": "Все LLM-модели недоступны. Проверьте OPENROUTER_API_KEY.",
+                },
+            )
         raise
 
     result_job_id = result["job_id"]
-    # Store in Redis (persistent)
     _store_job(result_job_id, result)
 
     r = result.get("result") or {}
-    logger.info("Orchestrator done: job=%s status=%s duration=%dms",
-                result_job_id, result["status"], result.get("duration_ms", 0))
+    logger.info(
+        "Orchestrator done: job=%s status=%s profile=%s duration=%dms",
+        result_job_id,
+        result["status"],
+        pipeline_profile,
+        result.get("duration_ms", 0),
+    )
 
+    # Собираем ответ со ВСЕМИ результатами агентов
+    response = {
+        "job_id": result_job_id,
+        "status": result["status"],
+        "gen_type": r.get("gen_type"),
+        "quality": quality,
+        "pipeline_profile": pipeline_profile,
+        "params": r.get("params"),
+        "render": r.get("render"),
+        "exports": r.get("exports", {}),
+        "confidence": r.get("confidence"),
+        "duration_ms": result.get("duration_ms", 0),
+        "steps": [
+            {"name": s["name"], "status": s["status"], "duration_ms": s.get("duration_ms", 0)}
+            for s in result.get("steps", [])
+        ],
+    }
+
+    # Результаты интеллектуальных агентов
+    for agent_name in ("concept", "style", "masterplan", "brand", "research", "market"):
+        if r.get(agent_name):
+            response[agent_name] = r[agent_name]
+
+    # Результаты специализированных агентов
+    for agent_name in ("landscape", "furniture", "lighting", "mep", "structural"):
+        if r.get(agent_name):
+            response[agent_name] = r[agent_name]
+
+    # Пост-анализ
+    for agent_name in ("compliance", "financial"):
+        if r.get(agent_name):
+            response[agent_name] = r[agent_name]
+
+    # Презентация
+    if r.get("presentation"):
+        response["presentation"] = r["presentation"]
+
+    # Clarification (если нужны уточнения)
+    if result.get("clarification"):
+        response["clarification"] = result["clarification"]
+
+    return response
+
+
+@app.post("/api/v1/orchestrator/clarify")
+async def orchestrator_clarify(
+    req: dict,
+    api_key: str = Depends(get_api_key_optional),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Применить ответы на уточняющие вопросы и продолжить генерацию."""
+    from shared.agents import Orchestrator
+    from shared.clarification import ClarificationEngine
+
+    job_id = req.get("job_id", "")
+    answers = req.get("answers", {})
+    quality = req.get("quality", "standard")
+    pipeline_profile = req.get("pipeline_profile", "standard")
+
+    if not job_id:
+        raise HTTPException(400, "No job_id provided")
+
+    job = _get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.get("status") != "clarification_needed":
+        raise HTTPException(400, "Job is not waiting for clarification")
+
+    engine = ClarificationEngine()
+    partial = job.get("clarification", {}).get("partial_params", {})
+    updated_params = engine.apply_answers(partial, answers)
+
+    prompt = job.get("prompt", "")
+    orch = Orchestrator(
+        blender_service_url=settings.BLENDER_SERVICE_URL,
+        output_dir=settings.OUTPUT_DIR,
+    )
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None,
+        lambda: orch.execute(
+            prompt,
+            llm_params=updated_params,
+            skip_clarification=True,
+            quality=quality,
+            pipeline_profile=pipeline_profile,
+        ),
+    )
+
+    result_job_id = result["job_id"]
+    _store_job(result_job_id, result)
+
+    r = result.get("result") or {}
     return {
         "job_id": result_job_id,
         "status": result["status"],
         "gen_type": r.get("gen_type"),
         "quality": quality,
+        "pipeline_profile": pipeline_profile,
         "params": r.get("params"),
         "render": r.get("render"),
         "exports": r.get("exports", {}),
-        "steps": [
-            {"name": s["name"], "status": s["status"], "duration_ms": s.get("duration_ms", 0)}
-            for s in result.get("steps", [])
-        ],
         "duration_ms": result.get("duration_ms", 0),
+    }
+
+
+@app.get("/api/v1/orchestrator/agents")
+async def orchestrator_agents():
+    """Список всех 20 агентов."""
+    from shared.agents import AGENT_REGISTRY
+
+    return {
+        "total": len(AGENT_REGISTRY),
+        "agents": [{"name": name, "class": cls.__name__} for name, cls in AGENT_REGISTRY.items()],
+    }
+
+
+@app.get("/api/v1/orchestrator/profiles")
+async def orchestrator_profiles():
+    """Доступные pipeline profiles."""
+    from shared.agents.orchestrator import PIPELINE_PROFILES
+
+    return {
+        "profiles": {
+            name: {
+                "agents": agents,
+                "count": len(agents),
+            }
+            for name, agents in PIPELINE_PROFILES.items()
+        }
     }
 
 
@@ -249,6 +403,7 @@ async def orchestrator_job_status(job_id: str):
 @app.get("/api/v1/orchestrator/jobs/{job_id}/stream")
 async def orchestrator_stream(job_id: str):
     from shared.streaming import get_streamer
+
     streamer = get_streamer(job_id)
     if not streamer:
         raise HTTPException(404, "Job not found or stream expired")
@@ -268,6 +423,7 @@ async def orchestrator_stream(job_id: str):
 # PREVIEW
 # ═══════════════════════════════════════════════════════════════
 
+
 @app.post("/api/v1/preview")
 async def preview(
     req: dict,
@@ -283,8 +439,10 @@ async def preview(
 
     logger.info("Preview request: %s...", prompt[:50])
     r = await request_with_retry(
-        "post", f"{settings.BLENDER_SERVICE_URL}/api/v1/preview",
-        json=req, timeout=90.0,
+        "post",
+        f"{settings.BLENDER_SERVICE_URL}/api/v1/preview",
+        json=req,
+        timeout=90.0,
     )
     if r.status_code == 200:
         return Response(content=r.content, media_type="image/png")
@@ -296,8 +454,17 @@ async def preview(
 # ═══════════════════════════════════════════════════════════════
 
 INTERIOR_KEYWORDS = [
-    "спальн", "детск", "кухн", "гостин", "ванн", "кабинет",
-    "салон", "столов", "интерьер", "дизайн интерьера", "комнат",
+    "спальн",
+    "детск",
+    "кухн",
+    "гостин",
+    "ванн",
+    "кабинет",
+    "салон",
+    "столов",
+    "интерьер",
+    "дизайн интерьера",
+    "комнат",
 ]
 
 
@@ -325,8 +492,10 @@ async def generate(
         raise HTTPException(503, "Blender service not configured")
 
     r = await request_with_retry(
-        "post", f"{settings.BLENDER_SERVICE_URL}/api/v1/generate",
-        json=req.model_dump(), timeout=300.0,
+        "post",
+        f"{settings.BLENDER_SERVICE_URL}/api/v1/generate",
+        json=req.model_dump(),
+        timeout=300.0,
     )
     if r.status_code == 200:
         return Response(content=r.content, media_type="model/gltf-binary")
@@ -337,6 +506,7 @@ async def generate(
 # PARSE (proxy to LLM service)
 # ═══════════════════════════════════════════════════════════════
 
+
 @app.post("/api/v1/parse")
 async def parse(
     req: ParseRequest,
@@ -346,8 +516,10 @@ async def parse(
     """Proxy parse request to LLM service."""
     logger.info("Parse request: %s...", req.text[:50])
     r = await request_with_retry(
-        "post", f"{settings.LLM_SERVICE_URL}/api/v1/parse",
-        json=req.model_dump(), timeout=60.0,
+        "post",
+        f"{settings.LLM_SERVICE_URL}/api/v1/parse",
+        json=req.model_dump(),
+        timeout=60.0,
     )
     if r.status_code == 200:
         return r.json()

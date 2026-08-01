@@ -9,16 +9,15 @@ shared/preview.py — Модуль превью, анализа и провер�
     take_screenshot_of_render() — Скриншот с аннотацией
 """
 
+import json
 import os
 import re
-import uuid
-import json
 import subprocess
-from typing import Optional
+import uuid
 
-from shared.config import settings
-from shared.parser import parse_prompt, get_generation_type, AllModelsFailedError
 from shared.blender import generate_bpy_script, generate_interior_script
+from shared.config import settings
+from shared.parser import AllModelsFailedError, get_generation_type, parse_prompt
 from shared.validation import DEFAULT_FURNITURE
 
 
@@ -32,29 +31,41 @@ def generate_preview(prompt: str, output_dir: str = "", quality: str = "preview"
         params = parse_prompt(prompt)  # LLM-only
     except AllModelsFailedError:
         # Для превью используем дефолты если LLM недоступны
-        params = {"width_m": 10, "length_m": 12, "floors": 2, "roof_type": "gabled",
-                  "material": "plaster", "features": [], "furniture": [], "room_type": "living"}
+        params = {
+            "width_m": 10,
+            "length_m": 12,
+            "floors": 2,
+            "roof_type": "gabled",
+            "material": "plaster",
+            "features": [],
+            "furniture": [],
+            "room_type": "living",
+        }
     gen_type = get_generation_type(params)
 
     if gen_type == "interior":
         room_type = params.get("room_type", "living")
         furniture = params.get("furniture") or DEFAULT_FURNITURE.get(room_type, ["sofa", "table", "chandelier"])
-        script = generate_interior_script({
-            "width": params.get("width_m", 6),
-            "length": params.get("length_m", 8),
-            "height": params.get("height_m", 3),
-            "style": params.get("style", "modern"),
-            "furniture": furniture,
-        })
+        script = generate_interior_script(
+            {
+                "width": params.get("width_m", 6),
+                "length": params.get("length_m", 8),
+                "height": params.get("height_m", 3),
+                "style": params.get("style", "modern"),
+                "furniture": furniture,
+            }
+        )
     else:
-        script = generate_bpy_script({
-            "width": params.get("width_m", 10),
-            "length": params.get("length_m", 12),
-            "floors": params.get("floors", 2),
-            "roof_type": params.get("roof_type", "gabled"),
-            "facade_material": params.get("material", "plaster"),
-            "has_balcony": "balcony" in params.get("features", []),
-        })
+        script = generate_bpy_script(
+            {
+                "width": params.get("width_m", 10),
+                "length": params.get("length_m", 12),
+                "floors": params.get("floors", 2),
+                "roof_type": params.get("roof_type", "gabled"),
+                "facade_material": params.get("material", "plaster"),
+                "has_balcony": "balcony" in params.get("features", []),
+            }
+        )
 
     presets = {
         "preview": {"engine": "BLENDER_EEVEE_NEXT", "res_x": 1920, "res_y": 1080, "samples": 32, "timeout": 60},
@@ -87,9 +98,11 @@ bpy.ops.render.render(write_still=True)
         env = os.environ.copy()
         env.setdefault("DISPLAY", ":99")
         result = subprocess.run(
-            [settings.BLENDER_PATH, "--background", "--factory-startup",
-             "--log-level", "0", "--python", script_path],
-            capture_output=True, text=True, timeout=p["timeout"], env=env,
+            [settings.BLENDER_PATH, "--background", "--factory-startup", "--log-level", "0", "--python", script_path],
+            capture_output=True,
+            text=True,
+            timeout=p["timeout"],
+            env=env,
         )
         if result.returncode != 0:
             raise RuntimeError(f"Preview render failed: {result.stderr[-500:]}")
@@ -109,6 +122,7 @@ bpy.ops.render.render(write_still=True)
 # ═══════════════════════════════════════════════════════════════
 # ANALYSIS
 # ═══════════════════════════════════════════════════════════════
+
 
 def analyze_render(image_path: str, question: str = "") -> dict:
     """
@@ -152,6 +166,7 @@ def analyze_render(image_path: str, question: str = "") -> dict:
         # Добавляем PIL-инфо
         try:
             from PIL import Image
+
             img = Image.open(image_path)
             result["resolution"] = f"{img.width}x{img.height}"
             result["quality_ok"] = img.width >= 15360 and img.height >= 8640
@@ -163,6 +178,7 @@ def analyze_render(image_path: str, question: str = "") -> dict:
     # Fallback: PIL info only
     try:
         from PIL import Image
+
         img = Image.open(image_path)
         result["description"] = f"Изображение {img.width}x{img.height}, формат: {img.format}"
         result["resolution"] = f"{img.width}x{img.height}"
@@ -182,6 +198,7 @@ def check_quality_16k(image_path: str) -> dict:
     """
     try:
         from PIL import Image
+
         img = Image.open(image_path)
         w, h = img.width, img.height
     except Exception:
@@ -221,7 +238,7 @@ def detect_visual_bugs(image_path: str) -> dict:
         '    {"type": "clipping|missing_texture|proportion|artifact|z_fighting|black_area",\n'
         '     "description": "описание",\n'
         '     "severity": "critical|major|minor"}\n'
-        '  ],\n'
+        "  ],\n"
         '  "overall_quality": "good|acceptable|poor"\n'
         "}\n"
     )
@@ -268,6 +285,7 @@ def validate_render_matches_prompt(image_path: str, prompt: str) -> dict:
 # SCREENSHOT
 # ═══════════════════════════════════════════════════════════════
 
+
 def take_screenshot_of_render(render_path: str, output_path: str = "") -> str:
     """Создаёт скриншот ренда с аннотацией (info bar)."""
     try:
@@ -291,7 +309,7 @@ def take_screenshot_of_render(render_path: str, output_path: str = "") -> str:
 
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
-    except (OSError, IOError):
+    except OSError:
         font = ImageFont.load_default()
 
     info = f"ArchAI | {img.width}x{img.height} | {os.path.basename(render_path)}"
@@ -305,6 +323,7 @@ def take_screenshot_of_render(render_path: str, output_path: str = "") -> str:
 # INTERNAL HELPERS
 # ═══════════════════════════════════════════════════════════════
 
+
 def _call_mimo_omni(image_path: str, prompt: str) -> dict | None:
     """Вызывает mimo-omni и парсит JSON ответ."""
     try:
@@ -314,7 +333,9 @@ def _call_mimo_omni(image_path: str, prompt: str) -> dict | None:
 
         proc = subprocess.run(
             ["bash", mimo_script, "image", image_path, prompt],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         if proc.returncode == 0:
             return _parse_json_response(proc.stdout)
@@ -326,7 +347,7 @@ def _call_mimo_omni(image_path: str, prompt: str) -> dict | None:
 def _parse_json_response(response: str) -> dict:
     """Извлекает JSON из ответа mimo-omni."""
     try:
-        json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
+        json_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", response, re.DOTALL)
         if json_match:
             return json.loads(json_match.group())
     except (json.JSONDecodeError, ValueError):

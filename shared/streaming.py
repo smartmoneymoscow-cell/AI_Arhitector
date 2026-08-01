@@ -19,16 +19,17 @@ shared/streaming.py — SSE (Server-Sent Events) progress streaming.
         return EventSourceResponse(stream_generator(job_id))
 """
 
+import asyncio
 import json
 import time
-import asyncio
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from typing import AsyncGenerator
 
 
 @dataclass
 class ProgressEvent:
     """Одно событие прогресса."""
+
     job_id: str
     step: str
     status: str  # "running" | "done" | "failed"
@@ -75,8 +76,7 @@ class ProgressStreamer:
         self._subscribers: list[asyncio.Queue] = []
         self._finished = False
 
-    def emit(self, step: str, status: str, progress: int = 0,
-             message: str = "", data: dict | None = None):
+    def emit(self, step: str, status: str, progress: int = 0, message: str = "", data: dict | None = None):
         """Добавить событие и уведомить подписчиков."""
         event = ProgressEvent(
             job_id=self.job_id,
@@ -119,7 +119,7 @@ class ProgressStreamer:
                     yield event
                     if event.status in ("done", "failed"):
                         return
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Heartbeat каждые30с (предотвращает disconnect)
                     yield ProgressEvent(
                         job_id=self.job_id,
@@ -166,7 +166,8 @@ def cleanup_streamers(max_age_seconds: int = 3600):
     """Удалить старые streamers (вызывать периодически)."""
     now = time.time()
     expired = [
-        jid for jid, s in _streamers.items()
+        jid
+        for jid, s in _streamers.items()
         if s.is_finished and (now - (s.events[-1].timestamp if s.events else 0)) > max_age_seconds
     ]
     for jid in expired:

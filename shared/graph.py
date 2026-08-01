@@ -16,9 +16,6 @@ shared/graph.py — Граф здания на NetworkX.
     bg.find_path("Kitchen", "Exit")
 """
 
-from typing import Optional
-from shared.validation import safe_val
-
 
 class BuildingGraph:
     """Граф связей помещений здания."""
@@ -46,15 +43,55 @@ class BuildingGraph:
         rooms = []
         room_configs = {
             1: [
-                {"name": "Living Room", "floor": 1, "x": -W / 4, "y": 0, "w": W / 2 - 0.5, "d": L / 2 - 0.5, "type": "living"},
-                {"name": "Kitchen", "floor": 1, "x": W / 4, "y": 0, "w": W / 2 - 0.5, "d": L / 2 - 0.5, "type": "kitchen"},
-                {"name": "Hallway", "floor": 1, "x": 0, "y": -L / 4, "w": W / 3, "d": L / 4 - 0.5, "type": "circulation"},
+                {
+                    "name": "Living Room",
+                    "floor": 1,
+                    "x": -W / 4,
+                    "y": 0,
+                    "w": W / 2 - 0.5,
+                    "d": L / 2 - 0.5,
+                    "type": "living",
+                },
+                {
+                    "name": "Kitchen",
+                    "floor": 1,
+                    "x": W / 4,
+                    "y": 0,
+                    "w": W / 2 - 0.5,
+                    "d": L / 2 - 0.5,
+                    "type": "kitchen",
+                },
+                {
+                    "name": "Hallway",
+                    "floor": 1,
+                    "x": 0,
+                    "y": -L / 4,
+                    "w": W / 3,
+                    "d": L / 4 - 0.5,
+                    "type": "circulation",
+                },
                 {"name": "Bathroom", "floor": 1, "x": -W / 3, "y": -L / 4, "w": W / 4, "d": L / 4 - 0.5, "type": "wet"},
                 {"name": "Entrance", "floor": 1, "x": 0, "y": -L / 2 + 1, "w": 2, "d": 2, "type": "entrance"},
             ],
             2: [
-                {"name": "Master Bedroom", "floor": 2, "x": -W / 4, "y": 0, "w": W / 2 - 0.5, "d": L / 2 - 0.5, "type": "bedroom"},
-                {"name": "Bedroom 2", "floor": 2, "x": W / 4, "y": 0, "w": W / 2 - 0.5, "d": L / 2 - 0.5, "type": "bedroom"},
+                {
+                    "name": "Master Bedroom",
+                    "floor": 2,
+                    "x": -W / 4,
+                    "y": 0,
+                    "w": W / 2 - 0.5,
+                    "d": L / 2 - 0.5,
+                    "type": "bedroom",
+                },
+                {
+                    "name": "Bedroom 2",
+                    "floor": 2,
+                    "x": W / 4,
+                    "y": 0,
+                    "w": W / 2 - 0.5,
+                    "d": L / 2 - 0.5,
+                    "type": "bedroom",
+                },
                 {"name": "Bathroom 2", "floor": 2, "x": 0, "y": -L / 4, "w": W / 4, "d": L / 4 - 0.5, "type": "wet"},
                 {"name": "Hallway 2", "floor": 2, "x": 0, "y": 0, "w": W / 3, "d": L / 4, "type": "circulation"},
             ],
@@ -94,36 +131,48 @@ class BuildingGraph:
                 combined_w = (r1["w"] + r2["w"]) / 2
                 combined_d = (r1["d"] + r2["d"]) / 2
 
-                if (dx < combined_w + threshold and dy < combined_d / 2) or \
-                   (dy < combined_d + threshold and dx < combined_w / 2):
-                    edges.append({
-                        "from": r1["name"],
-                        "to": r2["name"],
-                        "floor": r1["floor"],
-                        "type": "adjacent",
-                    })
+                if (dx < combined_w + threshold and dy < combined_d / 2) or (
+                    dy < combined_d + threshold and dx < combined_w / 2
+                ):
+                    edges.append(
+                        {
+                            "from": r1["name"],
+                            "to": r2["name"],
+                            "floor": r1["floor"],
+                            "type": "adjacent",
+                        }
+                    )
 
                 # Связь через коридор
                 if r1.get("type") == "circulation" or r2.get("type") == "circulation":
                     dist = ((r1["x"] - r2["x"]) ** 2 + (r1["y"] - r2["y"]) ** 2) ** 0.5
                     if dist < max(combined_w, combined_d) * 1.5:
-                        if {"from": r1["name"], "to": r2["name"], "floor": r1["floor"], "type": "adjacent"} not in edges:
-                            edges.append({
-                                "from": r1["name"],
-                                "to": r2["name"],
-                                "floor": r1["floor"],
-                                "type": "via_corridor",
-                            })
+                        if {
+                            "from": r1["name"],
+                            "to": r2["name"],
+                            "floor": r1["floor"],
+                            "type": "adjacent",
+                        } not in edges:
+                            edges.append(
+                                {
+                                    "from": r1["name"],
+                                    "to": r2["name"],
+                                    "floor": r1["floor"],
+                                    "type": "via_corridor",
+                                }
+                            )
 
                 # Связь через лестницу (между этажами)
                 if r1["floor"] != r2["floor"]:
                     if r1.get("type") == "circulation" and r2.get("type") == "circulation":
-                        edges.append({
-                            "from": r1["name"],
-                            "to": r2["name"],
-                            "floor": 0,  # межэтажная
-                            "type": "stairs",
-                        })
+                        edges.append(
+                            {
+                                "from": r1["name"],
+                                "to": r2["name"],
+                                "floor": 0,  # межэтажная
+                                "type": "stairs",
+                            }
+                        )
 
         return edges
 
@@ -160,6 +209,7 @@ class BuildingGraph:
 
         try:
             import networkx as nx
+
             return nx.shortest_path(self.graph, start, end)
         except Exception:
             return []
@@ -198,23 +248,28 @@ class BuildingGraph:
         svg_h = len(floors) * floor_h + 80
 
         parts = [
-            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" '
-            f'width="{svg_w}" height="{svg_h}" font-family="Inter, Arial, sans-serif">',
+            (
+                f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" '
+                f'width="{svg_w}" height="{svg_h}" font-family="Inter, Arial, sans-serif">'
+            ),
             f'<rect width="{svg_w}" height="{svg_h}" fill="#fafafa"/>',
         ]
 
         node_positions = {}
         colors = {
-            "living": "#4CAF50", "kitchen": "#FF9800", "bedroom": "#2196F3",
-            "bathroom": "#9C27B0", "wet": "#9C27B0", "circulation": "#607D8B",
+            "living": "#4CAF50",
+            "kitchen": "#FF9800",
+            "bedroom": "#2196F3",
+            "bathroom": "#9C27B0",
+            "wet": "#9C27B0",
+            "circulation": "#607D8B",
             "entrance": "#F44336",
         }
 
         for floor_num, rooms in sorted(floors.items()):
             y_offset = (floor_num - 1) * floor_h + 40
             parts.append(
-                f'<text x="10" y="{y_offset - 10}" font-size="12" font-weight="700" fill="#333">'
-                f'Этаж {floor_num}</text>'
+                f'<text x="10" y="{y_offset - 10}" font-size="12" font-weight="700" fill="#333">Этаж {floor_num}</text>'
             )
 
             n = len(rooms)
@@ -224,9 +279,7 @@ class BuildingGraph:
                 node_positions[room["name"]] = (x, y)
 
                 color = colors.get(room.get("type", ""), "#757575")
-                parts.append(
-                    f'<circle cx="{x}" cy="{y}" r="25" fill="{color}" opacity="0.8"/>'
-                )
+                parts.append(f'<circle cx="{x}" cy="{y}" r="25" fill="{color}" opacity="0.8"/>')
                 parts.append(
                     f'<text x="{x}" y="{y + 4}" text-anchor="middle" font-size="8" '
                     f'fill="white" font-weight="600">{room["name"][:12]}</text>'
@@ -238,9 +291,13 @@ class BuildingGraph:
                 x1, y1 = node_positions[edge["from"]]
                 x2, y2 = node_positions[edge["to"]]
 
-                stroke_color = "#2196F3" if edge["type"] == "adjacent" else \
-                               "#FF9800" if edge["type"] == "via_corridor" else \
-                               "#F44336"
+                stroke_color = (
+                    "#2196F3"
+                    if edge["type"] == "adjacent"
+                    else "#FF9800"
+                    if edge["type"] == "via_corridor"
+                    else "#F44336"
+                )
                 dash = 'stroke-dasharray="4,2"' if edge["type"] == "stairs" else ""
 
                 parts.append(

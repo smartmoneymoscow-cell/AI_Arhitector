@@ -14,12 +14,10 @@ v7.0:
         ...
 """
 
+import logging
 import os
 import time
-import json
-import logging
 from collections import defaultdict
-from typing import Optional
 
 from fastapi import HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
@@ -47,7 +45,7 @@ def _load_api_keys() -> set[str]:
     return _api_keys
 
 
-def get_api_key_optional(api_key: Optional[str] = Security(API_KEY_HEADER)) -> Optional[str]:
+def get_api_key_optional(api_key: str | None = Security(API_KEY_HEADER)) -> str | None:
     """Получить API key (необязательный). Если ключи не настроены — пропускает всех."""
     valid_keys = _load_api_keys()
     if not valid_keys:
@@ -101,6 +99,7 @@ def _get_redis():
         return None
     try:
         import redis
+
         _redis_client = redis.from_url(redis_url, decode_responses=True, socket_timeout=2)
         _redis_client.ping()
         logger.info("Rate limiter: Redis connected at %s", redis_url.split("@")[-1])
@@ -182,9 +181,7 @@ class RateLimiter:
         """Check rate limit using in-memory counters (fallback)."""
         now = time.time()
 
-        self._minute_hits[client_id] = [
-            h for h in self._minute_hits[client_id] if now - h < 60.0
-        ]
+        self._minute_hits[client_id] = [h for h in self._minute_hits[client_id] if now - h < 60.0]
         if len(self._minute_hits[client_id]) >= self.rpm:
             raise HTTPException(
                 status_code=429,
@@ -192,9 +189,7 @@ class RateLimiter:
                 headers={"Retry-After": "60"},
             )
 
-        self._hour_hits[client_id] = [
-            h for h in self._hour_hits[client_id] if now - h < 3600.0
-        ]
+        self._hour_hits[client_id] = [h for h in self._hour_hits[client_id] if now - h < 3600.0]
         if len(self._hour_hits[client_id]) >= self.rph:
             raise HTTPException(
                 status_code=429,

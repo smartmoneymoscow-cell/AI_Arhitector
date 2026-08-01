@@ -7,29 +7,33 @@ For production, use docker-compose with microservices.
 Serves frontend + LLM parsing + Blender execution + Orchestrator.
 """
 
-import os
-import uuid
-import sys
 import logging
+import os
+import sys
+import uuid
 
 sys.path.insert(0, os.path.dirname(__file__))
 
 import asyncio
-import httpx
-from fastapi import FastAPI, HTTPException, Request
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from shared.config import settings
 from shared.logging_config import setup_logging
 
 setup_logging("server-monolith")
 logger = logging.getLogger("archai.server")
-from shared.models import GenerateRequest, HealthResponse
-from shared.parser import parse_prompt_sync, get_generation_type, get_cache_stats, AllModelsFailedError
-from shared.validation import DEFAULT_FURNITURE
 from shared.blender import generate_bpy_script, generate_interior_script, run_blender
-from shared.auth import get_api_key_optional, rate_limit_middleware
+from shared.models import GenerateRequest, HealthResponse
+from shared.parser import (
+    AllModelsFailedError,
+    get_cache_stats,
+    get_generation_type,
+    parse_prompt_sync,
+)
+from shared.validation import DEFAULT_FURNITURE
 
 OUTPUT_DIR = settings.OUTPUT_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -55,6 +59,7 @@ app.add_middleware(
 # HEALTH
 # ═══════════════════════════════════════════════════════════════
 
+
 @app.get("/health")
 @app.get("/api/v1/health")
 async def health():
@@ -74,6 +79,7 @@ async def health():
 # ═══════════════════════════════════════════════════════════════
 # QUICK GENERATE (legacy, fast)
 # ═══════════════════════════════════════════════════════════════
+
 
 @app.post("/api/v1/generate")
 async def generate(req: GenerateRequest):
@@ -163,6 +169,7 @@ async def orchestrator_job_status(job_id: str):
 @app.get("/api/v1/orchestrator/jobs/{job_id}/progress")
 async def orchestrator_job_progress(job_id: str):
     from shared.agents import Orchestrator
+
     orch = Orchestrator()
     orch.jobs = _orchestrator_jobs
     progress = orch.get_progress(job_id)
@@ -225,6 +232,7 @@ async def orchestrator_clarify(req: dict):
 # PREVIEW (fast, low quality)
 # ═══════════════════════════════════════════════════════════════
 
+
 @app.post("/api/v1/preview")
 async def preview(req: dict):
     """Быстрое превью (1920×1080, EEVEE, 32 samples)."""
@@ -235,8 +243,15 @@ async def preview(req: dict):
     try:
         params = parse_prompt_sync(prompt)
     except AllModelsFailedError:
-        params = {"width_m": 10, "length_m": 12, "floors": 2, "roof_type": "gabled",
-                  "material": "plaster", "features": [], "room_type": "living"}
+        params = {
+            "width_m": 10,
+            "length_m": 12,
+            "floors": 2,
+            "roof_type": "gabled",
+            "material": "plaster",
+            "features": [],
+            "room_type": "living",
+        }
     gen_type = get_generation_type(params)
 
     if gen_type == "interior":
@@ -279,7 +294,7 @@ bpy.ops.render.render(write_still=True)
 """
 
     try:
-        result = run_blender(script, output_file, timeout=60)
+        run_blender(script, output_file, timeout=60)
     except TimeoutError as e:
         raise HTTPException(504, detail=str(e))
     except RuntimeError as e:
@@ -294,10 +309,12 @@ bpy.ops.render.render(write_still=True)
 # PARSE
 # ═══════════════════════════════════════════════════════════════
 
+
 @app.post("/api/v1/parse")
 async def parse_endpoint(req: dict):
     """Парсинг промта."""
     from shared.router import route_generation
+
     text = req.get("text", req.get("prompt", ""))
     try:
         params = parse_prompt_sync(text)
@@ -314,6 +331,7 @@ async def parse_endpoint(req: dict):
 # ═══════════════════════════════════════════════════════════════
 # HELPERS
 # ═══════════════════════════════════════════════════════════════
+
 
 async def _generate_building(params: dict):
     building_params = {
@@ -395,6 +413,7 @@ async def serve_index():
 
 if __name__ == "__main__":
     import uvicorn
+
     print(f"Architect Server starting on port {settings.PORT}")
     print(f"Model: {settings.LLM_MODEL}")
     print(f"Blender: {settings.BLENDER_PATH}")

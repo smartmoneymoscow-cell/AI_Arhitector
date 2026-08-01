@@ -6,11 +6,11 @@ v6.0 — Парсинг ТОЛЬКО через LLM-service (HTTP).
 Tiled rendering для 16K.
 """
 
-import sys
-import os
-import uuid
-import subprocess
 import logging
+import os
+import subprocess
+import sys
+import uuid
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -19,11 +19,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from shared.blender import generate_bpy_script, generate_interior_script, run_blender
 from shared.config import settings
+from shared.logging_config import setup_logging
 from shared.models import GenerateRequest, HealthResponse
 from shared.validation import DEFAULT_FURNITURE
-from shared.blender import generate_bpy_script, generate_interior_script, run_blender
-from shared.logging_config import setup_logging
 
 setup_logging("blender-service")
 logger = logging.getLogger("archai.blender")
@@ -48,6 +48,7 @@ app.add_middleware(
 # ═══════════════════════════════════════════════════════════════
 # PARSE HELPER — вызов LLM-service (НЕ regex)
 # ═══════════════════════════════════════════════════════════════
+
 
 async def _parse_via_llm_service(prompt: str) -> dict:
     """Парсинг промта через LLM-service. Если LLM-service недоступен — 503."""
@@ -87,6 +88,7 @@ def _detect_gen_type(params: dict) -> str:
 # HEALTH
 # ═══════════════════════════════════════════════════════════════
 
+
 @app.get("/health")
 async def health():
     return HealthResponse(status="ok", service="blender-service", version="6.0.0")
@@ -95,6 +97,7 @@ async def health():
 # ═══════════════════════════════════════════════════════════════
 # EXECUTE — произвольный bpy-скрипт
 # ═══════════════════════════════════════════════════════════════
+
 
 @app.post("/api/v1/execute")
 async def execute_script(req: dict):
@@ -123,17 +126,22 @@ async def execute_script(req: dict):
         env.setdefault("DISPLAY", ":99")
 
         result = subprocess.run(
-            [settings.BLENDER_PATH, "--background", "--factory-startup",
-             "--log-level", "0", "--python", script_path],
-            capture_output=True, text=True, timeout=timeout, env=env,
+            [settings.BLENDER_PATH, "--background", "--factory-startup", "--log-level", "0", "--python", script_path],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
         )
 
         if result.returncode != 0:
-            raise HTTPException(500, detail={
-                "error": "Blender execution failed",
-                "returncode": result.returncode,
-                "stderr": (result.stderr or "")[-1000:],
-            })
+            raise HTTPException(
+                500,
+                detail={
+                    "error": "Blender execution failed",
+                    "returncode": result.returncode,
+                    "stderr": (result.stderr or "")[-1000:],
+                },
+            )
 
         output_exists = os.path.exists(output_path) if output_path else False
         return {
@@ -160,6 +168,7 @@ async def execute_script(req: dict):
 # PREVIEW — быстрое превью (LLM-only парсинг)
 # ═══════════════════════════════════════════════════════════════
 
+
 @app.post("/api/v1/preview")
 async def generate_preview(req: dict):
     """Быстрое превью. Парсинг ТОЛЬКО через LLM-service."""
@@ -174,22 +183,26 @@ async def generate_preview(req: dict):
     if gen_type == "interior":
         room_type = params.get("room_type", "living")
         furniture = params.get("furniture") or DEFAULT_FURNITURE.get(room_type, ["sofa", "table", "chandelier"])
-        script = generate_interior_script({
-            "width": params.get("width_m", 6),
-            "length": params.get("length_m", 8),
-            "height": params.get("height_m", 3),
-            "style": params.get("style", "modern"),
-            "furniture": furniture,
-        })
+        script = generate_interior_script(
+            {
+                "width": params.get("width_m", 6),
+                "length": params.get("length_m", 8),
+                "height": params.get("height_m", 3),
+                "style": params.get("style", "modern"),
+                "furniture": furniture,
+            }
+        )
     else:
-        script = generate_bpy_script({
-            "width": params.get("width_m", 10),
-            "length": params.get("length_m", 12),
-            "floors": params.get("floors", 2),
-            "roof_type": params.get("roof_type", "gabled"),
-            "facade_material": params.get("material", "plaster"),
-            "has_balcony": "balcony" in params.get("features", []),
-        })
+        script = generate_bpy_script(
+            {
+                "width": params.get("width_m", 10),
+                "length": params.get("length_m", 12),
+                "floors": params.get("floors", 2),
+                "roof_type": params.get("roof_type", "gabled"),
+                "facade_material": params.get("material", "plaster"),
+                "has_balcony": "balcony" in params.get("features", []),
+            }
+        )
 
     job_id = uuid.uuid4().hex[:8]
     output_file = os.path.join(settings.OUTPUT_DIR, f"{job_id}_preview.png")
@@ -217,9 +230,11 @@ bpy.ops.render.render(write_still=True)
         env = os.environ.copy()
         env.setdefault("DISPLAY", ":99")
         result = subprocess.run(
-            [settings.BLENDER_PATH, "--background", "--factory-startup",
-             "--log-level", "0", "--python", script_path],
-            capture_output=True, text=True, timeout=60, env=env,
+            [settings.BLENDER_PATH, "--background", "--factory-startup", "--log-level", "0", "--python", script_path],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=env,
         )
         if result.returncode != 0:
             raise HTTPException(500, detail=f"Preview failed: {result.stderr[-500:]}")
@@ -241,6 +256,7 @@ bpy.ops.render.render(write_still=True)
 # ═══════════════════════════════════════════════════════════════
 # GENERATE — полная генерация (LLM-only парсинг)
 # ═══════════════════════════════════════════════════════════════
+
 
 @app.post("/api/v1/generate")
 async def generate(req: GenerateRequest):
@@ -270,6 +286,7 @@ async def render_interior_endpoint(req: GenerateRequest):
 # 16K TILED RENDER
 # ═══════════════════════════════════════════════════════════════
 
+
 @app.post("/api/v1/render/16k")
 async def render_16k(req: dict):
     """
@@ -291,28 +308,33 @@ async def render_16k(req: dict):
     if gen_type == "interior":
         room_type = params.get("room_type", "living")
         furniture = params.get("furniture") or DEFAULT_FURNITURE.get(room_type, ["sofa", "table"])
-        scene_script = generate_interior_script({
-            "width": params.get("width_m", 6),
-            "length": params.get("length_m", 8),
-            "height": params.get("height_m", 3),
-            "style": params.get("style", "modern"),
-            "furniture": furniture,
-        })
+        scene_script = generate_interior_script(
+            {
+                "width": params.get("width_m", 6),
+                "length": params.get("length_m", 8),
+                "height": params.get("height_m", 3),
+                "style": params.get("style", "modern"),
+                "furniture": furniture,
+            }
+        )
     else:
-        scene_script = generate_bpy_script({
-            "width": params.get("width_m", 10),
-            "length": params.get("length_m", 12),
-            "floors": params.get("floors", 2),
-            "roof_type": params.get("roof_type", "gabled"),
-            "facade_material": params.get("material", "plaster"),
-            "has_balcony": "balcony" in params.get("features", []),
-        })
+        scene_script = generate_bpy_script(
+            {
+                "width": params.get("width_m", 10),
+                "length": params.get("length_m", 12),
+                "floors": params.get("floors", 2),
+                "roof_type": params.get("roof_type", "gabled"),
+                "facade_material": params.get("material", "plaster"),
+                "has_balcony": "balcony" in params.get("features", []),
+            }
+        )
 
     job_id = uuid.uuid4().hex[:8]
     output_path = os.path.join(settings.OUTPUT_DIR, f"{job_id}_16k.png")
 
     try:
         from shared.tiled_render import render_16k_tiled
+
         result_path = render_16k_tiled(
             scene_script=scene_script,
             output_path=output_path,
@@ -337,6 +359,7 @@ async def render_16k(req: dict):
 # ═══════════════════════════════════════════════════════════════
 # HELPERS
 # ═══════════════════════════════════════════════════════════════
+
 
 async def _generate_building(params: dict):
     building_params = {
@@ -406,6 +429,7 @@ async def _generate_interior(params: dict):
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.environ.get("PORT", 8082))
     print(f"Blender Service starting on port {port}")
     print(f"Blender: {settings.BLENDER_PATH}")

@@ -1,4 +1,4 @@
-# Architect v6.0 🏗️
+# Architect v7.0 🏗️
 
 AI-архитектор — генерация 3D-моделей зданий и интерьеров по текстовому описанию на русском языке.
 
@@ -20,15 +20,77 @@ Client → Nginx (:80) → Gateway (:8080) → LLM Service (:8081)
 | **Blender Service** | ~3 GB | 8082 | 3D генерация, рендер (до 16K tiled), экспорт |
 | **Redis** | redis:7-alpine | 6379 | LLM кеш (24h TTL) + Celery broker |
 
-### Multi-Agent Pipeline
+## Multi-Agent Pipeline (20 агентов)
 
 ```
-prompt → ParserAgent → GeometryAgent → TextureAgent → RenderAgent → QualityAgent → ExportAgent
-            │               │               │              │              │             │
-         LLM каскад     bpy-скрипт     PBR материалы   Blender CLI   Проверка      GLB/IFC
+prompt → ParserAgent → LLM Orchestrator → [20 агентов по pipeline profile]
 ```
 
-## Что нового в v6.0
+### Pipeline агенты (6)
+
+| Агент | Описание |
+|-------|----------|
+| **ParserAgent** | Парсинг промтов (каскад 7 LLM моделей + Redis кеш) |
+| **GeometryAgent** | Генерация 3D геометрии (Blender bpy-скрипты) |
+| **TextureAgent** | PBR материалы и текстуры (2048px) |
+| **RenderAgent** | Рендер изображений (EEVEE Next / Cycles до 16K tiled) |
+| **ExportAgent** | Экспорт в форматы (GLB, IFC, OBJ, SVG, STEP) |
+| **QualityAgent** | Проверка качества рендера (разрешение, file size, mimo-omni) |
+
+### Интеллектуальные агенты (8)
+
+| Агент | Описание |
+|-------|----------|
+| **ResearchAgent** | Поиск архитектурных референсов, анализ трендов |
+| **MarketAgent** | Анализ рынка недвижимости, конкурентов, ценообразование |
+| **ConceptAgent** | Концептуальный дизайн, мудборды, палитры |
+| **MasterplanAgent** | Генерация мастер-плана участка (зонирование, дороги, отступы) |
+| **LandscapeAgent** | Ландшафтный дизайн (деревья, дорожки, бассейн, освещение) |
+| **BrandAgent** | Бренд-стиль, айдентика, фирменный архитектурный язык |
+| **FinancialAgent** | Финансовая оценка (стоимость, ROI, окупаемость, смета) |
+| **PresentationAgent** | Генерация HTML-презентаций проекта |
+
+### Специализированные агенты (6)
+
+| Агент | Описание |
+|-------|----------|
+| **StyleAgent** | Определение и применение архитектурного стиля (12 стилей) |
+| **LightingAgent** | Настройка освещения (время суток, интерьерное, HDRI) |
+| **FurnitureAgent** | Эргономичное размещение мебели (каталог по типам комнат) |
+| **MEPAgent** | Инженерные системы (электрика, водоснабжение, HVAC, слаботочка) |
+| **StructuralAgent** | Конструктивный расчёт (фундамент, стены, перекрытия, крыша) |
+| **ComplianceAgent** | Проверка соответствия нормам (СП, ГОСТ, IBC, пожарная безопасность) |
+
+### Pipeline Profiles
+
+| Профиль | Агенты | Описание |
+|---------|--------|----------|
+| `quick` | 5 | Быстрый preview (parse → geometry → render → export) |
+| `standard` | 8 | Стандартный ( + style, lighting, quality) |
+| `full` | 14 | Полный ( + research, concept, masterplan, furniture, structural, compliance) |
+| `premium` | 20 | Все 20 агентов ( + market, brand, landscape, MEP, financial, presentation) |
+| `interior` | 9 | Интерьер (concept, style, furniture, lighting) |
+| `presentation` | 9 | С презентацией (concept, style + presentation) |
+
+## Движки (Engines)
+
+| Движок | Файл | Описание |
+|--------|------|----------|
+| **NormEngine** | `shared/norm_engine.py` | Проверка строительных норм (СП 1.13130, СП 54.13330, ГОСТ 21.501, IBC) |
+| **CostEngine** | `shared/cost_engine.py` | Калькуляция стоимости (материалы, работы, инженерия, ландшафт) |
+| **WebSearchEngine** | `shared/web_search.py` | Веб-поиск (DuckDuckGo + SerpAPI) для ResearchAgent и MarketAgent |
+
+## Что нового в v7.0
+
+### 🤖 20 агентов (было 6)
+- 14 новых агентов: Research, Market, Concept, Masterplan, Landscape, Brand, Financial, Presentation, Style, Lighting, Furniture, MEP, Structural, Compliance
+- LLM-driven оркестратор с pipeline profiles
+- Параллельное выполнение независимых агентов
+
+### 🔧 3 новых движка
+- **NormEngine** — проверка по СП, ГОСТ, IBC (эвакуация, этажность, высота, лестницы, остекление)
+- **CostEngine** — полная смета (стены, крыша, фундамент, перекрытия, инженерия, ландшафт)
+- **WebSearchEngine** — веб-поиск для исследований и анализа рынка
 
 ### 🤖 LLM-only парсинг (regex УДАЛЁН)
 - Каскад 7 моделей: Gemini Pro → Claude Sonnet → Gemini Flash → GPT-4o-mini → Llama 4 free → Qwen3 free → DeepSeek free
@@ -41,34 +103,14 @@ prompt → ParserAgent → GeometryAgent → TextureAgent → RenderAgent → Qu
 - Gzip сжатие, static caching (7 дней), API response caching (1h)
 - Security headers (X-Frame-Options, X-Content-Type-Options, CSP)
 
-### 🐳 Per-service Dockerfiles
-- `gateway.Dockerfile` — multi-stage, ~200 MB, без Blender
-- `llm.Dockerfile` — multi-stage, ~200 MB, без Blender
-- `blender.Dockerfile` — ~3 GB, Blender + Xvfb
-
 ### 🖼️ 16K Tiled Rendering
 - Разбивает 15360×8640 на 12 тайлов (4×3 по 3840×2880)
 - Рендерит каждый тайл через Blender Cycles (2048 samples)
 - Собирает финальное изображение через PIL
 
-### ✅ QualityAgent
-- Проверка разрешения (≥ target resolution)
-- Проверка file size (sanity check)
-- Опциональный AI-анализ через mimo-omni
-
 ### 🔐 Auth
 - API key через `X-API-Key` header
 - Rate limiting (30 rpm / 200 rph per client)
-
-### 🎨 Качество рендера
-
-| Пресет | Разрешение | Движок | Семплы |
-|--------|-----------|--------|--------|
-| preview | 1280×720 | EEVEE Next | 64 |
-| standard | 3840×2160 | EEVEE Next | 128 |
-| high | 7680×4320 | EEVEE Next | 256 |
-| ultra | 15360×8640 | Cycles | 1024 |
-| **16k** | **15360×8640** | **Cycles** | **2048** |
 
 ## Быстрый старт
 
@@ -100,6 +142,11 @@ curl -X POST http://localhost/api/v1/orchestrator/execute \
   -H "Content-Type: application/json" \
   -d '{"prompt": "двухэтажный кирпичный дом 10x12", "quality": "16k", "export_formats": ["glb", "ifc"]}'
 
+# Premium pipeline (все 20 агентов)
+curl -X POST http://localhost/api/v1/orchestrator/execute \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "современный коттедж 12x15 с бассейном", "quality": "16k", "pipeline_profile": "premium"}'
+
 # Быстрое превью
 curl -X POST http://localhost/api/v1/preview \
   -H "Content-Type: application/json" \
@@ -109,11 +156,24 @@ curl -X POST http://localhost/api/v1/preview \
 curl http://localhost/api/v1/orchestrator/jobs/{job_id}/stream
 ```
 
+### Pipeline Profiles
+
+```json
+{
+  "prompt": "...",
+  "quality": "16k",
+  "pipeline_profile": "premium",
+  "export_formats": ["glb", "ifc", "svg"]
+}
+```
+
+Значения `pipeline_profile`: `quick`, `standard`, `full`, `premium`, `interior`, `presentation`
+
 ### Endpoints
 
 | Endpoint | Метод | Описание |
 |----------|-------|----------|
-| `/api/v1/orchestrator/execute` | POST | Полный pipeline (parse→render→export) |
+| `/api/v1/orchestrator/execute` | POST | Полный pipeline (20 агентов) |
 | `/api/v1/orchestrator/jobs/{id}` | GET | Статус задачи |
 | `/api/v1/orchestrator/jobs/{id}/stream` | GET | SSE прогресс |
 | `/api/v1/preview` | POST | Быстрое превью |
@@ -122,75 +182,67 @@ curl http://localhost/api/v1/orchestrator/jobs/{job_id}/stream
 | `/api/v1/render/16k` | POST | 16K tiled rendering |
 | `/api/v1/health` | GET | Health check |
 
-### Качество рендера
-
-```json
-{
-  "prompt": "...",
-  "quality": "16k",
-  "export_formats": ["glb", "ifc", "svg"]
-}
-```
-
-Значения `quality`: `preview`, `standard`, `high`, `ultra`, `16k`
-
-## Тесты
-
-```bash
-# Unit-тесты (137 тестов)
-PYTHONPATH=. python3 -m pytest tests/ -v
-
-# E2E тесты (22 теста)
-PYTHONPATH=. python3 tests/test_e2e_automated.py
-
-# Все тесты (169 тестов)
-PYTHONPATH=. python3 -m pytest tests/test_generation.py tests/test_server.py tests/test_orchestrator.py -v && \
-PYTHONPATH=. python3 tests/test_e2e.py && \
-PYTHONPATH=. python3 tests/test_e2e_automated.py
-```
-
 ## Структура проекта
 
 ```
 AI_Arhitector/
-├── shared/                    # Единая библиотека
-│   ├── config.py              # Настройки из env
-│   ├── models.py              # Pydantic-модели
-│   ├── validation.py          # Валидация параметров
-│   ├── parser.py              # LLM-only парсинг (каскад 7 моделей)
-│   ├── auth.py                # API key + rate limiting
-│   ├── tiled_render.py        # 16K tiled rendering
-│   ├── blender.py             # bpy-скрипты (PBR, лестницы)
-│   ├── ifc_generator.py       # IFC через IfcOpenShell
-│   ├── floorplan.py           # SVG планы через Shapely
-│   ├── preview.py             # Превью + анализ
-│   ├── streaming.py           # SSE прогресс
-│   ├── clarification.py       # Уточняющие вопросы
-│   └── agents/                # Multi-agent система
-│       ├── orchestrator.py    # Полный pipeline
-│       ├── parser_agent.py    # LLM-only парсинг
-│       ├── geometry_agent.py  # Генерация геометрии
-│       ├── texture_agent.py   # PBR материалы
-│       ├── render_agent.py    # Рендер (до 16K)
-│       ├── quality_agent.py   # Проверка качества
-│       └── export_agent.py    # Экспорт (GLB/IFC/OBJ)
-├── gateway/                   # API Gateway (:8080)
-├── llm-service/               # LLM прокси (:8081)
-├── blender-service/           # Blender CLI (:8082)
-├── nginx.conf                 # Nginx конфиг
-├── gateway.Dockerfile         # Gateway образ (~200MB)
-├── llm.Dockerfile             # LLM Service образ (~200MB)
-├── blender.Dockerfile         # Blender Service образ (~3GB)
-├── docker-compose.yml         # Production compose
-├── AUDIT.md                   # Ответы на 12 вопросов аудита
-├── ROADMAP.md                 # 6-фазный план улучшений
-├── tests/                     # Тесты (169 total)
-│   ├── test_generation.py     # Unit-тесты парсера
-│   ├── test_server.py         # Unit-тесты сервера
-│   ├── test_orchestrator.py   # Unit-тесты оркестратора
-│   ├── test_e2e.py            # E2E тесты (моки)
-│   └── test_e2e_automated.py  # Автоматизированные E2E
-└── server.py                  # Монолит (локальная разработка)
+├── shared/                        # Единая библиотека
+│   ├── config.py                  # Настройки из env
+│   ├── models.py                  # Pydantic-модели
+│   ├── validation.py              # Валидация параметров
+│   ├── parser.py                  # LLM-only парсинг (каскад 7 моделей)
+│   ├── auth.py                    # API key + rate limiting
+│   ├── tiled_render.py            # 16K tiled rendering
+│   ├── blender.py                 # bpy-скрипты (PBR, лестницы)
+│   ├── ifc_generator.py           # IFC через IfcOpenShell
+│   ├── floorplan.py               # SVG планы через Shapely
+│   ├── preview.py                 # Превью + анализ
+│   ├── streaming.py               # SSE прогресс
+│   ├── clarification.py           # Уточняющие вопросы
+│   ├── web_search.py              # Веб-поиск (DuckDuckGo/SerpAPI)
+│   ├── norm_engine.py             # Проверка строительных норм
+│   ├── cost_engine.py             # Калькуляция стоимости
+│   └── agents/                    # Multi-agent система (20 агентов)
+│       ├── __init__.py            # Реестр всех агентов
+│       ├── base.py                # BaseAgent, Task, TaskResult
+│       ├── orchestrator.py        # LLM-driven оркестратор
+│       ├── parser_agent.py        # LLM-only парсинг
+│       ├── geometry_agent.py      # Генерация геометрии
+│       ├── texture_agent.py       # PBR материалы
+│       ├── render_agent.py        # Рендер (до 16K)
+│       ├── export_agent.py        # Экспорт (GLB/IFC/OBJ)
+│       ├── quality_agent.py       # Проверка качества
+│       ├── research_agent.py      # Поиск референсов
+│       ├── market_agent.py        # Анализ рынка
+│       ├── concept_agent.py       # Концептуальный дизайн
+│       ├── masterplan_agent.py    # Мастер-план участка
+│       ├── landscape_agent.py     # Ландшафтный дизайн
+│       ├── brand_agent.py         # Бренд-стиль
+│       ├── financial_agent.py     # Финансовая оценка
+│       ├── presentation_agent.py  # Генерация презентаций
+│       ├── style_agent.py         # Определение стиля
+│       ├── lighting_agent.py      # Освещение
+│       ├── furniture_agent.py     # Размещение мебели
+│       ├── mep_agent.py           # Инженерные системы
+│       ├── structural_agent.py    # Конструктивный расчёт
+│       └── compliance_agent.py    # Проверка норм
+├── gateway/                       # API Gateway (:8080)
+├── llm-service/                   # LLM прокси (:8081)
+├── blender-service/               # Blender CLI (:8082)
+├── nginx.conf                     # Nginx конфиг
+├── gateway.Dockerfile             # Gateway образ (~200MB)
+├── llm.Dockerfile                 # LLM Service образ (~200MB)
+├── blender.Dockerfile             # Blender Service образ (~3GB)
+├── docker-compose.yml             # Production compose
+├── AUDIT.md                       # Ответы на 12 вопросов аудита
+├── ROADMAP.md                     # 6-фазный план улучшений
+├── tests/                         # Тесты (169 total)
+│   ├── test_generation.py         # Unit-тесты парсера
+│   ├── test_server.py             # Unit-тесты сервера
+│   ├── test_orchestrator.py       # Unit-тесты оркестратора
+│   ├── test_e2e.py                # E2E тесты (моки)
+│   └── test_e2e_automated.py      # Автоматизированные E2E
+└── server.py                      # Монолит (локальная разработка)
 ```
 
 ## Технологический стек
@@ -207,6 +259,10 @@ AI_Arhitector/
 | Async Queue | Celery + Redis | ✅ |
 | Quality Check | QualityAgent + mimo-omni | ✅ |
 | Auth | API key + rate limiting | ✅ |
+| Multi-Agent | 20 агентов + LLM Orchestrator | ✅ |
+| Norm Check | NormEngine (СП, ГОСТ, IBC) | ✅ |
+| Cost Calc | CostEngine (смета) | ✅ |
+| Web Search | WebSearchEngine (DDG/SerpAPI) | ✅ |
 
 ## Переменные окружения
 
@@ -219,6 +275,7 @@ AI_Arhitector/
 | `OUTPUT_DIR` | Нет | Директория выходных файлов (default: /app/output) |
 | `ARCH_API_KEYS` | Нет | API ключи (через запятую) |
 | `CORS_ORIGINS` | Нет | Разрешённые origins (через запятую, default: *) |
+| `SERPAPI_KEY` | Нет | Ключ SerpAPI для веб-поиска (опционально) |
 
 ## Лицензия
 

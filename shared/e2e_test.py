@@ -15,18 +15,19 @@ shared/e2e_test.py — E2E тестирование Architect сервиса.
     print(result.report())
 """
 
+import json
 import os
 import re
-import json
 import time
-import httpx
 from dataclasses import dataclass, field
-from typing import Optional
+
+import httpx
 
 
 @dataclass
 class ChatStepAnalysis:
     """Анализ шагов в чате."""
+
     steps_found: list[str] = field(default_factory=list)
     steps_expected: list[str] = field(default_factory=list)
     steps_correct: bool = False
@@ -37,6 +38,7 @@ class ChatStepAnalysis:
 @dataclass
 class PreviewAnalysis:
     """Анализ превью-скриншота."""
+
     matches_prompt: bool = False
     match_score: float = 0.0
     quality_ok: bool = False
@@ -50,9 +52,10 @@ class PreviewAnalysis:
 @dataclass
 class E2EResult:
     """Полный результат E2E теста."""
+
     prompt: str = ""
-    chat_analysis: Optional[ChatStepAnalysis] = None
-    preview_analysis: Optional[PreviewAnalysis] = None
+    chat_analysis: ChatStepAnalysis | None = None
+    preview_analysis: PreviewAnalysis | None = None
     api_response: dict = field(default_factory=dict)
     screenshots: dict = field(default_factory=dict)
     passed: bool = False
@@ -178,13 +181,9 @@ class E2ETester:
 
                 if screenshots.get("preview"):
                     print("[E2E] Analyzing preview...")
-                    result.preview_analysis = self._analyze_preview(
-                        screenshots["preview"], prompt, quality
-                    )
+                    result.preview_analysis = self._analyze_preview(screenshots["preview"], prompt, quality)
                 else:
-                    result.preview_analysis = PreviewAnalysis(
-                        details="No preview screenshot available"
-                    )
+                    result.preview_analysis = PreviewAnalysis(details="No preview screenshot available")
             else:
                 # Анализ только по API response
                 result.preview_analysis = self._analyze_from_api(api_result, quality)
@@ -305,8 +304,7 @@ class E2ETester:
 
                 # Ждём превью если есть
                 try:
-                    page.wait_for_selector("canvas, .preview, #viewer, .three-canvas",
-                                           timeout=10000)
+                    page.wait_for_selector("canvas, .preview, #viewer, .three-canvas", timeout=10000)
                     time.sleep(2)
                     preview_path = os.path.join(self.screenshot_dir, "preview.png")
                     page.screenshot(path=preview_path, full_page=False)
@@ -334,6 +332,7 @@ class E2ETester:
         # 1. Проверка разрешения
         try:
             from PIL import Image
+
             img = Image.open(screenshot_path)
             analysis.resolution = f"{img.width}x{img.height}"
             analysis.quality_ok = self._check_resolution_quality(img.width, img.height, quality)
@@ -365,6 +364,7 @@ class E2ETester:
         if render and os.path.exists(render):
             try:
                 from PIL import Image
+
                 img = Image.open(render)
                 analysis.resolution = f"{img.width}x{img.height}"
                 analysis.quality_ok = self._check_resolution_quality(img.width, img.height, quality)
@@ -416,13 +416,16 @@ class E2ETester:
 
         try:
             import subprocess
+
             mimo_script = os.path.expanduser("~/.openclaw/skills/mimo-omni/mimo_api.sh")
             if not os.path.exists(mimo_script):
                 return None
 
             result = subprocess.run(
                 ["bash", mimo_script, "image", image_path, analysis_prompt],
-                capture_output=True, text=True, timeout=60,
+                capture_output=True,
+                text=True,
+                timeout=60,
             )
 
             if result.returncode == 0:
@@ -440,7 +443,7 @@ class E2ETester:
         # Try JSON first
         try:
             # Find JSON block
-            json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
+            json_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", response, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group())
                 # Ensure required fields
@@ -457,13 +460,32 @@ class E2ETester:
 
         # Fallback: parse as text
         response_lower = response.lower()
-        has_bugs = any(word in response_lower for word in [
-            "баг", "артефакт", "ошибка", "глитч", "проблема", "дефект",
-            "bug", "artifact", "error", "glitch", " проблем",
-        ])
-        matches = any(word in response_lower for word in [
-            "соответств", "правильн", "корректн", "похож", "match",
-        ])
+        has_bugs = any(
+            word in response_lower
+            for word in [
+                "баг",
+                "артефакт",
+                "ошибка",
+                "глитч",
+                "проблема",
+                "дефект",
+                "bug",
+                "artifact",
+                "error",
+                "glitch",
+                " проблем",
+            ]
+        )
+        matches = any(
+            word in response_lower
+            for word in [
+                "соответств",
+                "правильн",
+                "корректн",
+                "похож",
+                "match",
+            ]
+        )
 
         return {
             "description": response[:500],
@@ -516,7 +538,7 @@ def run_full_test_suite(base_url: str = "http://localhost:8080") -> list[E2EResu
 
     results = []
     for tc in test_cases:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Test: {tc['prompt'][:50]}...")
         result = tester.run_full_test(
             prompt=tc["prompt"],

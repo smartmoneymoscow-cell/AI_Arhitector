@@ -14,13 +14,11 @@ shared/web_search.py — Модуль веб-поиска для архитек�
     results = engine.search("современные тренды архитектуры 2026")
 """
 
+import logging
 import os
 import re
-import json
-import logging
 import urllib.parse
 from dataclasses import dataclass, field
-from typing import Optional
 
 import httpx
 
@@ -30,6 +28,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SearchResult:
     """Один результат поиска."""
+
     title: str
     url: str
     snippet: str
@@ -40,11 +39,12 @@ class SearchResult:
 @dataclass
 class SearchResponse:
     """Ответ поискового запроса."""
+
     query: str
     results: list[SearchResult] = field(default_factory=list)
     total: int = 0
     provider: str = "duckduckgo"
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class WebSearchEngine:
@@ -60,9 +60,15 @@ class WebSearchEngine:
     SERPAPI_URL = "https://serpapi.com/search"
 
     ARCH_DOMAINS = [
-        "archdaily.com", "dezeen.com", "architecturaldigest.com",
-        "archdaily.ru", "architime.ru", "pinterest.com",
-        "houzz.com", "behance.net", "planning.org",
+        "archdaily.com",
+        "dezeen.com",
+        "architecturaldigest.com",
+        "archdaily.ru",
+        "architime.ru",
+        "pinterest.com",
+        "houzz.com",
+        "behance.net",
+        "planning.org",
     ]
 
     def __init__(self, timeout: float = 15.0):
@@ -74,7 +80,7 @@ class WebSearchEngine:
         query: str,
         max_results: int = 10,
         region: str = "ru-ru",
-        site_filter: Optional[str] = None,
+        site_filter: str | None = None,
     ) -> SearchResponse:
         if site_filter:
             query = f"site:{site_filter} {query}"
@@ -119,9 +125,12 @@ class WebSearchEngine:
     def _search_serpapi(self, query: str, max_results: int, region: str) -> SearchResponse:
         try:
             params = {
-                "q": query, "api_key": self.serpapi_key,
-                "engine": "google", "num": max_results,
-                "hl": "ru", "gl": region.split("-")[0],
+                "q": query,
+                "api_key": self.serpapi_key,
+                "engine": "google",
+                "num": max_results,
+                "hl": "ru",
+                "gl": region.split("-")[0],
             }
             with httpx.Client(timeout=self.timeout) as client:
                 resp = client.get(self.SERPAPI_URL, params=params)
@@ -146,13 +155,14 @@ class WebSearchEngine:
         blocks = re.findall(
             r'<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>.*?'
             r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>',
-            html, re.DOTALL,
+            html,
+            re.DOTALL,
         )
         for url, title, snippet in blocks[:max_results]:
-            title = re.sub(r'<[^>]+>', '', title).strip()
-            snippet = re.sub(r'<[^>]+>', '', snippet).strip()
+            title = re.sub(r"<[^>]+>", "", title).strip()
+            snippet = re.sub(r"<[^>]+>", "", snippet).strip()
             if "uddg=" in url:
-                match = re.search(r'uddg=([^&]+)', url)
+                match = re.search(r"uddg=([^&]+)", url)
                 if match:
                     url = urllib.parse.unquote(match.group(1))
             if title and url:
@@ -160,7 +170,7 @@ class WebSearchEngine:
         return results
 
 
-_default_engine: Optional[WebSearchEngine] = None
+_default_engine: WebSearchEngine | None = None
 
 
 def get_search_engine() -> WebSearchEngine:

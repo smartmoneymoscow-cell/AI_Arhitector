@@ -8,6 +8,7 @@ shared/agents/geometry_agent.py — Агент генерации3D геомет
 """
 
 import time
+
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
 
@@ -42,37 +43,45 @@ class GeometryAgent(BaseAgent):
 
         # Стены + окна (каждый этаж отдельно)
         for fl in range(building_params.get("floors", 2)):
-            subtasks.append(Task(
-                name=f"walls_floor_{fl}",
-                agent="geometry",
-                params={**building_params, "gen_type": "building", "floor": fl, "part": "walls"},
-                parent_id=task.id,
-            ))
+            subtasks.append(
+                Task(
+                    name=f"walls_floor_{fl}",
+                    agent="geometry",
+                    params={**building_params, "gen_type": "building", "floor": fl, "part": "walls"},
+                    parent_id=task.id,
+                )
+            )
 
         # Крыша
-        subtasks.append(Task(
-            name="roof",
-            agent="geometry",
-            params={**building_params, "gen_type": "building", "part": "roof"},
-            parent_id=task.id,
-        ))
+        subtasks.append(
+            Task(
+                name="roof",
+                agent="geometry",
+                params={**building_params, "gen_type": "building", "part": "roof"},
+                parent_id=task.id,
+            )
+        )
 
         # Балкон (если есть)
         if building_params.get("balcony"):
-            subtasks.append(Task(
-                name="balcony",
-                agent="geometry",
-                params={**building_params, "gen_type": "building", "part": "balcony"},
-                parent_id=task.id,
-            ))
+            subtasks.append(
+                Task(
+                    name="balcony",
+                    agent="geometry",
+                    params={**building_params, "gen_type": "building", "part": "balcony"},
+                    parent_id=task.id,
+                )
+            )
 
         # Ландшафт
-        subtasks.append(Task(
-            name="landscape",
-            agent="geometry",
-            params={**building_params, "gen_type": "building", "part": "landscape"},
-            parent_id=task.id,
-        ))
+        subtasks.append(
+            Task(
+                name="landscape",
+                agent="geometry",
+                params={**building_params, "gen_type": "building", "part": "landscape"},
+                parent_id=task.id,
+            )
+        )
 
         return subtasks
 

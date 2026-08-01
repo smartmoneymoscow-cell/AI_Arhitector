@@ -6,10 +6,10 @@ shared/tiled_render.py — Tiled rendering для 16K через Blender Cycles.
 рендерим каждый отдельно, собираем финальное изображение.
 """
 
-import os
-import uuid
-import subprocess
 import logging
+import os
+import subprocess
+import uuid
 
 from PIL import Image
 
@@ -39,8 +39,9 @@ def render_16k_tiled(
         for tx in range(tiles_x):
             tile_idx = ty * tiles_x + tx
             tile_path = os.path.join(output_dir, f"{job_id}_tile_{ty}_{tx}.png")
-            tile_script = _build_tile_script(scene_script, tile_path, total_x, total_y,
-                                              tx * tile_w, ty * tile_h, tile_w, tile_h, samples)
+            tile_script = _build_tile_script(
+                scene_script, tile_path, total_x, total_y, tx * tile_w, ty * tile_h, tile_w, tile_h, samples
+            )
             script_path = os.path.join(output_dir, f"{job_id}_tile_{ty}_{tx}.py")
             with open(script_path, "w") as f:
                 f.write(tile_script)
@@ -51,7 +52,10 @@ def render_16k_tiled(
                 logger.info(f"Tile {tile_idx + 1}/{tiles_x * tiles_y}: ({tx},{ty})")
                 result = subprocess.run(
                     [blender_path, "--background", "--factory-startup", "--log-level", "0", "--python", script_path],
-                    capture_output=True, text=True, timeout=timeout_per_tile, env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_per_tile,
+                    env=env,
                 )
                 if result.returncode != 0:
                     raise RuntimeError(f"Tile {tile_idx} failed: {result.stderr[-500:]}")

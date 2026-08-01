@@ -13,8 +13,8 @@ shared/blender.py — единый модуль генерации bpy-скри�
 
 import os
 import re
-import uuid
 import subprocess
+import uuid
 
 from shared.config import settings
 from shared.validation import safe_val
@@ -22,12 +22,12 @@ from shared.validation import safe_val
 
 def _sanitize_identifier(value: str) -> str:
     """Sanitize a string to be a safe Python/BPY identifier (no injection)."""
-    return re.sub(r'[^a-zA-Z0-9_]', '_', str(value))
+    return re.sub(r"[^a-zA-Z0-9_]", "_", str(value))
 
 
 def _sanitize_string_literal(value: str) -> str:
     """Escape a string for safe inclusion in a Python string literal inside bpy scripts."""
-    return str(value).replace('\\', '\\\\').replace('"', '\\"').replace("'", "\\'")
+    return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("'", "\\'")
 
 
 def _safe_color(color: tuple) -> tuple:
@@ -39,8 +39,10 @@ def _safe_color(color: tuple) -> tuple:
 # MATERIAL HELPERS
 # ═══════════════════════════════════════════════════════════════
 
-def _make_mat_code(name: str, color: tuple, roughness: float = 0.8,
-                   metallic: float = 0.0, emission: float = 0.0) -> str:
+
+def _make_mat_code(
+    name: str, color: tuple, roughness: float = 0.8, metallic: float = 0.0, emission: float = 0.0
+) -> str:
     """Генерирует код создания PBR-материала."""
     r, g, b = color
     code = f"""
@@ -65,8 +67,8 @@ if bsdf_{name}:
 # WINDOW GENERATOR
 # ═══════════════════════════════════════════════════════════════
 
-def _window_code(x: str, z: str, floor: str, idx: str,
-                 wall_y: str, thick: str) -> str:
+
+def _window_code(x: str, z: str, floor: str, idx: str, wall_y: str, thick: str) -> str:
     """Генерирует окно с рамой, стеклом и подоконником (8-space indent для вставки в цикл)."""
     return f"""
         # Window {{floor}}_{{idx}}
@@ -88,6 +90,7 @@ def _window_code(x: str, z: str, floor: str, idx: str,
 # ═══════════════════════════════════════════════════════════════
 # STAIRCASE GENERATOR
 # ═══════════════════════════════════════════════════════════════
+
 
 def _staircase_code(W: str, L: str, fH: str, floors: str) -> str:
     """Генерирует лестницу между этажами."""
@@ -120,6 +123,7 @@ for s in range(4):
 # DOWNSPOUT / GUTTER GENERATOR
 # ═══════════════════════════════════════════════════════════════
 
+
 def _downspout_code(W: str, L: str, total_h: str) -> str:
     """Генерирует водосточные трубы."""
     return f"""
@@ -135,6 +139,7 @@ for dx,dy in [(-{W}/2-0.15,-{L}/2-0.15),({W}/2+0.15,-{L}/2-0.15),(-{W}/2-0.15,{L
 # BUILDING GENERATOR
 # ═══════════════════════════════════════════════════════════════
 
+
 def generate_bpy_script(params: dict) -> str:
     """
     Генерирует bpy-скрипт для здания.
@@ -147,7 +152,8 @@ def generate_bpy_script(params: dict) -> str:
     thick = safe_val(params.get("wall_thickness"), 0.3)
     roof_type = safe_val(params.get("roof_type"), "gabled", ["gabled", "flat", "hip"])
     mat = safe_val(
-        params.get("facade_material"), "plaster",
+        params.get("facade_material"),
+        "plaster",
         ["brick", "wood", "glass", "stone", "concrete", "plaster"],
     )
     has_balcony = bool(params.get("has_balcony", False))
@@ -155,12 +161,15 @@ def generate_bpy_script(params: dict) -> str:
     has_garage = bool(params.get("has_garage", False))
 
     colors = {
-        "brick": (0.71, 0.40, 0.12), "wood": (0.55, 0.41, 0.13),
-        "glass": (0.53, 0.81, 0.92), "plaster": (0.91, 0.88, 0.83),
-        "stone": (0.50, 0.50, 0.50), "concrete": (0.63, 0.63, 0.63),
+        "brick": (0.71, 0.40, 0.12),
+        "wood": (0.55, 0.41, 0.13),
+        "glass": (0.53, 0.81, 0.92),
+        "plaster": (0.91, 0.88, 0.83),
+        "stone": (0.50, 0.50, 0.50),
+        "concrete": (0.63, 0.63, 0.63),
     }
     wr, wg, wb = colors.get(mat, (0.91, 0.88, 0.83))
-    total_h = floors * fH
+    floors * fH
 
     # === Header ===
     script = f"""import bpy, os, math
@@ -180,7 +189,7 @@ W={W};L={L};floors={floors};fH={fH};thick={thick};total_h=floors*fH
     script += _make_mat_code("railing", (0.2, 0.2, 0.2), 0.3, 0.8)
 
     # === Foundation ===
-    script += f"""
+    script += """
 bpy.ops.mesh.primitive_cube_add(size=1,location=(0,0,-0.15))
 fnd=bpy.context.active_object;fnd.name="Foundation"
 fnd.scale=(W/2+0.3,L/2+0.3,0.15)
@@ -188,32 +197,32 @@ bpy.ops.object.transform_apply(scale=True);fnd.data.materials.append(mat_concret
 """
 
     # === Walls + Windows per floor ===
-    script += f"""
+    script += """
 for floor in range(floors):
     z=floor*fH+fH/2
     for side,(sx,sy) in [("F",(0,-L/2)),("B",(0,L/2)),("L",(-W/2,0)),("R",(W/2,0))]:
         is_x=side in ("L","R")
         bpy.ops.mesh.primitive_cube_add(size=1,location=(sx,sy,z))
-        w=bpy.context.active_object;w.name=f"Wall_{{side}}_{{floor}}"
+        w=bpy.context.active_object;w.name=f"Wall_{side}_{floor}"
         w.scale=((thick if is_x else W)/2,(L if is_x else thick)/2,fH/2)
         bpy.ops.object.transform_apply(scale=True);w.data.materials.append(mat_wall)
 """
 
     # Windows (front and back walls only, with frames)
-    script += f"""
+    script += """
     n_win=max(2,W//3)
     for i in range(n_win):
         x=-W/2+(i+1)*W/(n_win+1)
         wz=floor*fH+fH*0.4
 """
-    script += _window_code("x", "wz", "floor", "i", f"-L/2-thick/2-0.01", "thick")
-    script += _window_code("x", "wz", "floor", "i", f"L/2+thick/2+0.01", "thick")
+    script += _window_code("x", "wz", "floor", "i", "-L/2-thick/2-0.01", "thick")
+    script += _window_code("x", "wz", "floor", "i", "L/2+thick/2+0.01", "thick")
 
     # === Floor slabs ===
-    script += f"""
+    script += """
     if floor>0:
         bpy.ops.mesh.primitive_cube_add(size=1,location=(0,0,floor*fH))
-        slab=bpy.context.active_object;slab.name=f"Slab_{{floor}}"
+        slab=bpy.context.active_object;slab.name=f"Slab_{floor}"
         slab.scale=(W/2,L/2,0.1)
         bpy.ops.object.transform_apply(scale=True);slab.data.materials.append(mat_concrete)
 """
@@ -306,7 +315,7 @@ for cx,cy in [(-W/2,-L/2),(W/2,-L/2),(-W/2,L/2),(W/2,L/2)]:
 """
 
     # === Door ===
-    script += f"""
+    script += """
 bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2-thick/2-0.01,1.1))
 door=bpy.context.active_object;door.name="Door";door.scale=(0.5,0.04,1.1)
 door.data.materials.append(mat_door)
@@ -353,7 +362,7 @@ gd.data.materials.append(mat_door)
 """
 
     # === Ground + Camera + Lighting ===
-    script += f"""
+    script += """
 bpy.ops.mesh.primitive_plane_add(size=50,location=(0,0,-0.01))
 gnd=bpy.context.active_object;gnd.name="Ground";gnd.data.materials.append(mat_ground)
 
@@ -392,6 +401,7 @@ if bg:bg.inputs["Color"].default_value=(0.5,0.7,1.0,1.0);bg.inputs["Strength"].d
 # INTERIOR GENERATOR
 # ═══════════════════════════════════════════════════════════════
 
+
 def generate_interior_script(params: dict) -> str:
     """
     Генерирует bpy-скрипт для интерьера.
@@ -406,20 +416,32 @@ def generate_interior_script(params: dict) -> str:
     if style not in _VALID_STYLES:
         style = "modern"
     # Sanitize furniture list — only allow known items
-    _VALID_FURNITURE = {"sofa", "table", "bed", "chandelier", "desk", "wardrobe",
-                        "nightstand", "bookshelf", "sink", "stove", "bathtub", "chair"}
+    _VALID_FURNITURE = {
+        "sofa",
+        "table",
+        "bed",
+        "chandelier",
+        "desk",
+        "wardrobe",
+        "nightstand",
+        "bookshelf",
+        "sink",
+        "stove",
+        "bathtub",
+        "chair",
+    }
     raw_furniture = params.get("furniture", ["sofa", "table", "chandelier"])
     furniture = [f for f in raw_furniture if f in _VALID_FURNITURE]
     if not furniture:
         furniture = ["sofa", "table", "chandelier"]
 
     style_colors = {
-        "modern":       {"wall": (0.96, 0.96, 0.96), "floor": (0.77, 0.66, 0.51), "accent": (0.17, 0.24, 0.31)},
-        "classic":      {"wall": (0.94, 0.90, 0.83), "floor": (0.55, 0.41, 0.08), "accent": (0.55, 0.0, 0.0)},
+        "modern": {"wall": (0.96, 0.96, 0.96), "floor": (0.77, 0.66, 0.51), "accent": (0.17, 0.24, 0.31)},
+        "classic": {"wall": (0.94, 0.90, 0.83), "floor": (0.55, 0.41, 0.08), "accent": (0.55, 0.0, 0.0)},
         "scandinavian": {"wall": (0.98, 0.98, 0.98), "floor": (0.83, 0.72, 0.59), "accent": (0.56, 0.74, 0.56)},
-        "loft":         {"wall": (0.63, 0.63, 0.63), "floor": (0.42, 0.42, 0.42), "accent": (1.0, 0.42, 0.21)},
-        "minimalist":   {"wall": (1.0, 1.0, 1.0), "floor": (0.88, 0.85, 0.80), "accent": (0.0, 0.0, 0.0)},
-        "hitech":       {"wall": (0.9, 0.9, 0.95), "floor": (0.3, 0.3, 0.35), "accent": (0.0, 0.6, 0.8)},
+        "loft": {"wall": (0.63, 0.63, 0.63), "floor": (0.42, 0.42, 0.42), "accent": (1.0, 0.42, 0.21)},
+        "minimalist": {"wall": (1.0, 1.0, 1.0), "floor": (0.88, 0.85, 0.80), "accent": (0.0, 0.0, 0.0)},
+        "hitech": {"wall": (0.9, 0.9, 0.95), "floor": (0.3, 0.3, 0.35), "accent": (0.0, 0.6, 0.8)},
     }
     sc = style_colors.get(style, style_colors["modern"])
 
@@ -439,7 +461,7 @@ W={w};L={l};H={h}
     script += _make_mat_code("crown", (0.95, 0.95, 0.95), 0.4)
 
     # === Floor + Ceiling ===
-    script += f"""
+    script += """
 bpy.ops.mesh.primitive_plane_add(size=1,location=(0,0,0))
 fl=bpy.context.active_object;fl.name="Floor";fl.scale=(W/2,L/2,1)
 bpy.ops.object.transform_apply(scale=True);fl.data.materials.append(mat_floor)
@@ -593,7 +615,7 @@ bpy.ops.object.transform_apply(scale=True);chback.data.materials.append(chair_ma
             script += furniture_scripts[item]
 
     # === Camera + Lighting ===
-    script += f"""
+    script += """
 cam=bpy.data.cameras.new("InteriorCam");cam.lens=24
 cam_obj=bpy.data.objects.new("InteriorCam",cam)
 bpy.context.scene.collection.objects.link(cam_obj);bpy.context.scene.camera=cam_obj
@@ -623,6 +645,7 @@ if bg:bg.inputs["Color"].default_value=(0.02,0.02,0.05,1.0);bg.inputs["Strength"
 # BLENDER EXECUTION
 # ═══════════════════════════════════════════════════════════════
 
+
 def run_blender(script: str, output_file: str, timeout: int = 0) -> subprocess.CompletedProcess:
     """
     Запуск Blender CLI с валидацией скрипта и проверкой результата.
@@ -646,17 +669,16 @@ def run_blender(script: str, output_file: str, timeout: int = 0) -> subprocess.C
 
     try:
         result = subprocess.run(
-            [settings.BLENDER_PATH, "--background", "--factory-startup",
-             "--log-level", "0", "--python", script_path],
-            capture_output=True, text=True, timeout=timeout,
+            [settings.BLENDER_PATH, "--background", "--factory-startup", "--log-level", "0", "--python", script_path],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
 
         # Проверка returncode
         if result.returncode != 0:
             stderr_tail = (result.stderr or "")[-500:]
-            raise RuntimeError(
-                f"Blender exited with code {result.returncode}: {stderr_tail}"
-            )
+            raise RuntimeError(f"Blender exited with code {result.returncode}: {stderr_tail}")
 
         return result
 

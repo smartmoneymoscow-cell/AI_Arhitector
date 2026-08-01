@@ -11,17 +11,18 @@ Endpoints:
 Requires: Blender installed, BlenderLLM model or ANTHROPIC_API_KEY
 """
 
-import os
-import sys
 import json
-import uuid
 import logging
+import os
 import subprocess
-from flask import Flask, request, jsonify, send_file
+import sys
+import uuid
+
+from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 
 # Add blender scripts to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'blender'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "blender"))
 from blenderllm_bridge import BlenderLLMBridge
 
 # ═══════════════════════════════════════════════════════════════
@@ -52,6 +53,7 @@ bridge = BlenderLLMBridge(
     anthropic_base=ANTHROPIC_BASE,
 )
 
+
 # Try loading model on startup (non-blocking if fails)
 def _load_model_async():
     try:
@@ -59,25 +61,30 @@ def _load_model_async():
     except Exception as e:
         logger.warning(f"Model not loaded (will use Claude fallback): {e}")
 
+
 import threading
+
 threading.Thread(target=_load_model_async, daemon=True).start()
 
 # ═══════════════════════════════════════════════════════════════
 # ENDPOINTS
 # ═══════════════════════════════════════════════════════════════
 
-@app.route('/health')
-@app.route('/api/v1/health')
+
+@app.route("/health")
+@app.route("/api/v1/health")
 def health():
-    return jsonify({
-        "status": "ok",
-        "service": "archai-blender",
-        "model_loaded": bridge._model_loaded,
-        "blender": BLENDER_PATH,
-    })
+    return jsonify(
+        {
+            "status": "ok",
+            "service": "archai-blender",
+            "model_loaded": bridge._model_loaded,
+            "blender": BLENDER_PATH,
+        }
+    )
 
 
-@app.route('/api/v1/generate/script', methods=['POST'])
+@app.route("/api/v1/generate/script", methods=["POST"])
 def generate_script():
     """Generate bpy script from text (no Blender execution)."""
     data = request.json or {}
@@ -87,20 +94,22 @@ def generate_script():
 
     try:
         script = bridge.generate(prompt)
-        return jsonify({
-            "script": script,
-            "prompt": prompt,
-            "chars": len(script),
-        })
+        return jsonify(
+            {
+                "script": script,
+                "prompt": prompt,
+                "chars": len(script),
+            }
+        )
     except Exception as e:
         logger.error(f"Script generation failed: {e}")
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/v1/generate/building', methods=['POST'])
+@app.route("/api/v1/generate/building", methods=["POST"])
 def generate_building():
     """Generate 3D building model from text prompt.
-    
+
     Body JSON:
         prompt: str — Natural language description
         export_format: str — glb, fbx, obj, blend (default: glb)
@@ -126,7 +135,8 @@ def generate_building():
         # Run in Blender
         logger.info(f"[{job_id}] Running in Blender, export={export_format}")
         result = bridge.run_in_blender(
-            script, output_file,
+            script,
+            output_file,
             export_format=export_format,
             render_preview=render_preview,
             preview_path=preview_file,
@@ -141,7 +151,7 @@ def generate_building():
                 output_file,
                 as_attachment=True,
                 download_name=f"archai_{job_id}.{export_format}",
-                mimetype='model/gltf-binary' if export_format == 'glb' else None,
+                mimetype="model/gltf-binary" if export_format == "glb" else None,
             )
         else:
             return jsonify({"error": "Generation failed", "details": result}), 500
@@ -151,10 +161,10 @@ def generate_building():
         return jsonify({"error": str(e), "job_id": job_id}), 500
 
 
-@app.route('/api/v1/render/interior', methods=['POST'])
+@app.route("/api/v1/render/interior", methods=["POST"])
 def render_interior():
     """Render photorealistic interior.
-    
+
     Body JSON:
         room_type: str — living_room, bedroom, kitchen, office
         width, length, height: float — room dimensions
@@ -166,29 +176,41 @@ def render_interior():
     params_file = os.path.join(OUTPUT_DIR, f"{job_id}_interior.json")
     output_file = os.path.join(OUTPUT_DIR, f"{job_id}_interior.png")
 
-    with open(params_file, 'w') as f:
+    with open(params_file, "w") as f:
         json.dump(data, f)
 
-    interior_script = os.path.join(os.path.dirname(__file__), 'blender', 'render_interior.py')
+    interior_script = os.path.join(os.path.dirname(__file__), "blender", "render_interior.py")
 
     try:
         result = subprocess.run(
-            [BLENDER_PATH, '--background', '--factory-startup',
-             '--python', interior_script,
-             '--', params_file, output_file],
-            capture_output=True, text=True, timeout=300,
+            [
+                BLENDER_PATH,
+                "--background",
+                "--factory-startup",
+                "--python",
+                interior_script,
+                "--",
+                params_file,
+                output_file,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
         )
 
         if os.path.exists(output_file):
             return send_file(
-                output_file, as_attachment=True,
+                output_file,
+                as_attachment=True,
                 download_name=f"archai_interior_{job_id}.png",
             )
         else:
-            return jsonify({
-                "error": "Render failed",
-                "stderr": result.stderr[-500:],
-            }), 500
+            return jsonify(
+                {
+                    "error": "Render failed",
+                    "stderr": result.stderr[-500:],
+                }
+            ), 500
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -197,19 +219,21 @@ def render_interior():
 # ═══════════════════════════════════════════════════════════════
 # STATIC FILES (serve frontend)
 # ═══════════════════════════════════════════════════════════════
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), 'frontend')
+FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend")
 
-@app.route('/')
+
+@app.route("/")
 def serve_index():
-    index = os.path.join(FRONTEND_DIR, 'index.html')
+    index = os.path.join(FRONTEND_DIR, "index.html")
     if os.path.exists(index):
         return send_file(index)
     return jsonify({"error": "Frontend not found"}), 404
 
+
 # ═══════════════════════════════════════════════════════════════
-if __name__ == '__main__':
+if __name__ == "__main__":
     logger.info(f"Starting ArchAI Blender Server on port {PORT}")
     logger.info(f"Blender: {BLENDER_PATH}")
     logger.info(f"Model: {MODEL_PATH}")
     logger.info(f"Output: {OUTPUT_DIR}")
-    app.run(host='0.0.0.0', port=PORT, debug=False)
+    app.run(host="0.0.0.0", port=PORT, debug=False)

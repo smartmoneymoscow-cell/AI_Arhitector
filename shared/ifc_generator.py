@@ -11,9 +11,6 @@ shared/ifc_generator.py — Генерация IFC-файлов из парам�
 """
 
 import os
-import math
-import uuid
-from typing import Optional
 
 from shared.validation import safe_val
 
@@ -39,9 +36,7 @@ def generate_ifc_building(params: dict, output_path: str, schema: str = "IFC2X3"
         import ifcopenshell.api
         import ifcopenshell.guid
     except ImportError:
-        raise ImportError(
-            "ifcopenshell не установлен. Установите: pip install ifcopenshell"
-        )
+        raise ImportError("ifcopenshell не установлен. Установите: pip install ifcopenshell")
 
     W = safe_val(params.get("width"), 10, range(1, 201))
     L = safe_val(params.get("length"), 12, range(1, 201))
@@ -127,9 +122,7 @@ def generate_ifc_building(params: dict, output_path: str, schema: str = "IFC2X3"
         # Местоположение этажа
         storey_placement = model.createIfcLocalPlacement(
             None,
-            model.createIfcAxis2Placement3D(
-                model.createIfcCartesianPoint((0.0, 0.0, z))
-            ),
+            model.createIfcAxis2Placement3D(model.createIfcCartesianPoint((0.0, 0.0, z))),
         )
 
         storey = model.createIfcBuildingStorey(
@@ -151,8 +144,18 @@ def generate_ifc_building(params: dict, output_path: str, schema: str = "IFC2X3"
 
         for wall_name, (cx, cy), length, orientation in walls_data:
             _create_wall(
-                model, owner_history, storey, material,
-                wall_name, cx, cy, z, length, fH, thick, orientation,
+                model,
+                owner_history,
+                storey,
+                material,
+                wall_name,
+                cx,
+                cy,
+                z,
+                length,
+                fH,
+                thick,
+                orientation,
             )
 
         # Окна (передняя и задняя стены)
@@ -161,23 +164,47 @@ def generate_ifc_building(params: dict, output_path: str, schema: str = "IFC2X3"
             x = -W / 2 + (i + 1) * W / (n_win + 1)
             for wy, wall_dir in [(-L / 2 - thick / 2, "Front"), (L / 2 + thick / 2, "Back")]:
                 _create_window(
-                    model, owner_history, storey, material,
+                    model,
+                    owner_history,
+                    storey,
+                    material,
                     f"Window_{wall_dir}_{floor_idx}_{i}",
-                    x, wy, z + fH * 0.3, 1.2, 1.5,
+                    x,
+                    wy,
+                    z + fH * 0.3,
+                    1.2,
+                    1.5,
                 )
 
         # Дверь (первый этаж, передняя стена)
         if floor_idx == 0:
             _create_door(
-                model, owner_history, storey, material,
-                "MainDoor", 0, -L / 2 - thick / 2, z, 0.9, 2.1,
+                model,
+                owner_history,
+                storey,
+                material,
+                "MainDoor",
+                0,
+                -L / 2 - thick / 2,
+                z,
+                0.9,
+                2.1,
             )
 
         # Плита перекрытия (не на первом этаже)
         if floor_idx > 0:
             _create_slab(
-                model, owner_history, storey, material,
-                f"Slab_{floor_idx}", 0, 0, z, W, L, 0.2,
+                model,
+                owner_history,
+                storey,
+                material,
+                f"Slab_{floor_idx}",
+                0,
+                0,
+                z,
+                W,
+                L,
+                0.2,
             )
 
     # Привязать этажи к зданию
@@ -202,14 +229,11 @@ def generate_ifc_building(params: dict, output_path: str, schema: str = "IFC2X3"
     return output_path
 
 
-def _create_wall(model, owner_history, storey, material,
-                 name, cx, cy, z, length, height, thick, orientation):
+def _create_wall(model, owner_history, storey, material, name, cx, cy, z, length, height, thick, orientation):
     """Создаёт IfcWall с позиционированием."""
     placement = model.createIfcLocalPlacement(
         storey.ObjectPlacement,
-        model.createIfcAxis2Placement3D(
-            model.createIfcCartesianPoint((cx, cy, z + height / 2))
-        ),
+        model.createIfcAxis2Placement3D(model.createIfcCartesianPoint((cx, cy, z + height / 2))),
     )
 
     # Простая box-репрезентация
@@ -220,11 +244,11 @@ def _create_wall(model, owner_history, storey, material,
 
     body = model.createIfcExtrudedAreaSolid(
         model.createIfcRectangleProfileDef(
-            "AREA", None,
-            model.createIfcAxis2Placement2D(
-                model.createIfcCartesianPoint((0.0, 0.0))
-            ),
-            dx, dy,
+            "AREA",
+            None,
+            model.createIfcAxis2Placement2D(model.createIfcCartesianPoint((0.0, 0.0))),
+            dx,
+            dy,
         ),
         model.createIfcCartesianPoint((0.0, 0.0, -dz / 2)),
         model.createIfcDirection((0.0, 0.0, 1.0)),
@@ -233,7 +257,9 @@ def _create_wall(model, owner_history, storey, material,
 
     rep = model.createIfcShapeRepresentation(
         model.createIfcRepresentationContext(None, None, None),
-        "Body", "SweptSolid", [body],
+        "Body",
+        "SweptSolid",
+        [body],
     )
 
     wall = model.createIfcWall(
@@ -253,23 +279,20 @@ def _create_wall(model, owner_history, storey, material,
     )
 
 
-def _create_window(model, owner_history, storey, material,
-                   name, x, y, z, width, height):
+def _create_window(model, owner_history, storey, material, name, x, y, z, width, height):
     """Создаёт IfcWindow."""
     placement = model.createIfcLocalPlacement(
         storey.ObjectPlacement,
-        model.createIfcAxis2Placement3D(
-            model.createIfcCartesianPoint((x, y, z + height / 2))
-        ),
+        model.createIfcAxis2Placement3D(model.createIfcCartesianPoint((x, y, z + height / 2))),
     )
 
     body = model.createIfcExtrudedAreaSolid(
         model.createIfcRectangleProfileDef(
-            "AREA", None,
-            model.createIfcAxis2Placement2D(
-                model.createIfcCartesianPoint((0.0, 0.0))
-            ),
-            width, 0.05,
+            "AREA",
+            None,
+            model.createIfcAxis2Placement2D(model.createIfcCartesianPoint((0.0, 0.0))),
+            width,
+            0.05,
         ),
         model.createIfcCartesianPoint((0.0, 0.0, -height / 2)),
         model.createIfcDirection((0.0, 0.0, 1.0)),
@@ -278,7 +301,9 @@ def _create_window(model, owner_history, storey, material,
 
     rep = model.createIfcShapeRepresentation(
         model.createIfcRepresentationContext(None, None, None),
-        "Body", "SweptSolid", [body],
+        "Body",
+        "SweptSolid",
+        [body],
     )
 
     window = model.createIfcWindow(
@@ -299,23 +324,20 @@ def _create_window(model, owner_history, storey, material,
     )
 
 
-def _create_door(model, owner_history, storey, material,
-                 name, x, y, z, width, height):
+def _create_door(model, owner_history, storey, material, name, x, y, z, width, height):
     """Создаёт IfcDoor."""
     placement = model.createIfcLocalPlacement(
         storey.ObjectPlacement,
-        model.createIfcAxis2Placement3D(
-            model.createIfcCartesianPoint((x, y, z + height / 2))
-        ),
+        model.createIfcAxis2Placement3D(model.createIfcCartesianPoint((x, y, z + height / 2))),
     )
 
     body = model.createIfcExtrudedAreaSolid(
         model.createIfcRectangleProfileDef(
-            "AREA", None,
-            model.createIfcAxis2Placement2D(
-                model.createIfcCartesianPoint((0.0, 0.0))
-            ),
-            width, 0.08,
+            "AREA",
+            None,
+            model.createIfcAxis2Placement2D(model.createIfcCartesianPoint((0.0, 0.0))),
+            width,
+            0.08,
         ),
         model.createIfcCartesianPoint((0.0, 0.0, -height / 2)),
         model.createIfcDirection((0.0, 0.0, 1.0)),
@@ -324,7 +346,9 @@ def _create_door(model, owner_history, storey, material,
 
     rep = model.createIfcShapeRepresentation(
         model.createIfcRepresentationContext(None, None, None),
-        "Body", "SweptSolid", [body],
+        "Body",
+        "SweptSolid",
+        [body],
     )
 
     door = model.createIfcDoor(
@@ -345,23 +369,20 @@ def _create_door(model, owner_history, storey, material,
     )
 
 
-def _create_slab(model, owner_history, storey, material,
-                 name, x, y, z, width, length, thickness):
+def _create_slab(model, owner_history, storey, material, name, x, y, z, width, length, thickness):
     """Создаёт IfcSlab (плита перекрытия)."""
     placement = model.createIfcLocalPlacement(
         storey.ObjectPlacement,
-        model.createIfcAxis2Placement3D(
-            model.createIfcCartesianPoint((x, y, z))
-        ),
+        model.createIfcAxis2Placement3D(model.createIfcCartesianPoint((x, y, z))),
     )
 
     body = model.createIfcExtrudedAreaSolid(
         model.createIfcRectangleProfileDef(
-            "AREA", None,
-            model.createIfcAxis2Placement2D(
-                model.createIfcCartesianPoint((0.0, 0.0))
-            ),
-            width, length,
+            "AREA",
+            None,
+            model.createIfcAxis2Placement2D(model.createIfcCartesianPoint((0.0, 0.0))),
+            width,
+            length,
         ),
         model.createIfcCartesianPoint((0.0, 0.0, -thickness / 2)),
         model.createIfcDirection((0.0, 0.0, 1.0)),
@@ -370,7 +391,9 @@ def _create_slab(model, owner_history, storey, material,
 
     rep = model.createIfcShapeRepresentation(
         model.createIfcRepresentationContext(None, None, None),
-        "Body", "SweptSolid", [body],
+        "Body",
+        "SweptSolid",
+        [body],
     )
 
     slab = model.createIfcSlab(
@@ -394,19 +417,17 @@ def _create_roof(model, owner_history, building, material, W, L, total_h, roof_t
     """Создаёт IfcRoof."""
     placement = model.createIfcLocalPlacement(
         building.ObjectPlacement,
-        model.createIfcAxis2Placement3D(
-            model.createIfcCartesianPoint((0.0, 0.0, total_h))
-        ),
+        model.createIfcAxis2Placement3D(model.createIfcCartesianPoint((0.0, 0.0, total_h))),
     )
 
     if roof_type == "flat":
         body = model.createIfcExtrudedAreaSolid(
             model.createIfcRectangleProfileDef(
-                "AREA", None,
-                model.createIfcAxis2Placement2D(
-                    model.createIfcCartesianPoint((0.0, 0.0))
-                ),
-                W + 0.6, L + 0.6,
+                "AREA",
+                None,
+                model.createIfcAxis2Placement2D(model.createIfcCartesianPoint((0.0, 0.0))),
+                W + 0.6,
+                L + 0.6,
             ),
             model.createIfcCartesianPoint((0.0, 0.0, 0.0)),
             model.createIfcDirection((0.0, 0.0, 1.0)),
@@ -417,13 +438,16 @@ def _create_roof(model, owner_history, building, material, W, L, total_h, roof_t
         rh = 2.5
         body = model.createIfcExtrudedAreaSolid(
             model.createIfcArbitraryClosedProfileDef(
-                "AREA", None,
-                model.createIfcPolyline([
-                    model.createIfcCartesianPoint((-W / 2 - 0.3, 0.0)),
-                    model.createIfcCartesianPoint((0.0, rh)),
-                    model.createIfcCartesianPoint((W / 2 + 0.3, 0.0)),
-                    model.createIfcCartesianPoint((-W / 2 - 0.3, 0.0)),
-                ]),
+                "AREA",
+                None,
+                model.createIfcPolyline(
+                    [
+                        model.createIfcCartesianPoint((-W / 2 - 0.3, 0.0)),
+                        model.createIfcCartesianPoint((0.0, rh)),
+                        model.createIfcCartesianPoint((W / 2 + 0.3, 0.0)),
+                        model.createIfcCartesianPoint((-W / 2 - 0.3, 0.0)),
+                    ]
+                ),
             ),
             model.createIfcCartesianPoint((0.0, -L / 2 - 0.3, 0.0)),
             model.createIfcDirection((0.0, 1.0, 0.0)),
@@ -432,7 +456,9 @@ def _create_roof(model, owner_history, building, material, W, L, total_h, roof_t
 
     rep = model.createIfcShapeRepresentation(
         model.createIfcRepresentationContext(None, None, None),
-        "Body", "SweptSolid", [body],
+        "Body",
+        "SweptSolid",
+        [body],
     )
 
     roof = model.createIfcRoof(
@@ -473,18 +499,16 @@ def _create_rooms(model, owner_history, storeys, W, L, fH, params):
 
             placement = model.createIfcLocalPlacement(
                 storey.ObjectPlacement,
-                model.createIfcAxis2Placement3D(
-                    model.createIfcCartesianPoint((rx, ry, 0))
-                ),
+                model.createIfcAxis2Placement3D(model.createIfcCartesianPoint((rx, ry, 0))),
             )
 
             body = model.createIfcExtrudedAreaSolid(
                 model.createIfcRectangleProfileDef(
-                    "AREA", None,
-                    model.createIfcAxis2Placement2D(
-                        model.createIfcCartesianPoint((0.0, 0.0))
-                    ),
-                    rw, rd,
+                    "AREA",
+                    None,
+                    model.createIfcAxis2Placement2D(model.createIfcCartesianPoint((0.0, 0.0))),
+                    rw,
+                    rd,
                 ),
                 model.createIfcCartesianPoint((0.0, 0.0, 0.0)),
                 model.createIfcDirection((0.0, 0.0, 1.0)),
@@ -493,7 +517,9 @@ def _create_rooms(model, owner_history, storeys, W, L, fH, params):
 
             rep = model.createIfcShapeRepresentation(
                 model.createIfcRepresentationContext(None, None, None),
-                "Body", "SweptSolid", [body],
+                "Body",
+                "SweptSolid",
+                [body],
             )
 
             space = model.createIfcSpace(
@@ -513,12 +539,8 @@ def _create_rooms(model, owner_history, storeys, W, L, fH, params):
                 OwnerHistory=owner_history,
                 Name="Pset_SpaceCommon",
                 HasProperties=[
-                    model.createIfcPropertySingleValue(
-                        "NetFloorArea", "AreaMeasure", area
-                    ),
-                    model.createIfcPropertySingleValue(
-                        "NetVolume", "VolumeMeasure", area * fH
-                    ),
+                    model.createIfcPropertySingleValue("NetFloorArea", "AreaMeasure", area),
+                    model.createIfcPropertySingleValue("NetVolume", "VolumeMeasure", area * fH),
                 ],
             )
             model.createIfcRelDefinesByProperties(

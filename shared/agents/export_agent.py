@@ -8,34 +8,45 @@ shared/agents/export_agent.py — Агент экспорта.
 import os
 import time
 import uuid
-import httpx
-from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
+import httpx
+
+from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
 # Команды экспорта для разных форматов
 EXPORT_COMMANDS = {
-    "glb": lambda path: f"""
+    "glb": lambda path: (
+        f"""
 import bpy
 bpy.ops.export_scene.gltf(filepath=r'{path}', export_format='GLB', use_selection=False,
     export_apply=True, export_materials='EXPORT')
-""",
-    "obj": lambda path: f"""
+"""
+    ),
+    "obj": lambda path: (
+        f"""
 import bpy
 bpy.ops.wm.obj_export(filepath=r'{path}', export_materials=True, export_triangulated_mesh=True)
-""",
-    "fbx": lambda path: f"""
+"""
+    ),
+    "fbx": lambda path: (
+        f"""
 import bpy
 bpy.ops.export_scene.fbx(filepath=r'{path}', use_selection=False, apply_unit_scale=True,
     apply_scale_options='FBX_SCALE_ALL', mesh_smooth_type='FACE')
-""",
-    "usd": lambda path: f"""
+"""
+    ),
+    "usd": lambda path: (
+        f"""
 import bpy
 bpy.ops.wm.usd_export(filepath=r'{path}', export_materials=True, export_meshes=True)
-""",
-    "ply": lambda path: f"""
+"""
+    ),
+    "ply": lambda path: (
+        f"""
 import bpy
 bpy.ops.export_mesh.ply(filepath=r'{path}')
-""",
+"""
+    ),
 }
 
 
@@ -100,6 +111,7 @@ class ExportAgent(BaseAgent):
         """Экспорт через IfcOpenShell (без Blender)."""
         try:
             from shared.ifc_generator import generate_ifc_building
+
             building_params = params.get("building_params", {})
             generate_ifc_building(building_params, output_path)
             return TaskResult(
@@ -118,6 +130,7 @@ class ExportAgent(BaseAgent):
         """Экспорт SVG плана этажа (без Blender)."""
         try:
             from shared.floorplan import generate_floorplan_svg
+
             building_params = params.get("building_params", {})
             floor = params.get("floor", 1)
             svg = generate_floorplan_svg(building_params, floor)
@@ -154,6 +167,7 @@ class ExportAgent(BaseAgent):
     def _run_local(self, script: str, output_path: str, job_id: str) -> dict:
         """Локальный запуск Blender для экспорта."""
         import subprocess
+
         from shared.config import settings
 
         script_path = os.path.join(settings.OUTPUT_DIR, f"{job_id}_export.py")
@@ -168,9 +182,18 @@ class ExportAgent(BaseAgent):
 
         try:
             result = subprocess.run(
-                [settings.BLENDER_PATH, "--background", "--factory-startup",
-                 "--log-level", "0", "--python", script_path],
-                capture_output=True, text=True, timeout=120,
+                [
+                    settings.BLENDER_PATH,
+                    "--background",
+                    "--factory-startup",
+                    "--log-level",
+                    "0",
+                    "--python",
+                    script_path,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
             )
             if result.returncode != 0:
                 raise RuntimeError(f"Blender export failed: {result.stderr[-500:]}")

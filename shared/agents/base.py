@@ -6,11 +6,11 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Optional
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     DONE = "done"
@@ -21,16 +21,17 @@ class TaskStatus(str, Enum):
 @dataclass
 class Task:
     """Задача для агента."""
+
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     name: str = ""
     agent: str = ""
     params: dict = field(default_factory=dict)
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
     status: TaskStatus = TaskStatus.PENDING
     result: Optional["TaskResult"] = None
     created_at: float = field(default_factory=time.time)
-    started_at: Optional[float] = None
-    finished_at: Optional[float] = None
+    started_at: float | None = None
+    finished_at: float | None = None
 
     def start(self):
         self.status = TaskStatus.RUNNING
@@ -56,9 +57,10 @@ class Task:
 @dataclass
 class TaskResult:
     """Результат выполнения задачи."""
+
     status: TaskStatus = TaskStatus.DONE
     data: Any = None
-    error: Optional[str] = None
+    error: str | None = None
     duration_ms: float = 0
     metadata: dict = field(default_factory=dict)
 

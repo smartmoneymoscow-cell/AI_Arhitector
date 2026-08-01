@@ -7,10 +7,7 @@ shared/floorplan.py — Генерация SVG floor plan из параметр�
 Зависимости: shapely
 """
 
-import math
-from typing import Optional
-
-from shared.validation import safe_val, DEFAULT_FURNITURE
+from shared.validation import safe_val
 
 
 def generate_floorplan_svg(params: dict, floor: int = 1) -> str:
@@ -26,7 +23,7 @@ def generate_floorplan_svg(params: dict, floor: int = 1) -> str:
     """
     W = safe_val(params.get("width"), 10, range(1, 201))
     L = safe_val(params.get("length"), 12, range(1, 201))
-    fH = safe_val(params.get("floor_height"), 3.0)
+    safe_val(params.get("floor_height"), 3.0)
     thick = safe_val(params.get("wall_thickness"), 0.3)
 
     # Масштаб: 1м = 40px
@@ -47,8 +44,10 @@ def generate_floorplan_svg(params: dict, floor: int = 1) -> str:
     rooms = _get_rooms_for_floor(params, floor)
 
     svg_parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_l}" '
-        f'width="{svg_w}" height="{svg_l}" font-family="Inter, Arial, sans-serif">',
+        (
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_l}" '
+            f'width="{svg_w}" height="{svg_l}" font-family="Inter, Arial, sans-serif">'
+        ),
         f'<rect width="{svg_w}" height="{svg_l}" fill="#f8f8f8"/>',
     ]
 
@@ -61,7 +60,7 @@ def generate_floorplan_svg(params: dict, floor: int = 1) -> str:
 
     # === Стены (толщина) ===
     wall_color = "#444"
-    wall_w = thick * scale
+    thick * scale
 
     # Внешние стены
     for side, (sx, sy), (sw, sh) in [
@@ -71,15 +70,18 @@ def generate_floorplan_svg(params: dict, floor: int = 1) -> str:
         ("right", (W / 2 - thick, -L / 2), (thick, L)),
     ]:
         wx, wy = to_svg(sx, sy)
-        svg_parts.append(
-            f'<rect x="{wx}" y="{wy}" width="{sw * scale}" height="{sh * scale}" '
-            f'fill="{wall_color}"/>'
-        )
+        svg_parts.append(f'<rect x="{wx}" y="{wy}" width="{sw * scale}" height="{sh * scale}" fill="{wall_color}"/>')
 
     # === Помещения ===
     colors = [
-        "#e8f4f8", "#f8e8e8", "#e8f8e8", "#f8f8e8",
-        "#f0e8f8", "#e8f0f8", "#f8f0e8", "#e0f0e0",
+        "#e8f4f8",
+        "#f8e8e8",
+        "#e8f8e8",
+        "#f8f8e8",
+        "#f0e8f8",
+        "#e8f0f8",
+        "#f8f0e8",
+        "#e0f0e0",
     ]
 
     for i, room in enumerate(rooms):
@@ -106,8 +108,7 @@ def generate_floorplan_svg(params: dict, floor: int = 1) -> str:
             f'font-size="11" font-weight="600" fill="#333">{name}</text>'
         )
         svg_parts.append(
-            f'<text x="{tx}" y="{ty + 10}" text-anchor="middle" '
-            f'font-size="9" fill="#666">{area:.1f} м²</text>'
+            f'<text x="{tx}" y="{ty + 10}" text-anchor="middle" font-size="9" fill="#666">{area:.1f} м²</text>'
         )
 
         # Мебель (схематично)
@@ -156,26 +157,19 @@ def generate_floorplan_svg(params: dict, floor: int = 1) -> str:
         f'<text x="0" y="-3" text-anchor="middle" font-size="8" font-weight="700" fill="#c00">N</text>'
         f'<line x1="0" y1="-10" x2="0" y2="10" stroke="#999" stroke-width="0.5"/>'
         f'<line x1="-10" y1="0" x2="10" y2="0" stroke="#999" stroke-width="0.5"/>'
-        f'</g>'
+        f"</g>"
     )
 
     # === Масштабная лейка ===
     lx, ly = to_svg(-W / 2, L / 2 + 2)
-    svg_parts.append(
-        f'<line x1="{lx}" y1="{ly}" x2="{lx + 2 * scale}" y2="{ly}" '
-        f'stroke="#333" stroke-width="1.5"/>'
-    )
-    svg_parts.append(
-        f'<text x="{lx + scale}" y="{ly - 5}" text-anchor="middle" '
-        f'font-size="9" fill="#333">2 м</text>'
-    )
+    svg_parts.append(f'<line x1="{lx}" y1="{ly}" x2="{lx + 2 * scale}" y2="{ly}" stroke="#333" stroke-width="1.5"/>')
+    svg_parts.append(f'<text x="{lx + scale}" y="{ly - 5}" text-anchor="middle" font-size="9" fill="#333">2 м</text>')
 
     # === Легенда ===
     lx2, ly2 = to_svg(-W / 2 - 1, L / 2 + 3.5)
     total_area = W * L
     svg_parts.append(
-        f'<text x="{lx2}" y="{ly2}" font-size="10" fill="#333">'
-        f'Этаж {floor} | {W}×{L} м | {total_area} м²</text>'
+        f'<text x="{lx2}" y="{ly2}" font-size="10" fill="#333">Этаж {floor} | {W}×{L} м | {total_area} м²</text>'
     )
 
     svg_parts.append("</svg>")
@@ -213,34 +207,35 @@ def _add_furniture_svg(svg_parts: list, room: dict, to_svg, scale: float):
     name = room.get("name", "").lower()
     rx = room.get("x", 0)
     ry = room.get("y", 0)
-    rw = room.get("w", 4)
+    room.get("w", 4)
     rd = room.get("d", 4)
 
     furn = []
     if "гостиная" in name or "living" in name:
         # Диван
         fx, fy = to_svg(rx - 0.5, ry + rd / 4)
-        furn.append(f'<rect x="{fx}" y="{fy}" width="{1.8 * scale * 0.3}" '
-                     f'height="{0.8 * scale * 0.3}" fill="#8B7355" rx="2" opacity="0.5"/>')
+        furn.append(
+            f'<rect x="{fx}" y="{fy}" width="{1.8 * scale * 0.3}" '
+            f'height="{0.8 * scale * 0.3}" fill="#8B7355" rx="2" opacity="0.5"/>'
+        )
         # Столик
         tx, ty = to_svg(rx, ry)
-        furn.append(f'<rect x="{tx - 6}" y="{ty - 4}" width="12" height="8" '
-                     f'fill="#A0522D" rx="1" opacity="0.5"/>')
+        furn.append(f'<rect x="{tx - 6}" y="{ty - 4}" width="12" height="8" fill="#A0522D" rx="1" opacity="0.5"/>')
     elif "кухня" in name or "kitchen" in name:
         # Стол
         tx, ty = to_svg(rx, ry)
-        furn.append(f'<rect x="{tx - 8}" y="{ty - 6}" width="16" height="12" '
-                     f'fill="#DEB887" rx="1" opacity="0.5"/>')
+        furn.append(f'<rect x="{tx - 8}" y="{ty - 6}" width="16" height="12" fill="#DEB887" rx="1" opacity="0.5"/>')
     elif "спальн" in name or "bedroom" in name:
         # Кровать
         bx, by = to_svg(rx - 0.9, ry - 1)
-        furn.append(f'<rect x="{bx}" y="{by}" width="{1.8 * scale * 0.3}" '
-                     f'height="{2 * scale * 0.3}" fill="#E8E0D0" rx="2" opacity="0.5"/>')
+        furn.append(
+            f'<rect x="{bx}" y="{by}" width="{1.8 * scale * 0.3}" '
+            f'height="{2 * scale * 0.3}" fill="#E8E0D0" rx="2" opacity="0.5"/>'
+        )
     elif "ванн" in name or "bath" in name:
         # Ванна
         bx, by = to_svg(rx, ry)
-        furn.append(f'<rect x="{bx - 10}" y="{by - 18}" width="20" height="36" '
-                     f'fill="#E0E0E0" rx="8" opacity="0.5"/>')
+        furn.append(f'<rect x="{bx - 10}" y="{by - 18}" width="20" height="36" fill="#E0E0E0" rx="8" opacity="0.5"/>')
 
     svg_parts.extend(furn)
 
@@ -253,32 +248,19 @@ def _add_dimensions(svg_parts: list, W: float, L: float, to_svg, scale: float):
     # Ширина (сверху)
     x1, y1 = to_svg(-W / 2, -L / 2 - 2)
     x2, y2 = to_svg(W / 2, -L / 2 - 2)
-    svg_parts.append(
-        f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
-        f'stroke="{color}" stroke-width="{lw}"/>'
-    )
+    svg_parts.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{color}" stroke-width="{lw}"/>')
     # Выноски
-    svg_parts.append(f'<line x1="{x1}" y1="{y1}" x2="{x1}" y2="{y1 + 10}" '
-                      f'stroke="{color}" stroke-width="0.5"/>')
-    svg_parts.append(f'<line x1="{x2}" y1="{y2}" x2="{x2}" y2="{y2 + 10}" '
-                      f'stroke="{color}" stroke-width="0.5"/>')
+    svg_parts.append(f'<line x1="{x1}" y1="{y1}" x2="{x1}" y2="{y1 + 10}" stroke="{color}" stroke-width="0.5"/>')
+    svg_parts.append(f'<line x1="{x2}" y1="{y2}" x2="{x2}" y2="{y2 + 10}" stroke="{color}" stroke-width="0.5"/>')
     mx, my = to_svg(0, -L / 2 - 3)
-    svg_parts.append(
-        f'<text x="{mx}" y="{my}" text-anchor="middle" font-size="10" fill="{color}">'
-        f'{W} м</text>'
-    )
+    svg_parts.append(f'<text x="{mx}" y="{my}" text-anchor="middle" font-size="10" fill="{color}">{W} м</text>')
 
     # Длина (справа)
     x1, y1 = to_svg(W / 2 + 2, -L / 2)
     x2, y2 = to_svg(W / 2 + 2, L / 2)
-    svg_parts.append(
-        f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
-        f'stroke="{color}" stroke-width="{lw}"/>'
-    )
-    svg_parts.append(f'<line x1="{x1}" y1="{y1}" x2="{x1 - 10}" y2="{y1}" '
-                      f'stroke="{color}" stroke-width="0.5"/>')
-    svg_parts.append(f'<line x1="{x2}" y1="{y2}" x2="{x2 - 10}" y2="{y2}" '
-                      f'stroke="{color}" stroke-width="0.5"/>')
+    svg_parts.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{color}" stroke-width="{lw}"/>')
+    svg_parts.append(f'<line x1="{x1}" y1="{y1}" x2="{x1 - 10}" y2="{y1}" stroke="{color}" stroke-width="0.5"/>')
+    svg_parts.append(f'<line x1="{x2}" y1="{y2}" x2="{x2 - 10}" y2="{y2}" stroke="{color}" stroke-width="0.5"/>')
     mx, my = to_svg(W / 2 + 3.5, 0)
     svg_parts.append(
         f'<text x="{mx}" y="{my}" text-anchor="middle" font-size="10" fill="{color}" '

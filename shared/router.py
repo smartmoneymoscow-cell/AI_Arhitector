@@ -11,34 +11,35 @@ shared/router.py — единый роутер генерации на бэке�
     # → GenerationPlan(type='building', params={...}, steps=[...])
 """
 
-import uuid
 import time
+import uuid
 from dataclasses import dataclass, field
-from typing import Optional
 
-from shared.parser import parse_prompt, get_generation_type, AllModelsFailedError
-from shared.validation import validate_params, DEFAULT_FURNITURE
-
+from shared.parser import parse_prompt
+from shared.validation import DEFAULT_FURNITURE, validate_params
 
 # ═══════════════════════════════════════════════════════════════
 # TYPES
 # ═══════════════════════════════════════════════════════════════
 
+
 @dataclass
 class GenerationStep:
     """Один этап генерации."""
+
     name: str
     service: str  # 'local' | 'blender' | 'geometry' | 'ifc' | 'ml'
     params: dict = field(default_factory=dict)
     status: str = "pending"  # pending | running | done | failed
-    result: Optional[dict] = None
-    error: Optional[str] = None
+    result: dict | None = None
+    error: str | None = None
     duration_ms: float = 0
 
 
 @dataclass
 class GenerationPlan:
     """Полный план генерации."""
+
     job_id: str
     prompt: str
     gen_type: str  # 'building' | 'interior'
@@ -47,8 +48,8 @@ class GenerationPlan:
     status: str = "pending"
     created_at: float = field(default_factory=time.time)
     progress: int = 0
-    result_url: Optional[str] = None
-    error: Optional[str] = None
+    result_url: str | None = None
+    error: str | None = None
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -58,9 +59,16 @@ class GenerationPlan:
 BUILDING_TEMPLATES = {
     "house": {
         "label": "Жилой дом",
-        "floors": 2, "W": 10, "L": 12, "fH": 2.8,
-        "roof": "gabled", "mat": "brick",
-        "fc": "#c87040", "rc": "#6b3510", "tc": "#f8f4ef", "dc": "#3d2010",
+        "floors": 2,
+        "W": 10,
+        "L": 12,
+        "fH": 2.8,
+        "roof": "gabled",
+        "mat": "brick",
+        "fc": "#c87040",
+        "rc": "#6b3510",
+        "tc": "#f8f4ef",
+        "dc": "#3d2010",
         "balcony": True,
         "rooms": [
             {"n": "Гостиная", "a": 24, "fl": 1, "tag": "l", "x": -2, "z": 1, "w": 5.5, "d": 4.2},
@@ -73,9 +81,16 @@ BUILDING_TEMPLATES = {
     },
     "office": {
         "label": "Офисный центр",
-        "floors": 5, "W": 20, "L": 24, "fH": 3.2,
-        "roof": "flat", "mat": "glass",
-        "fc": "#7ec8e3", "rc": "#455a64", "tc": "#eceff1", "dc": "#263238",
+        "floors": 5,
+        "W": 20,
+        "L": 24,
+        "fH": 3.2,
+        "roof": "flat",
+        "mat": "glass",
+        "fc": "#7ec8e3",
+        "rc": "#455a64",
+        "tc": "#eceff1",
+        "dc": "#263238",
         "balcony": False,
         "rooms": [
             {"n": "Open Space", "a": 320, "fl": 1, "tag": "l", "x": 0, "z": 2, "w": 16, "d": 18},
@@ -85,9 +100,16 @@ BUILDING_TEMPLATES = {
     },
     "cottage": {
         "label": "Загородный коттедж",
-        "floors": 2, "W": 12, "L": 15, "fH": 2.9,
-        "roof": "gabled", "mat": "wood",
-        "fc": "#b8864e", "rc": "#3e2005", "tc": "#fdf5e6", "dc": "#2d1505",
+        "floors": 2,
+        "W": 12,
+        "L": 15,
+        "fH": 2.9,
+        "roof": "gabled",
+        "mat": "wood",
+        "fc": "#b8864e",
+        "rc": "#3e2005",
+        "tc": "#fdf5e6",
+        "dc": "#2d1505",
         "balcony": True,
         "rooms": [
             {"n": "Гостиная", "a": 36, "fl": 1, "tag": "l", "x": -2, "z": 1, "w": 7, "d": 5},
@@ -99,9 +121,16 @@ BUILDING_TEMPLATES = {
     },
     "modern": {
         "label": "Таунхаус",
-        "floors": 3, "W": 8, "L": 16, "fH": 3.0,
-        "roof": "flat", "mat": "plaster",
-        "fc": "#f0f0ee", "rc": "#1a1a1a", "tc": "#111", "dc": "#050505",
+        "floors": 3,
+        "W": 8,
+        "L": 16,
+        "fH": 3.0,
+        "roof": "flat",
+        "mat": "plaster",
+        "fc": "#f0f0ee",
+        "rc": "#1a1a1a",
+        "tc": "#111",
+        "dc": "#050505",
         "balcony": True,
         "rooms": [
             {"n": "Гостиная+кухня", "a": 45, "fl": 1, "tag": "l", "x": 0, "z": 2, "w": 7, "d": 6},
@@ -121,14 +150,24 @@ MATERIAL_COLORS = {
 }
 
 INTERIOR_KEYWORDS = [
-    "спальн", "детск", "кухн", "гостин", "ванн", "кабинет",
-    "салон", "столов", "интерьер", "дизайн интерьера", "комнат",
+    "спальн",
+    "детск",
+    "кухн",
+    "гостин",
+    "ванн",
+    "кабинет",
+    "салон",
+    "столов",
+    "интерьер",
+    "дизайн интерьера",
+    "комнат",
 ]
 
 
 # ═══════════════════════════════════════════════════════════════
 # CORE ROUTER
 # ═══════════════════════════════════════════════════════════════
+
 
 def route_generation(prompt: str, llm_params: dict | None = None) -> GenerationPlan:
     """
@@ -198,6 +237,7 @@ def _build_building_params(prompt: str, params: dict) -> dict:
         tpl_key = "house"
 
     import copy
+
     b = copy.deepcopy(BUILDING_TEMPLATES[tpl_key])
 
     # Override from parsed params
@@ -245,14 +285,10 @@ def _plan_building_steps(params: dict, building_params: dict) -> list:
     ]
 
     # Optional IFC export
-    steps.append(
-        GenerationStep(name="export_ifc", service="ifc", params=building_params)
-    )
+    steps.append(GenerationStep(name="export_ifc", service="ifc", params=building_params))
 
     # Optional floorplan
-    steps.append(
-        GenerationStep(name="generate_floorplan", service="geometry", params=building_params)
-    )
+    steps.append(GenerationStep(name="generate_floorplan", service="geometry", params=building_params))
 
     return steps
 

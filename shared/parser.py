@@ -13,7 +13,6 @@ import logging
 import os
 import re
 import time
-from typing import Optional
 
 import httpx
 from pydantic import BaseModel, Field, field_validator
@@ -25,11 +24,17 @@ logger = logging.getLogger("archai.parser")
 # PYDANTIC VALIDATION — strict schema for LLM responses
 # ═══════════════════════════════════════════════════════════════
 
+
 class LLMParsedResponse(BaseModel):
     """Validated schema for LLM parser output."""
+
     object_type: str = Field("building", pattern="^(building|interior|room)$")
-    building_type: str = Field("house", pattern="^(house|office|cottage|villa|apartment|townhouse|hotel|warehouse|school)$")
-    room_type: Optional[str] = Field(None, pattern="^(bedroom|kitchen|living|bathroom|children|study|dining|hall|laundry)$")
+    building_type: str = Field(
+        "house", pattern="^(house|office|cottage|villa|apartment|townhouse|hotel|warehouse|school)$"
+    )
+    room_type: str | None = Field(
+        None, pattern="^(bedroom|kitchen|living|bathroom|children|study|dining|hall|laundry)$"
+    )
     floors: int = Field(2, ge=1, le=20)
     width_m: int = Field(10, ge=1, le=200)
     length_m: int = Field(12, ge=1, le=200)
@@ -44,17 +49,45 @@ class LLMParsedResponse(BaseModel):
     @field_validator("style")
     @classmethod
     def validate_style(cls, v):
-        valid = {"modern", "classic", "loft", "scandinavian", "minimalist", "hitech",
-                 "art_deco", "baroque", "brutalism", "japandi", "biophilic",
-                 "industrial", "colonial", "mediterranean", "provence"}
+        valid = {
+            "modern",
+            "classic",
+            "loft",
+            "scandinavian",
+            "minimalist",
+            "hitech",
+            "art_deco",
+            "baroque",
+            "brutalism",
+            "japandi",
+            "biophilic",
+            "industrial",
+            "colonial",
+            "mediterranean",
+            "provence",
+        }
         return v if v in valid else "modern"
 
     @field_validator("material")
     @classmethod
     def validate_material(cls, v):
-        valid = {"brick", "wood", "glass", "stone", "concrete", "plaster",
-                 "marble", "granite", "ceramic", "metal", "composite",
-                 "aerated_concrete", "foam_block", "sip_panel", "timber_frame"}
+        valid = {
+            "brick",
+            "wood",
+            "glass",
+            "stone",
+            "concrete",
+            "plaster",
+            "marble",
+            "granite",
+            "ceramic",
+            "metal",
+            "composite",
+            "aerated_concrete",
+            "foam_block",
+            "sip_panel",
+            "timber_frame",
+        }
         return v if v in valid else "plaster"
 
     @field_validator("roof_type")
@@ -72,10 +105,26 @@ class LLMParsedResponse(BaseModel):
     @field_validator("furniture")
     @classmethod
     def validate_furniture(cls, v):
-        valid = {"sofa", "table", "bed", "chandelier", "wardrobe", "bookshelf",
-                 "sink", "stove", "bathtub", "chair", "desk", "nightstand",
-                 "bench", "washing_machine", "shelf", "chairs"}
+        valid = {
+            "sofa",
+            "table",
+            "bed",
+            "chandelier",
+            "wardrobe",
+            "bookshelf",
+            "sink",
+            "stove",
+            "bathtub",
+            "chair",
+            "desk",
+            "nightstand",
+            "bench",
+            "washing_machine",
+            "shelf",
+            "chairs",
+        }
         return [f for f in v if f in valid]
+
 
 OPENROUTER_BASE = os.environ.get("OPENROUTER_BASE", "https://openrouter.ai/api/v1")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
@@ -108,7 +157,7 @@ def _key(text: str) -> str:
     return hashlib.sha256(text.strip().lower().encode()).hexdigest()[:16]
 
 
-def _l1_get(text: str) -> Optional[dict]:
+def _l1_get(text: str) -> dict | None:
     k = _key(text)
     if k in _l1:
         ts, val = _l1[k]
@@ -138,6 +187,7 @@ def _get_redis():
         return _redis
     try:
         import redis
+
         _redis = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=2)
         _redis.ping()
         return _redis
@@ -146,7 +196,7 @@ def _get_redis():
         return None
 
 
-def _l2_get(text: str) -> Optional[dict]:
+def _l2_get(text: str) -> dict | None:
     r = _get_redis()
     if r is None:
         return None
@@ -171,11 +221,12 @@ def _l2_set(text: str, val: dict) -> None:
 # JSON EXTRACTION
 # ═══════════════════════════════════════════════════════════════
 
-def _extract_json(text: str) -> Optional[dict]:
-    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
-    text = re.sub(r'<reasoning>.*?</reasoning>', '', text, flags=re.DOTALL)
 
-    md = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+def _extract_json(text: str) -> dict | None:
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    text = re.sub(r"<reasoning>.*?</reasoning>", "", text, flags=re.DOTALL)
+
+    md = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if md:
         try:
             return json.loads(md.group(1))
@@ -184,15 +235,15 @@ def _extract_json(text: str) -> Optional[dict]:
 
     depth, start = 0, -1
     for i, ch in enumerate(text):
-        if ch == '{':
+        if ch == "{":
             if depth == 0:
                 start = i
             depth += 1
-        elif ch == '}':
+        elif ch == "}":
             depth -= 1
             if depth == 0 and start >= 0:
                 try:
-                    return json.loads(text[start:i + 1])
+                    return json.loads(text[start : i + 1])
                 except json.JSONDecodeError:
                     start = -1
 
@@ -244,21 +295,58 @@ _VALID = {
     "object_type": {"building", "interior", "room"},
     "building_type": {"house", "office", "cottage", "villa", "apartment", "townhouse", "hotel", "warehouse", "school"},
     "room_type": {"bedroom", "kitchen", "living", "bathroom", "children", "study", "dining", "hall", "laundry"},
-    "style": {"modern", "classic", "loft", "scandinavian", "minimalist", "hitech",
-              "art_deco", "baroque", "brutalism", "japandi", "biophilic",
-              "industrial", "colonial", "mediterranean", "provence"},
-    "material": {"brick", "wood", "glass", "stone", "concrete", "plaster",
-                 "marble", "granite", "ceramic", "metal", "composite",
-                 "aerated_concrete", "foam_block", "sip_panel", "timber_frame"},
+    "style": {
+        "modern",
+        "classic",
+        "loft",
+        "scandinavian",
+        "minimalist",
+        "hitech",
+        "art_deco",
+        "baroque",
+        "brutalism",
+        "japandi",
+        "biophilic",
+        "industrial",
+        "colonial",
+        "mediterranean",
+        "provence",
+    },
+    "material": {
+        "brick",
+        "wood",
+        "glass",
+        "stone",
+        "concrete",
+        "plaster",
+        "marble",
+        "granite",
+        "ceramic",
+        "metal",
+        "composite",
+        "aerated_concrete",
+        "foam_block",
+        "sip_panel",
+        "timber_frame",
+    },
     "roof_type": {"gabled", "flat", "hip", "mansard", "shed", "dome"},
     "features": {"balcony", "terrace", "garage", "pool", "garden", "basement", "attic", "chimney", "bay_window"},
 }
 
 _DEFAULTS = {
-    "object_type": "building", "building_type": "house", "room_type": None,
-    "floors": 2, "width_m": 10, "length_m": 12, "height_m": 3,
-    "style": "modern", "material": "plaster", "roof_type": "gabled",
-    "features": [], "furniture": [], "confidence": 0.5,
+    "object_type": "building",
+    "building_type": "house",
+    "room_type": None,
+    "floors": 2,
+    "width_m": 10,
+    "length_m": 12,
+    "height_m": 3,
+    "style": "modern",
+    "material": "plaster",
+    "roof_type": "gabled",
+    "features": [],
+    "furniture": [],
+    "confidence": 0.5,
 }
 
 _FURNITURE = {
@@ -287,14 +375,20 @@ def _validate(raw: dict) -> dict:
             if field == "features":
                 result["features"] = [f for f in (val or []) if f in valid] if isinstance(val, list) else []
             elif field == "room_type":
-                result["room_type"] = val if val and val in valid else ("living" if raw.get("object_type") == "room" else None)
+                result["room_type"] = (
+                    val if val and val in valid else ("living" if raw.get("object_type") == "room" else None)
+                )
             else:
                 result[field] = val if val in valid else _DEFAULTS[field]
         floors = raw.get("floors", 2)
         result["floors"] = floors if isinstance(floors, int) and 1 <= floors <= 20 else 2
         for key in ("width_m", "length_m", "height_m"):
             val = raw.get(key, _DEFAULTS[key])
-            result[key] = (int if key != "height_m" else float)(val) if isinstance(val, (int, float)) and 1 <= val <= 200 else _DEFAULTS[key]
+            result[key] = (
+                (int if key != "height_m" else float)(val)
+                if isinstance(val, (int, float)) and 1 <= val <= 200
+                else _DEFAULTS[key]
+            )
         conf = raw.get("confidence", 0.5)
         result["confidence"] = max(0.0, min(1.0, conf)) if isinstance(conf, (int, float)) else 0.5
 
@@ -308,17 +402,21 @@ def _validate(raw: dict) -> dict:
 # LLM CALLS
 # ═══════════════════════════════════════════════════════════════
 
-def _call_llm(text: str, cfg: dict) -> Optional[dict]:
+
+def _call_llm(text: str, cfg: dict) -> dict | None:
     if not OPENROUTER_API_KEY:
         return None
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {OPENROUTER_API_KEY}"}
     payload = {
         "model": cfg["model"],
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": text}],
-        "max_tokens": 500, "temperature": 0.1,
+        "max_tokens": 500,
+        "temperature": 0.1,
     }
     try:
-        r = httpx.post(f"{OPENROUTER_BASE}/chat/completions", headers=headers, json=payload, timeout=cfg.get("timeout", 15))
+        r = httpx.post(
+            f"{OPENROUTER_BASE}/chat/completions", headers=headers, json=payload, timeout=cfg.get("timeout", 15)
+        )
         if r.status_code == 200:
             content = r.json()["choices"][0]["message"]["content"]
             parsed = _extract_json(content)
@@ -337,18 +435,21 @@ def _call_llm(text: str, cfg: dict) -> Optional[dict]:
     return None
 
 
-async def _call_llm_async(text: str, cfg: dict) -> Optional[dict]:
+async def _call_llm_async(text: str, cfg: dict) -> dict | None:
     if not OPENROUTER_API_KEY:
         return None
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {OPENROUTER_API_KEY}"}
     payload = {
         "model": cfg["model"],
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": text}],
-        "max_tokens": 500, "temperature": 0.1,
+        "max_tokens": 500,
+        "temperature": 0.1,
     }
     try:
         async with httpx.AsyncClient() as client:
-            r = await client.post(f"{OPENROUTER_BASE}/chat/completions", headers=headers, json=payload, timeout=cfg.get("timeout", 15))
+            r = await client.post(
+                f"{OPENROUTER_BASE}/chat/completions", headers=headers, json=payload, timeout=cfg.get("timeout", 15)
+            )
         if r.status_code == 200:
             content = r.json()["choices"][0]["message"]["content"]
             parsed = _extract_json(content)
@@ -363,6 +464,7 @@ async def _call_llm_async(text: str, cfg: dict) -> Optional[dict]:
 # ═══════════════════════════════════════════════════════════════
 # MAIN — LLM-ONLY, NO REGEX
 # ═══════════════════════════════════════════════════════════════
+
 
 class AllModelsFailedError(Exception):
     pass
@@ -386,8 +488,7 @@ def parse_prompt(text: str) -> dict:
             _l2_set(text, val)
             return val
     raise AllModelsFailedError(
-        "Все 7 LLM-моделей недоступны и кеш парсинга пуст. "
-        "Проверьте OPENROUTER_API_KEY и доступность openrouter.ai"
+        "Все 7 LLM-моделей недоступны и кеш парсинга пуст. Проверьте OPENROUTER_API_KEY и доступность openrouter.ai"
     )
 
 
@@ -432,8 +533,11 @@ def get_cache_stats() -> dict:
         except Exception:
             pass
     return {
-        "l1_entries": len(_l1), "l1_max": _L1_MAX, "l1_ttl": _L1_TTL,
-        "l2_redis_entries": redis_keys, "l2_ttl": 86400,
+        "l1_entries": len(_l1),
+        "l1_max": _L1_MAX,
+        "l1_ttl": _L1_TTL,
+        "l2_redis_entries": redis_keys,
+        "l2_ttl": 86400,
         "llm_cascade": [m["model"] for m in LLM_CASCADE],
         "redis_connected": r is not None,
     }

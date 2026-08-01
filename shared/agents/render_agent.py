@@ -7,9 +7,10 @@ shared/agents/render_agent.py — Агент рендеринга.
 
 import os
 import time
-import httpx
-from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
+import httpx
+
+from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
 # Пресеты качества рендера
 QUALITY_PRESETS = {
@@ -97,14 +98,14 @@ bpy.context.scene.render.filepath = r'{output_path}'
 bpy.context.scene.cycles.samples = {samples}
 bpy.context.scene.cycles.use_denoising = {denoise}
 bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
-bpy.context.scene.cycles.use_adaptive_sampling = {preset.get('use_adaptive_sampling', True)}
-bpy.context.scene.cycles.adaptive_threshold = {preset.get('adaptive_threshold', 0.01)}
-bpy.context.scene.cycles.tile_x = {preset.get('tile_size', 64)}
-bpy.context.scene.cycles.tile_y = {preset.get('tile_size', 64)}
-bpy.context.scene.cycles.max_bounces = {preset.get('max_bounces', 8)}
-bpy.context.scene.cycles.diffuse_bounces = {preset.get('diffuse_bounces', 4)}
-bpy.context.scene.cycles.glossy_bounces = {preset.get('glossy_bounces', 4)}
-bpy.context.scene.cycles.transmission_bounces = {preset.get('transmission_bounces', 8)}
+bpy.context.scene.cycles.use_adaptive_sampling = {preset.get("use_adaptive_sampling", True)}
+bpy.context.scene.cycles.adaptive_threshold = {preset.get("adaptive_threshold", 0.01)}
+bpy.context.scene.cycles.tile_x = {preset.get("tile_size", 64)}
+bpy.context.scene.cycles.tile_y = {preset.get("tile_size", 64)}
+bpy.context.scene.cycles.max_bounces = {preset.get("max_bounces", 8)}
+bpy.context.scene.cycles.diffuse_bounces = {preset.get("diffuse_bounces", 4)}
+bpy.context.scene.cycles.glossy_bounces = {preset.get("glossy_bounces", 4)}
+bpy.context.scene.cycles.transmission_bounces = {preset.get("transmission_bounces", 8)}
 bpy.context.scene.cycles.transparent_max_bounces = 8
 """
         if preset.get("use_motion_blur"):
@@ -123,7 +124,7 @@ try:
 except:
     pass
 try:
-    bpy.context.scene.eevee.use_bloom = {preset.get('use_bloom', True)}
+    bpy.context.scene.eevee.use_bloom = {preset.get("use_bloom", True)}
 except:
     pass
 try:
@@ -138,14 +139,14 @@ except:
         script += f"""
 # Camera setup
 cam = bpy.data.cameras.new("RenderCam")
-cam.lens = {camera_params.get('focal_length', 35)}
+cam.lens = {camera_params.get("focal_length", 35)}
 cam.clip_start = 0.1
 cam.clip_end = 1000
 cam_obj = bpy.data.objects.new("RenderCam", cam)
 bpy.context.scene.collection.objects.link(cam_obj)
 bpy.context.scene.camera = cam_obj
-cam_obj.location = ({camera_params.get('x', 0)}, {camera_params.get('y', -20)}, {camera_params.get('z', 15)})
-cam_obj.rotation_euler = ({camera_params.get('rx', 1.1)}, {camera_params.get('ry', 0)}, {camera_params.get('rz', 0)})
+cam_obj.location = ({camera_params.get("x", 0)}, {camera_params.get("y", -20)}, {camera_params.get("z", 15)})
+cam_obj.rotation_euler = ({camera_params.get("rx", 1.1)}, {camera_params.get("ry", 0)}, {camera_params.get("rz", 0)})
 """
 
     # Lighting
@@ -222,6 +223,7 @@ class RenderAgent(BaseAgent):
 
             if not output_path:
                 import uuid
+
                 job_id = uuid.uuid4().hex[:8]
                 output_dir = task.params.get("output_dir", "/app/output")
                 output_path = os.path.join(output_dir, f"{job_id}_render.png")
@@ -273,7 +275,6 @@ class RenderAgent(BaseAgent):
 
     def _run_local(self, script: str, output_path: str) -> dict:
         """Локальный запуск Blender."""
-        from shared.blender import run_blender
         import subprocess
 
         job_id = os.path.basename(output_path).split("_")[0]
@@ -291,7 +292,9 @@ class RenderAgent(BaseAgent):
         try:
             result = subprocess.run(
                 ["blender", "--background", "--factory-startup", "--log-level", "0", "--python", script_path],
-                capture_output=True, text=True, timeout=600,
+                capture_output=True,
+                text=True,
+                timeout=600,
             )
             if result.returncode != 0:
                 raise RuntimeError(f"Blender render failed: {result.stderr[-500:]}")

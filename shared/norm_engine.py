@@ -19,19 +19,18 @@ shared/norm_engine.py — Движок проверки строительных
 
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 logger = logging.getLogger(__name__)
 
 
-class Severity(str, Enum):
-    CRITICAL = "critical"      # Нарушение обязательных норм
-    WARNING = "warning"        # Рекомендация
-    INFO = "info"              # Информационное замечание
+class Severity(StrEnum):
+    CRITICAL = "critical"  # Нарушение обязательных норм
+    WARNING = "warning"  # Рекомендация
+    INFO = "info"  # Информационное замечание
 
 
-class NormCode(str, Enum):
+class NormCode(StrEnum):
     SP_EVACUATION = "СП 1.13130"
     SP_RESIDENTIAL = "СП 54.13330"
     GOST_DRAWINGS = "ГОСТ 21.501"
@@ -47,6 +46,7 @@ class NormCode(str, Enum):
 @dataclass
 class NormViolation:
     """Одно нарушение/замечание."""
+
     code: NormCode
     section: str
     severity: Severity
@@ -60,6 +60,7 @@ class NormViolation:
 @dataclass
 class NormReport:
     """Отчёт проверки норм."""
+
     passed: bool = True
     violations: list[NormViolation] = field(default_factory=list)
     warnings: list[NormViolation] = field(default_factory=list)
@@ -134,18 +135,18 @@ class NormEngine:
 
     # Лестницы
     MIN_STAIR_WIDTH = 0.9
-    MAX_STAIR_RISE = 0.20       # м
-    MIN_STAIR_TREAD = 0.26      # м
-    MAX_STAIR_FLIGHT = 18       # ступеней без площадки
+    MAX_STAIR_RISE = 0.20  # м
+    MIN_STAIR_TREAD = 0.26  # м
+    MAX_STAIR_FLIGHT = 18  # ступеней без площадки
 
     # Эвакуация
     MAX_EVAC_DISTANCE_SINGLE = 25  # м (одной лестницей)
-    MAX_EVAC_DISTANCE_MULTI = 40   # м (две лестницы)
+    MAX_EVAC_DISTANCE_MULTI = 40  # м (две лестницы)
     MIN_EXIT_WIDTH = 0.9
 
     # Этажность
     MAX_FLOORS_NO_ELEVATOR = 5
-    MAX_FLOORS_RESIDENTIAL = 9     # без спец. мер
+    MAX_FLOORS_RESIDENTIAL = 9  # без спец. мер
 
     def check_building(self, params: dict) -> NormReport:
         """
@@ -223,56 +224,65 @@ class NormEngine:
         area = width * length
 
         if room_type == "kitchen" and area < self.MIN_KITCHEN_AREA:
-            report.add_violation(NormViolation(
-                code=NormCode.SP_RESIDENTIAL,
-                section="8.2",
-                severity=Severity.WARNING,
-                message=f"Площадь кухни {area:.1f} м² < минимума {self.MIN_KITCHEN_AREA} м²",
-                recommendation="Увеличьте площадь кухни до 8 м²",
-                parameter="kitchen_area",
-                actual_value=f"{area:.1f}",
-                required_value=f">= {self.MIN_KITCHEN_AREA}",
-            ))
+            report.add_violation(
+                NormViolation(
+                    code=NormCode.SP_RESIDENTIAL,
+                    section="8.2",
+                    severity=Severity.WARNING,
+                    message=f"Площадь кухни {area:.1f} м² < минимума {self.MIN_KITCHEN_AREA} м²",
+                    recommendation="Увеличьте площадь кухни до 8 м²",
+                    parameter="kitchen_area",
+                    actual_value=f"{area:.1f}",
+                    required_value=f">= {self.MIN_KITCHEN_AREA}",
+                )
+            )
 
         if room_type == "bedroom" and area < self.MIN_BEDROOM_AREA:
-            report.add_violation(NormViolation(
-                code=NormCode.SP_RESIDENTIAL,
-                section="8.3",
-                severity=Severity.WARNING,
-                message=f"Площадь спальни {area:.1f} м² < минимума {self.MIN_BEDROOM_AREA} м²",
-                recommendation="Увеличьте площадь спальни",
-                parameter="bedroom_area",
-                actual_value=f"{area:.1f}",
-                required_value=f">= {self.MIN_BEDROOM_AREA}",
-            ))
+            report.add_violation(
+                NormViolation(
+                    code=NormCode.SP_RESIDENTIAL,
+                    section="8.3",
+                    severity=Severity.WARNING,
+                    message=f"Площадь спальни {area:.1f} м² < минимума {self.MIN_BEDROOM_AREA} м²",
+                    recommendation="Увеличьте площадь спальни",
+                    parameter="bedroom_area",
+                    actual_value=f"{area:.1f}",
+                    required_value=f">= {self.MIN_BEDROOM_AREA}",
+                )
+            )
 
         if height < self.MIN_ROOM_HEIGHT:
-            report.add_violation(NormViolation(
-                code=NormCode.SP_RESIDENTIAL,
-                section="5.5",
-                severity=Severity.CRITICAL,
-                message=f"Высота {height} м < минимума {self.MIN_ROOM_HEIGHT} м",
-                recommendation="Увеличьте высоту потолков",
-                parameter="height",
-                actual_value=f"{height}",
-                required_value=f">= {self.MIN_ROOM_HEIGHT}",
-            ))
+            report.add_violation(
+                NormViolation(
+                    code=NormCode.SP_RESIDENTIAL,
+                    section="5.5",
+                    severity=Severity.CRITICAL,
+                    message=f"Высота {height} м < минимума {self.MIN_ROOM_HEIGHT} м",
+                    recommendation="Увеличьте высоту потолков",
+                    parameter="height",
+                    actual_value=f"{height}",
+                    required_value=f">= {self.MIN_ROOM_HEIGHT}",
+                )
+            )
 
         return report
 
-    def _check_residential(self, report: NormReport, params: dict,
-                           floors: int, width: float, length: float, height: float):
+    def _check_residential(
+        self, report: NormReport, params: dict, floors: int, width: float, length: float, height: float
+    ):
         area = width * length
         if area < 20:
-            report.add_violation(NormViolation(
-                code=NormCode.SP_RESIDENTIAL, section="5.2",
-                severity=Severity.WARNING,
-                message=f"Площадь здания {area:.0f} м² мала для жилого дома",
-                recommendation="Рассмотрите увеличение площади",
-            ))
+            report.add_violation(
+                NormViolation(
+                    code=NormCode.SP_RESIDENTIAL,
+                    section="5.2",
+                    severity=Severity.WARNING,
+                    message=f"Площадь здания {area:.0f} м² мала для жилого дома",
+                    recommendation="Рассмотрите увеличение площади",
+                )
+            )
 
-    def _check_evacuation(self, report: NormReport, params: dict,
-                          floors: int, width: float, length: float):
+    def _check_evacuation(self, report: NormReport, params: dict, floors: int, width: float, length: float):
         max_dim = max(width, length)
         if floors <= 2:
             max_dist = self.MAX_EVAC_DISTANCE_SINGLE
@@ -280,50 +290,62 @@ class NormEngine:
             max_dist = self.MAX_EVAC_DISTANCE_MULTI
 
         if max_dim > max_dist:
-            report.add_violation(NormViolation(
-                code=NormCode.SP_EVACUATION, section="6",
-                severity=Severity.CRITICAL,
-                message=f"Макс. расстояние эвакуации {max_dim:.0f} м > допустимого {max_dist} м",
-                recommendation="Добавьте второй эвакуационный выход",
-                parameter="evac_distance",
-                actual_value=f"{max_dim:.0f}",
-                required_value=f"<= {max_dist}",
-            ))
+            report.add_violation(
+                NormViolation(
+                    code=NormCode.SP_EVACUATION,
+                    section="6",
+                    severity=Severity.CRITICAL,
+                    message=f"Макс. расстояние эвакуации {max_dim:.0f} м > допустимого {max_dist} м",
+                    recommendation="Добавьте второй эвакуационный выход",
+                    parameter="evac_distance",
+                    actual_value=f"{max_dim:.0f}",
+                    required_value=f"<= {max_dist}",
+                )
+            )
 
     def _check_floors(self, report: NormReport, floors: int, has_elevator: bool):
         if floors > self.MAX_FLOORS_NO_ELEVATOR and not has_elevator:
-            report.add_violation(NormViolation(
-                code=NormCode.SP_RESIDENTIAL, section="5.4",
-                severity=Severity.CRITICAL,
-                message=f"Этажность {floors} > {self.MAX_FLOORS_NO_ELEVATOR} без лифта",
-                recommendation="Установите лифт или уменьшите этажность",
-                parameter="floors",
-                actual_value=str(floors),
-                required_value=f"<= {self.MAX_FLOORS_NO_ELEVATOR} без лифта",
-            ))
+            report.add_violation(
+                NormViolation(
+                    code=NormCode.SP_RESIDENTIAL,
+                    section="5.4",
+                    severity=Severity.CRITICAL,
+                    message=f"Этажность {floors} > {self.MAX_FLOORS_NO_ELEVATOR} без лифта",
+                    recommendation="Установите лифт или уменьшите этажность",
+                    parameter="floors",
+                    actual_value=str(floors),
+                    required_value=f"<= {self.MAX_FLOORS_NO_ELEVATOR} без лифта",
+                )
+            )
 
         if floors > self.MAX_FLOORS_RESIDENTIAL:
-            report.add_violation(NormViolation(
-                code=NormCode.SP_RESIDENTIAL, section="5.3",
-                severity=Severity.WARNING,
-                message=f"Этажность {floors} > типичного максимума {self.MAX_FLOORS_RESIDENTIAL}",
-                recommendation="Требуются спец. меры пожарной безопасности",
-            ))
+            report.add_violation(
+                NormViolation(
+                    code=NormCode.SP_RESIDENTIAL,
+                    section="5.3",
+                    severity=Severity.WARNING,
+                    message=f"Этажность {floors} > типичного максимума {self.MAX_FLOORS_RESIDENTIAL}",
+                    recommendation="Требуются спец. меры пожарной безопасности",
+                )
+            )
 
     def _check_height(self, report: NormReport, height: float, building_type: str):
         min_h = self.MIN_ROOM_HEIGHT
         if building_type == "commercial":
             min_h = 3.0
         if height < min_h:
-            report.add_violation(NormViolation(
-                code=NormCode.SP_RESIDENTIAL, section="5.5",
-                severity=Severity.CRITICAL,
-                message=f"Высота потолков {height} м < минимума {min_h} м",
-                recommendation=f"Увеличьте высоту до {min_h} м",
-                parameter="height",
-                actual_value=str(height),
-                required_value=f">= {min_h}",
-            ))
+            report.add_violation(
+                NormViolation(
+                    code=NormCode.SP_RESIDENTIAL,
+                    section="5.5",
+                    severity=Severity.CRITICAL,
+                    message=f"Высота потолков {height} м < минимума {min_h} м",
+                    recommendation=f"Увеличьте высоту до {min_h} м",
+                    parameter="height",
+                    actual_value=str(height),
+                    required_value=f">= {min_h}",
+                )
+            )
 
     def _check_rooms(self, report: NormReport, rooms: list[dict]):
         for room in rooms:
@@ -331,27 +353,33 @@ class NormEngine:
             area = room.get("width", 3) * room.get("length", 4)
 
             if rtype == "bathroom" and area < self.MIN_BATHROOM_AREA:
-                report.add_violation(NormViolation(
-                    code=NormCode.SP_RESIDENTIAL, section="8.5",
-                    severity=Severity.WARNING,
-                    message=f"Санузел {area:.1f} м² < минимума {self.MIN_BATHROOM_AREA} м²",
-                    parameter="bathroom_area",
-                    actual_value=f"{area:.1f}",
-                    required_value=f">= {self.MIN_BATHROOM_AREA}",
-                ))
+                report.add_violation(
+                    NormViolation(
+                        code=NormCode.SP_RESIDENTIAL,
+                        section="8.5",
+                        severity=Severity.WARNING,
+                        message=f"Санузел {area:.1f} м² < минимума {self.MIN_BATHROOM_AREA} м²",
+                        parameter="bathroom_area",
+                        actual_value=f"{area:.1f}",
+                        required_value=f">= {self.MIN_BATHROOM_AREA}",
+                    )
+                )
 
     def _check_stairs(self, report: NormReport, params: dict):
         stair_width = params.get("stair_width", 1.0)
         if stair_width < self.MIN_STAIR_WIDTH:
-            report.add_violation(NormViolation(
-                code=NormCode.SP_STAIRS, section="7",
-                severity=Severity.CRITICAL,
-                message=f"Ширина лестницы {stair_width} м < минимума {self.MIN_STAIR_WIDTH} м",
-                recommendation="Увеличьте ширину лестницы",
-                parameter="stair_width",
-                actual_value=str(stair_width),
-                required_value=f">= {self.MIN_STAIR_WIDTH}",
-            ))
+            report.add_violation(
+                NormViolation(
+                    code=NormCode.SP_STAIRS,
+                    section="7",
+                    severity=Severity.CRITICAL,
+                    message=f"Ширина лестницы {stair_width} м < минимума {self.MIN_STAIR_WIDTH} м",
+                    recommendation="Увеличьте ширину лестницы",
+                    parameter="stair_width",
+                    actual_value=str(stair_width),
+                    required_value=f">= {self.MIN_STAIR_WIDTH}",
+                )
+            )
 
     def _check_glazing(self, report: NormReport, params: dict, width: float, length: float):
         floor_area = width * length
@@ -359,25 +387,31 @@ class NormEngine:
         if window_area > 0:
             ratio = window_area / floor_area
             if ratio < self.MIN_WINDOW_AREA_RATIO:
-                report.add_violation(NormViolation(
-                    code=NormCode.SP_RESIDENTIAL, section="6.3",
-                    severity=Severity.WARNING,
-                    message=f"Остекление {ratio:.1%} < минимума {self.MIN_WINDOW_AREA_RATIO:.0%}",
-                    recommendation="Увеличьте площадь окон",
-                    parameter="glazing_ratio",
-                    actual_value=f"{ratio:.2%}",
-                    required_value=f">= {self.MIN_WINDOW_AREA_RATIO:.0%}",
-                ))
+                report.add_violation(
+                    NormViolation(
+                        code=NormCode.SP_RESIDENTIAL,
+                        section="6.3",
+                        severity=Severity.WARNING,
+                        message=f"Остекление {ratio:.1%} < минимума {self.MIN_WINDOW_AREA_RATIO:.0%}",
+                        recommendation="Увеличьте площадь окон",
+                        parameter="glazing_ratio",
+                        actual_value=f"{ratio:.2%}",
+                        required_value=f">= {self.MIN_WINDOW_AREA_RATIO:.0%}",
+                    )
+                )
 
     def _check_thermal(self, report: NormReport, params: dict):
         material = params.get("material", "")
         if material in ("glass", "стекло"):
-            report.add_violation(NormViolation(
-                code=NormCode.SP_THERMAL, section="5",
-                severity=Severity.WARNING,
-                message="Полностью стеклянный фасад требует расчёта теплозащиты",
-                recommendation="Добавьте теплоизоляцию или уменьшите остекление",
-            ))
+            report.add_violation(
+                NormViolation(
+                    code=NormCode.SP_THERMAL,
+                    section="5",
+                    severity=Severity.WARNING,
+                    message="Полностью стеклянный фасад требует расчёта теплозащиты",
+                    recommendation="Добавьте теплоизоляцию или уменьшите остекление",
+                )
+            )
 
     def get_norm_reference(self, code: NormCode) -> dict:
         """Получить справочную информацию по нормативному документу."""

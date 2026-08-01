@@ -15,13 +15,9 @@ shared/voice.py — Голосовой ввод через Whisper.
 
 import os
 import tempfile
-from typing import Optional
-
-from shared.config import settings
 
 
-def transcribe_audio(audio_bytes: bytes, language: str = "ru",
-                     api_key: str = "", model: str = "whisper-1") -> str:
+def transcribe_audio(audio_bytes: bytes, language: str = "ru", api_key: str = "", model: str = "whisper-1") -> str:
     """
     Транскрибирует аудио через OpenAI Whisper API.
 
@@ -120,7 +116,7 @@ def detect_language_hint(text: str) -> str:
     Определяет подсказку языка из текста промта.
     Используется для выбора языка Whisper.
     """
-    russian_chars = sum(1 for c in text if '\u0400' <= c <= '\u04ff')
+    russian_chars = sum(1 for c in text if "\u0400" <= c <= "\u04ff")
     if russian_chars > len(text) * 0.3:
         return "ru"
     return "en"

@@ -13,7 +13,6 @@ shared/upscaler.py — Апскейл изображений через Real-ESR
 """
 
 import os
-from typing import Optional
 
 
 def upscale_image(input_path: str, output_path: str, scale: int = 4) -> str:
@@ -44,11 +43,9 @@ def upscale_image(input_path: str, output_path: str, scale: int = 4) -> str:
 
 def _upscale_realesrgan(input_path: str, output_path: str, scale: int) -> str:
     """Апскейл через Real-ESRGAN."""
-    from realesrgan import RealESRGANer
-    from realesrgan.archs.srvgg_arch import SRVGGNetCompact
     import cv2
-    import numpy as np
     import torch
+    from realesrgan import RealESRGANer
 
     # Выбор модели в зависимости от scale
     if scale == 4:
@@ -125,8 +122,9 @@ def upscale_image_bytes(image_bytes: bytes, scale: int = 4, format: str = "PNG")
         Байты апскейленного изображения
     """
     try:
-        from PIL import Image
         import io
+
+        from PIL import Image
     except ImportError:
         raise ImportError("Pillow не установлен")
 

@@ -6,8 +6,8 @@ shared/agents/texture_agent.py — Агент генерации текстур 
 """
 
 import time
-from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
+from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
 # PBR-конфигурации материалов
 MATERIAL_CONFIGS = {
@@ -95,9 +95,9 @@ noise_{material_name}.inputs["Roughness"].default_value = 0.6
 ramp_{material_name} = nodes_{material_name}.new('ShaderNodeValToRGB')
 ramp_{material_name}.location = (-200, 0)
 ramp_{material_name}.color_ramp.elements[0].position = 0.4
-ramp_{material_name}.color_ramp.elements[0].color = ({r*0.9}, {g*0.9}, {b*0.9}, 1.0)
+ramp_{material_name}.color_ramp.elements[0].color = ({r * 0.9}, {g * 0.9}, {b * 0.9}, 1.0)
 ramp_{material_name}.color_ramp.elements[1].position = 0.6
-ramp_{material_name}.color_ramp.elements[1].color = ({min(1,r*1.1)}, {min(1,g*1.1)}, {min(1,b*1.1)}, 1.0)
+ramp_{material_name}.color_ramp.elements[1].color = ({min(1, r * 1.1)}, {min(1, g * 1.1)}, {min(1, b * 1.1)}, 1.0)
 
 # Bump map for surface detail
 bump_{material_name} = nodes_{material_name}.new('ShaderNodeBump')

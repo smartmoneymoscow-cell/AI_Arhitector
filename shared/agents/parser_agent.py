@@ -4,8 +4,9 @@ Regex fallback УДАЛЁН. При недоступности LLM → AllModels
 """
 
 import time
+
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
-from shared.parser import parse_prompt, AllModelsFailedError
+from shared.parser import AllModelsFailedError, parse_prompt
 
 
 class ParserAgent(BaseAgent):
@@ -23,6 +24,8 @@ class ParserAgent(BaseAgent):
                 duration_ms=(time.time() - start) * 1000,
             )
         except AllModelsFailedError as e:
-            return TaskResult(status=TaskStatus.FAILED, error=f"LLM unavailable: {e}", duration_ms=(time.time() - start) * 1000)
+            return TaskResult(
+                status=TaskStatus.FAILED, error=f"LLM unavailable: {e}", duration_ms=(time.time() - start) * 1000
+            )
         except Exception as e:
             return TaskResult(status=TaskStatus.FAILED, error=str(e), duration_ms=(time.time() - start) * 1000)
