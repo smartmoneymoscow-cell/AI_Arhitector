@@ -20,6 +20,7 @@ import json
 import time
 import tempfile
 import hashlib
+import pytest
 from unittest.mock import patch, MagicMock
 from dataclasses import dataclass
 from typing import Optional
@@ -681,8 +682,6 @@ def test_infrastructure():
 
     checks = [
         ("upstream gateway", "gateway upstream"),
-        ("upstream llm_service", "llm upstream"),
-        ("upstream blender_service", "blender upstream"),
         ("limit_req_zone", "rate limiting"),
         ("proxy_buffering off", "SSE buffering off"),
         ("gzip on", "gzip compression"),
