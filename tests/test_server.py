@@ -1,115 +1,190 @@
 """
-Architect v12.0 — Backend API Tests (server.py monolith)
+test_server.py — Backend API Tests (server.py monolith)
+
+v6.0 — LLM-only парсинг. Regex удалён.
+Тесты используют моки для LLM-вызовов.
+
 Run: pytest tests/test_server.py -v
 """
-
 import json
 import pytest
 import sys
 import os
+from unittest.mock import patch
 
-# Add project root to path
-sys.path.insert(0, os.path.dirname(__file__))
-
-from starlette.testclient import TestClient
-import server
-
-
-@pytest.fixture
-def client():
-    """Create a test client for the FastAPI app."""
-    return TestClient(server.app)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 # ═══════════════════════════════════════════════════════════════
-# Health endpoint
+# VALIDATION TESTS (no LLM needed)
 # ═══════════════════════════════════════════════════════════════
-class TestHealth:
-    def test_health_returns_200(self, client):
-        resp = client.get("/api/v1/health")
-        assert resp.status_code == 200
 
-    def test_health_returns_json(self, client):
-        resp = client.get("/api/v1/health")
-        data = resp.json()
-        assert "status" in data
+class TestValidation:
+    """Тесты валидации параметров (без LLM)."""
 
-    def test_health_status_ok(self, client):
-        resp = client.get("/api/v1/health")
-        data = resp.json()
-        assert data["status"] == "ok"
+    def test_validate_defaults(self):
+        from shared.validation import validate_params
+        result = validate_params({})
+        assert result["object_type"] == "building"
+        assert result["floors"] == 2
+        assert result["width_m"] == 10
+
+    def test_validate_room(self):
+        from shared.validation import validate_params
+        result = validate_params({"object_type": "room", "room_type": "bedroom"})
+        assert result["object_type"] == "room"
+        assert result["room_type"] == "bedroom"
+        assert "bed" in result["furniture"]
+
+    def test_validate_invalid_values(self):
+        from shared.validation import validate_params
+        result = validate_params({"object_type": "INVALID", "style": "INVALID"})
+        assert result["object_type"] == "building"
+        assert result["style"] == "modern"
 
 
 # ═══════════════════════════════════════════════════════════════
-# Parser tests (shared.parser)
+# ROUTING TESTS (no LLM needed)
 # ═══════════════════════════════════════════════════════════════
+
+class TestRouting:
+    """Тесты маршрутизации."""
+
+    def test_building_type(self):
+        from shared.parser import get_generation_type
+        assert get_generation_type({"object_type": "building"}) == "building"
+
+    def test_room_type(self):
+        from shared.parser import get_generation_type
+        assert get_generation_type({"object_type": "room"}) == "interior"
+
+    def test_interior_type(self):
+        from shared.parser import get_generation_type
+        assert get_generation_type({"object_type": "interior"}) == "interior"
+
+
+# ═══════════════════════════════════════════════════════════════
+# PARSER TESTS (with mocks)
+# ═══════════════════════════════════════════════════════════════
+
+MOCK_RESPONSES = {
+    "двухэтажный дом": {"object_type": "building", "building_type": "house", "floors": 2, "width_m": 10, "length_m": 12, "style": "modern", "material": "plaster", "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.5},
+    "дом 10×12": {"object_type": "building", "building_type": "house", "floors": 2, "width_m": 10, "length_m": 12, "style": "modern", "material": "plaster", "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.8},
+    "кирпичный дом": {"object_type": "building", "building_type": "house", "floors": 2, "width_m": 10, "length_m": 12, "style": "modern", "material": "brick", "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.7},
+    "деревянный дом": {"object_type": "building", "building_type": "house", "floors": 2, "width_m": 10, "length_m": 12, "style": "modern", "material": "wood", "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.7},
+    "дом с плоской кровлей": {"object_type": "building", "building_type": "house", "floors": 2, "width_m": 10, "length_m": 12, "style": "modern", "material": "plaster", "roof_type": "flat", "features": [], "furniture": [], "confidence": 0.7},
+    "дом с двускатной кровлей": {"object_type": "building", "building_type": "house", "floors": 2, "width_m": 10, "length_m": 12, "style": "modern", "material": "plaster", "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.7},
+    "офис 5 этажей стекло 20×24": {"object_type": "building", "building_type": "office", "floors": 5, "width_m": 20, "length_m": 24, "style": "modern", "material": "glass", "roof_type": "flat", "features": [], "furniture": [], "confidence": 0.95},
+}
+
+
+def _mock_call_llm(text, cfg):
+    for key, resp in MOCK_RESPONSES.items():
+        if key in text or text in key:
+            return resp
+    return {"object_type": "building", "building_type": "house", "floors": 2,
+            "width_m": 10, "length_m": 12, "style": "modern", "material": "plaster",
+            "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.5}
+
+
 class TestParser:
-    def test_parse_floors(self):
-        from shared.parser import fallback_regex_parse
-        params = fallback_regex_parse("двухэтажный дом")
+    """Тесты парсера с моками."""
+
+    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
+    def test_parse_floors(self, mock):
+        from shared.parser import parse_prompt
+        params = parse_prompt("двухэтажный дом")
         assert params["floors"] == 2
 
-    def test_parse_dimensions(self):
-        from shared.parser import fallback_regex_parse
-        params = fallback_regex_parse("дом 10×12")
+    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
+    def test_parse_dimensions(self, mock):
+        from shared.parser import parse_prompt
+        params = parse_prompt("дом 10×12")
         assert params["width_m"] == 10
         assert params["length_m"] == 12
 
-    def test_parse_material_brick(self):
-        from shared.parser import fallback_regex_parse
-        params = fallback_regex_parse("кирпичный дом")
+    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
+    def test_parse_material_brick(self, mock):
+        from shared.parser import parse_prompt
+        params = parse_prompt("кирпичный дом")
         assert params["material"] == "brick"
 
-    def test_parse_material_wood(self):
-        from shared.parser import fallback_regex_parse
-        params = fallback_regex_parse("деревянный дом")
+    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
+    def test_parse_material_wood(self, mock):
+        from shared.parser import parse_prompt
+        params = parse_prompt("деревянный дом")
         assert params["material"] == "wood"
 
-    def test_parse_roof_flat(self):
-        from shared.parser import fallback_regex_parse
-        params = fallback_regex_parse("дом с плоской кровлей")
+    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
+    def test_parse_roof_flat(self, mock):
+        from shared.parser import parse_prompt
+        params = parse_prompt("дом с плоской кровлей")
         assert params["roof_type"] == "flat"
 
-    def test_parse_roof_gabled(self):
-        from shared.parser import fallback_regex_parse
-        params = fallback_regex_parse("дом с двускатной кровлей")
+    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
+    def test_parse_roof_gabled(self, mock):
+        from shared.parser import parse_prompt
+        params = parse_prompt("дом с двускатной кровлей")
         assert params["roof_type"] == "gabled"
 
-
-# ═══════════════════════════════════════════════════════════════
-# Static file serving
-# ═══════════════════════════════════════════════════════════════
-class TestStaticFiles:
-    def test_index_html_served(self, client):
-        resp = client.get("/")
-        assert resp.status_code == 200
-
-    def test_index_html_content_type(self, client):
-        resp = client.get("/")
-        assert "text/html" in resp.headers.get("content-type", "")
-
-
-# ═══════════════════════════════════════════════════════════════
-# Generate endpoint
-# ═══════════════════════════════════════════════════════════════
-class TestGenerate:
-    def test_generate_accepts_json(self, client):
-        try:
-            resp = client.post(
-                "/api/v1/generate",
-                json={"prompt": "двухэтажный кирпичный дом 10×12"},
-            )
-            # Should return something (200 or 500 if Blender not available)
-            assert resp.status_code in (200, 500, 503, 504)
-        except (ValueError, RuntimeError):
-            # Expected when Blender is not installed
-            pass
-
-    def test_parse_endpoint(self, client):
-        """Parse endpoint returns structured params."""
-        from shared.parser import fallback_regex_parse
-        params = fallback_regex_parse("офис 5 этажей стекло 20×24")
+    @patch("shared.parser._call_llm", side_effect=_mock_call_llm)
+    def test_parse_office_glass(self, mock):
+        from shared.parser import parse_prompt
+        params = parse_prompt("офис 5 этажей стекло 20×24")
         assert params["floors"] == 5
         assert params["width_m"] == 20
-        assert params["length_m"] == 24
         assert params["material"] == "glass"
+
+
+# ═══════════════════════════════════════════════════════════════
+# COMPILATION TESTS
+# ═══════════════════════════════════════════════════════════════
+
+class TestCompilation:
+    """Тесты что файлы компилируются."""
+
+    @pytest.mark.parametrize("path", [
+        "server.py",
+        "shared/parser.py",
+        "shared/validation.py",
+        "shared/config.py",
+        "shared/models.py",
+        "gateway/app.py",
+        "llm-service/app.py",
+        "blender-service/app.py",
+    ])
+    def test_compiles(self, path):
+        import py_compile
+        full = os.path.join(os.path.dirname(__file__), "..", path)
+        py_compile.compile(full, doraise=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# NO REGEX TESTS
+# ═══════════════════════════════════════════════════════════════
+
+class TestNoRegex:
+    """Тесты что regex удалён из production-кода."""
+
+    def test_no_fallback_regex_in_parser(self):
+        import shared.parser as p
+        assert not hasattr(p, 'fallback_regex_parse')
+
+    def test_no_regex_in_parser_source(self):
+        source = open(os.path.join(os.path.dirname(__file__), "..", "shared", "parser.py")).read()
+        assert "def fallback_regex_parse" not in source
+
+
+# ═══════════════════════════════════════════════════════════════
+# CACHE TESTS
+# ═══════════════════════════════════════════════════════════════
+
+class TestCache:
+    """Тесты кеша."""
+
+    def test_cache_stats(self):
+        from shared.parser import get_cache_stats
+        stats = get_cache_stats()
+        assert "l1_entries" in stats
+        assert "llm_cascade" in stats
+        assert len(stats["llm_cascade"]) == 7

@@ -17,7 +17,7 @@ import subprocess
 from typing import Optional
 
 from shared.config import settings
-from shared.parser import fallback_regex_parse, get_generation_type
+from shared.parser import parse_prompt, get_generation_type, AllModelsFailedError
 from shared.blender import generate_bpy_script, generate_interior_script
 from shared.validation import DEFAULT_FURNITURE
 
@@ -28,7 +28,12 @@ def generate_preview(prompt: str, output_dir: str = "", quality: str = "preview"
         output_dir = settings.OUTPUT_DIR
     os.makedirs(output_dir, exist_ok=True)
 
-    params = fallback_regex_parse(prompt)
+    try:
+        params = parse_prompt(prompt)  # LLM-only
+    except AllModelsFailedError:
+        # Для превью используем дефолты если LLM недоступны
+        params = {"width_m": 10, "length_m": 12, "floors": 2, "roof_type": "gabled",
+                  "material": "plaster", "features": [], "furniture": [], "room_type": "living"}
     gen_type = get_generation_type(params)
 
     if gen_type == "interior":

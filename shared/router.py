@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from shared.parser import fallback_regex_parse, get_generation_type
+from shared.parser import parse_prompt, get_generation_type, AllModelsFailedError
 from shared.validation import validate_params, DEFAULT_FURNITURE
 
 
@@ -147,7 +147,7 @@ def route_generation(prompt: str, llm_params: dict | None = None) -> GenerationP
     if llm_params:
         raw_params = llm_params
     else:
-        raw_params = fallback_regex_parse(prompt)
+        raw_params = parse_prompt(prompt)  # LLM-only, no regex
 
     params = validate_params(raw_params)
 

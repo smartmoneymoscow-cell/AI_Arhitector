@@ -1,20 +1,8 @@
 """
 API Gateway — маршрутизация к микросервисам [FastAPI]
 
-Обновлённая архитектура:
-- Единый orchestrator endpoint с quality параметрами
-- Preview endpoint для быстрого превью
-- SSE stream для real-time прогресса
-- Все сервисы через shared-пакет
-
-Endpoints:
-  POST /api/v1/generate            — Генерация (legacy, быстрая)
-  POST /api/v1/orchestrator/execute — Полный pipeline через оркестратор
-  POST /api/v1/preview             — Быстрое превью
-  POST /api/v1/parse               — Парсинг промта
-  GET  /api/v1/health              — Health check всех сервисов
-  GET  /api/v1/orchestrator/jobs/{id} — Статус задачи
-  GET  /api/v1/orchestrator/jobs/{id}/stream — SSE stream прогресса
+v6.0 — Парсинг ТОЛЬКО через LLM-service.
+Regex fallback УДАЛЁН.
 """
 
 import sys
@@ -30,32 +18,23 @@ from fastapi.responses import Response, FileResponse, StreamingResponse
 
 from shared.config import settings
 from shared.models import GenerateRequest, ParseRequest, HealthResponse
+from shared.parser import get_cache_stats
 
 app = FastAPI(
     title="Architect Gateway",
-    description="API Gateway — маршрутизация к микросервисам",
-    version="5.0.0",
+    description="API Gateway — маршрутизация к микросервисам (LLM-only)",
+    version="6.0.0",
 )
+
+_cors_origins = os.environ.get("CORS_ORIGINS", "*")
+_origins_list = [o.strip() for o in _cors_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_origins_list,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
-
-
-# ═══════════════════════════════════════════════════════════════
-# FRONTEND DIR
-# ═══════════════════════════════════════════════════════════════
-
-FRONTEND_DIR = settings.FRONTEND_DIR
-if not FRONTEND_DIR:
-    FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
-if not os.path.isdir(FRONTEND_DIR):
-    FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend")
-if not os.path.isdir(FRONTEND_DIR):
-    FRONTEND_DIR = os.path.join("/", "app", "frontend")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -63,13 +42,8 @@ if not os.path.isdir(FRONTEND_DIR):
 # ═══════════════════════════════════════════════════════════════
 
 async def request_with_retry(
-    method: str, url: str, max_retries: int = 0, timeout: float = 0, **kwargs,
+    method: str, url: str, max_retries: int = 2, timeout: float = 120, **kwargs,
 ) -> httpx.Response:
-    if max_retries <= 0:
-        max_retries = settings.MAX_RETRIES
-    if timeout <= 0:
-        timeout = settings.REQUEST_TIMEOUT
-
     last_error = None
     async with httpx.AsyncClient() as client:
         for attempt in range(max_retries + 1):
@@ -78,23 +52,11 @@ async def request_with_retry(
                 return r
             except httpx.TimeoutException:
                 last_error = "timeout"
-                if attempt < max_retries:
-                    await asyncio.sleep(settings.RETRY_DELAY_BASE * (attempt + 1))
             except httpx.ConnectError:
                 last_error = "connection_error"
-                if attempt < max_retries:
-                    await asyncio.sleep(settings.RETRY_DELAY_BASE * (attempt + 1))
+            if attempt < max_retries:
+                await asyncio.sleep(3 * (attempt + 1))
     raise HTTPException(502, f"Service unavailable: {last_error}")
-
-
-async def proxy_request(request: Request, target_base: str, path: str):
-    if not target_base:
-        raise HTTPException(503, f"Service not configured for path: {path}")
-    data = await request.json()
-    r = await request_with_retry("post", f"{target_base}{path}", json=data, timeout=60.0)
-    if r.status_code == 200:
-        return Response(content=r.content, media_type=r.headers.get("content-type", "application/json"))
-    raise HTTPException(r.status_code, detail=r.text)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -105,30 +67,32 @@ async def proxy_request(request: Request, target_base: str, path: str):
 @app.get("/api/v1/health")
 async def health():
     services = {}
-    service_urls = {
-        "llm": settings.LLM_SERVICE_URL,
-        "blender": settings.BLENDER_SERVICE_URL,
-    }
-    async with httpx.AsyncClient() as client:
-        for name, url in service_urls.items():
-            if not url:
-                services[name] = "not_configured"
-                continue
-            try:
+    for name, url in {"llm": settings.LLM_SERVICE_URL, "blender": settings.BLENDER_SERVICE_URL}.items():
+        if not url:
+            services[name] = "not_configured"
+            continue
+        try:
+            async with httpx.AsyncClient() as client:
                 r = await client.get(f"{url}/health", timeout=5.0)
                 services[name] = "ok" if r.status_code == 200 else "error"
-            except Exception:
-                services[name] = "unreachable"
+        except Exception:
+            services[name] = "unreachable"
+
+    cache = get_cache_stats()
     return {
         "status": "ok",
         "service": "gateway",
-        "version": "5.0.0",
+        "version": "6.0.0",
         "services": services,
+        "cache": {
+            "l1_entries": cache["l1_entries"],
+            "redis_connected": cache["redis_connected"],
+        },
     }
 
 
 # ═══════════════════════════════════════════════════════════════
-# ORCHESTRATOR (main pipeline)
+# ORCHESTRATOR
 # ═══════════════════════════════════════════════════════════════
 
 _orchestrator_jobs: dict = {}
@@ -136,18 +100,9 @@ _orchestrator_jobs: dict = {}
 
 @app.post("/api/v1/orchestrator/execute")
 async def orchestrator_execute(req: dict):
-    """
-    Полный pipeline генерации через multi-agent оркестратор.
-
-    Body:
-    {
-        "prompt": "двухэтажный кирпичный дом 10×12",
-        "quality": "standard",  // preview|standard|high|ultra|16k
-        "export_formats": ["glb"],  // glb|obj|fbx|ifc|svg
-        "skip_clarification": false
-    }
-    """
+    """Полный pipeline: LLM parse → geometry → texture → render → quality → export."""
     from shared.agents import Orchestrator
+    from shared.parser import AllModelsFailedError
 
     prompt = req.get("prompt", "")
     if not prompt:
@@ -163,15 +118,23 @@ async def orchestrator_execute(req: dict):
     )
 
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(
-        None,
-        lambda: orch.execute(
-            prompt,
-            quality=quality,
-            export_formats=export_formats,
-            skip_clarification=skip_clarification,
-        ),
-    )
+    try:
+        result = await loop.run_in_executor(
+            None,
+            lambda: orch.execute(
+                prompt,
+                quality=quality,
+                export_formats=export_formats,
+                skip_clarification=skip_clarification,
+            ),
+        )
+    except Exception as e:
+        if "AllModelsFailed" in type(e).__name__ or "all_models_failed" in str(e):
+            raise HTTPException(503, detail={
+                "error": "all_models_failed",
+                "message": "Все LLM-модели недоступны. Проверьте OPENROUTER_API_KEY.",
+            })
+        raise
 
     job_id = result["job_id"]
     _orchestrator_jobs[job_id] = result
@@ -185,7 +148,6 @@ async def orchestrator_execute(req: dict):
         "params": r.get("params"),
         "render": r.get("render"),
         "exports": r.get("exports", {}),
-        "clarification": result.get("clarification"),
         "steps": [
             {"name": s["name"], "status": s["status"], "duration_ms": s.get("duration_ms", 0)}
             for s in result.get("steps", [])
@@ -202,22 +164,9 @@ async def orchestrator_job_status(job_id: str):
     return job
 
 
-@app.get("/api/v1/orchestrator/jobs/{job_id}/progress")
-async def orchestrator_job_progress(job_id: str):
-    from shared.agents import Orchestrator
-    orch = Orchestrator()
-    orch.jobs = _orchestrator_jobs
-    progress = orch.get_progress(job_id)
-    if "error" in progress:
-        raise HTTPException(404, progress["error"])
-    return progress
-
-
 @app.get("/api/v1/orchestrator/jobs/{job_id}/stream")
 async def orchestrator_stream(job_id: str):
-    """SSE stream прогресса генерации (real-time)."""
     from shared.streaming import get_streamer
-
     streamer = get_streamer(job_id)
     if not streamer:
         raise HTTPException(404, "Job not found or stream expired")
@@ -234,24 +183,21 @@ async def orchestrator_stream(job_id: str):
 
 
 # ═══════════════════════════════════════════════════════════════
-# PREVIEW (fast, low quality)
+# PREVIEW
 # ═══════════════════════════════════════════════════════════════
 
 @app.post("/api/v1/preview")
 async def preview(req: dict):
-    """Быстрое превью через blender-service."""
+    """Быстрое превью через blender-service (LLM-only парсинг)."""
     prompt = req.get("prompt", "")
     if not prompt:
         raise HTTPException(400, "No prompt provided")
-
     if not settings.BLENDER_SERVICE_URL:
         raise HTTPException(503, "Blender service not configured")
 
     r = await request_with_retry(
-        "post",
-        f"{settings.BLENDER_SERVICE_URL}/api/v1/preview",
-        json=req,
-        timeout=90.0,
+        "post", f"{settings.BLENDER_SERVICE_URL}/api/v1/preview",
+        json=req, timeout=90.0,
     )
     if r.status_code == 200:
         return Response(content=r.content, media_type="image/png")
@@ -280,61 +226,50 @@ def _detect_gen_type(prompt: str, object_type: str | None = None) -> str:
 
 @app.post("/api/v1/generate")
 async def generate(req: GenerateRequest):
-    """Legacy: быстрая генерация через blender-service."""
+    """Legacy: генерация через blender-service (LLM-only парсинг)."""
     gen_type = _detect_gen_type(req.prompt, req.object_type)
     target_url = (
         f"{settings.BLENDER_SERVICE_URL}/api/v1/render/interior"
         if gen_type == "interior"
         else f"{settings.BLENDER_SERVICE_URL}/api/v1/generate/building"
     )
-    r = await request_with_retry("post", target_url, json=req.model_dump(), timeout=180.0, max_retries=2)
+    r = await request_with_retry("post", target_url, json=req.model_dump(), timeout=180.0)
     if r.status_code == 200:
         return Response(content=r.content, media_type=r.headers.get("content-type", "application/octet-stream"))
     raise HTTPException(r.status_code, detail=r.text)
 
 
 # ═══════════════════════════════════════════════════════════════
-# PARSE
+# PARSE (прокси к LLM-service, БЕЗ regex)
 # ═══════════════════════════════════════════════════════════════
 
 @app.post("/api/v1/parse")
 async def parse(req: ParseRequest):
-    """Парсинг промта через LLM-service."""
+    """Парсинг промта. ТОЛЬКО через LLM-service. Regex УДАЛЁН."""
     if not settings.LLM_SERVICE_URL:
-        from shared.parser import fallback_regex_parse
-        from shared.router import route_generation
-        params = fallback_regex_parse(req.text)
-        plan = route_generation(req.text, params)
-        return {"params": params, "gen_type": plan.gen_type, "building_params": plan.params.get("building", {})}
+        raise HTTPException(503, "LLM service not configured")
 
     r = await request_with_retry(
-        "post",
-        f"{settings.LLM_SERVICE_URL}/api/v1/parse",
-        json=req.model_dump(),
-        timeout=30.0,
+        "post", f"{settings.LLM_SERVICE_URL}/api/v1/parse",
+        json=req.model_dump(), timeout=60.0,
     )
     if r.status_code == 200:
         return r.json()
     raise HTTPException(r.status_code, detail=r.text)
 
 
-@app.post("/api/v1/parse-local")
-async def parse_local(req: GenerateRequest):
-    """Локальный парсинг (regex, без LLM)."""
-    from shared.parser import fallback_regex_parse
-    from shared.router import route_generation
-    params = fallback_regex_parse(req.prompt)
-    plan = route_generation(req.prompt, params)
-    return {
-        "params": params,
-        "gen_type": plan.gen_type,
-        "building_params": plan.params.get("building", {}),
-    }
-
-
 # ═══════════════════════════════════════════════════════════════
 # STATIC FILES
 # ═══════════════════════════════════════════════════════════════
+
+FRONTEND_DIR = settings.FRONTEND_DIR
+if not FRONTEND_DIR:
+    FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
+if not os.path.isdir(FRONTEND_DIR):
+    FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend")
+if not os.path.isdir(FRONTEND_DIR):
+    FRONTEND_DIR = os.path.join("/", "app", "frontend")
+
 
 @app.get("/")
 async def serve_index():
@@ -348,10 +283,6 @@ async def serve_static(filename: str):
         return FileResponse(path)
     return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
-
-# ═══════════════════════════════════════════════════════════════
-# STARTUP
-# ═══════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     import uvicorn

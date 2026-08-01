@@ -1,19 +1,16 @@
 """
 Blender Microservice — генерация и выполнение bpy-скриптов [FastAPI]
 
-Endpoints:
-  POST /api/v1/execute             — Выполнить произвольный bpy-скрипт
-  POST /api/v1/generate            — Промт → GLB/PNG (единый endpoint)
-  POST /api/v1/generate/building   — Промт → GLB файл
-  POST /api/v1/render/interior     — Промт → PNG файл
-  POST /api/v1/preview             — Сгенерировать превью + скриншот
-  GET  /health
+v6.0 — Парсинг ТОЛЬКО через LLM-service (HTTP).
+Локальный regex fallback УДАЛЁН.
+Tiled rendering для 16K.
 """
 
 import sys
 import os
 import uuid
 import subprocess
+import logging
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -24,14 +21,15 @@ from fastapi.responses import FileResponse
 
 from shared.config import settings
 from shared.models import GenerateRequest, HealthResponse
-from shared.parser import fallback_regex_parse, get_generation_type
 from shared.validation import DEFAULT_FURNITURE
 from shared.blender import generate_bpy_script, generate_interior_script, run_blender
 
+logger = logging.getLogger("archai.blender")
+
 app = FastAPI(
     title="Architect Blender Service",
-    description="Выполнение bpy-скриптов, генерация зданий и интерьеров через Blender CLI",
-    version="4.0.0",
+    description="Blender CLI: генерация 3D, рендер (до 16K tiled), экспорт",
+    version="6.0.0",
 )
 
 app.add_middleware(
@@ -43,17 +41,59 @@ app.add_middleware(
 
 
 # ═══════════════════════════════════════════════════════════════
-# CORE: Execute arbitrary bpy script
+# PARSE HELPER — вызов LLM-service (НЕ regex)
+# ═══════════════════════════════════════════════════════════════
+
+async def _parse_via_llm_service(prompt: str) -> dict:
+    """Парсинг промта через LLM-service. Если LLM-service недоступен — 503."""
+    llm_url = settings.LLM_SERVICE_URL
+    if not llm_url:
+        raise HTTPException(503, "LLM service not configured")
+
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(
+                f"{llm_url}/api/v1/parse",
+                json={"text": prompt},
+                timeout=60.0,
+            )
+        if r.status_code == 200:
+            return r.json()
+        elif r.status_code == 503:
+            raise HTTPException(503, "LLM service unavailable — all models failed")
+        else:
+            raise HTTPException(r.status_code, r.text)
+    except httpx.TimeoutException:
+        raise HTTPException(504, "LLM service timeout")
+    except httpx.ConnectError:
+        raise HTTPException(503, "LLM service unreachable")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"LLM service error: {e}")
+
+
+def _detect_gen_type(params: dict) -> str:
+    obj_type = params.get("object_type", "building")
+    return "interior" if obj_type in ("interior", "room") else "building"
+
+
+# ═══════════════════════════════════════════════════════════════
+# HEALTH
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/health")
+async def health():
+    return HealthResponse(status="ok", service="blender-service", version="6.0.0")
+
+
+# ═══════════════════════════════════════════════════════════════
+# EXECUTE — произвольный bpy-скрипт
 # ═══════════════════════════════════════════════════════════════
 
 @app.post("/api/v1/execute")
 async def execute_script(req: dict):
-    """
-    Выполняет произвольный bpy-скрипт в Blender.
-    Используется оркестратором и агентами.
-
-    Body: { "script": "...", "output_path": "/app/output/file.glb", "timeout": 300 }
-    """
+    """Выполняет bpy-скрипт в Blender."""
     script = req.get("script", "")
     output_path = req.get("output_path", "")
     timeout = req.get("timeout", settings.BLENDER_TIMEOUT)
@@ -64,7 +104,6 @@ async def execute_script(req: dict):
     job_id = uuid.uuid4().hex[:8]
     script_path = os.path.join(settings.OUTPUT_DIR, f"{job_id}_exec.py")
 
-    # Validate syntax
     try:
         compile(script, f"<{job_id}>", "exec")
     except SyntaxError as e:
@@ -75,7 +114,6 @@ async def execute_script(req: dict):
         f.write(script)
 
     try:
-        # Use Xvfb for headless rendering
         env = os.environ.copy()
         env.setdefault("DISPLAY", ":99")
 
@@ -86,22 +124,17 @@ async def execute_script(req: dict):
         )
 
         if result.returncode != 0:
-            stderr_tail = (result.stderr or "")[-1000:]
             raise HTTPException(500, detail={
                 "error": "Blender execution failed",
                 "returncode": result.returncode,
-                "stderr": stderr_tail,
+                "stderr": (result.stderr or "")[-1000:],
             })
 
-        # Check if output file was created
         output_exists = os.path.exists(output_path) if output_path else False
-        output_size = os.path.getsize(output_path) if output_exists else 0
-
         return {
             "status": "ok",
             "output_path": output_path if output_exists else None,
-            "output_size": output_size,
-            "stdout_tail": (result.stdout or "")[-500:],
+            "output_size": os.path.getsize(output_path) if output_exists else 0,
         }
 
     except subprocess.TimeoutExpired:
@@ -119,62 +152,48 @@ async def execute_script(req: dict):
 
 
 # ═══════════════════════════════════════════════════════════════
-# PREVIEW: Generate preview + screenshot
+# PREVIEW — быстрое превью (LLM-only парсинг)
 # ═══════════════════════════════════════════════════════════════
 
 @app.post("/api/v1/preview")
 async def generate_preview(req: dict):
-    """
-    Генерирует превью 3D-модели (PNG скриншот).
-    Быстрый рендер на низком качестве для предпросмотра.
-
-    Body: { "prompt": "...", "quality": "preview" }
-    """
+    """Быстрое превью. Парсинг ТОЛЬКО через LLM-service."""
     prompt = req.get("prompt", "")
-    quality = req.get("quality", "preview")
-
     if not prompt:
         raise HTTPException(400, "No prompt provided")
 
-    # Parse prompt
-    params = fallback_regex_parse(prompt)
-    gen_type = get_generation_type(params)
+    # Парсинг через LLM-service
+    params = await _parse_via_llm_service(prompt)
+    gen_type = _detect_gen_type(params)
 
-    # Generate geometry script
     if gen_type == "interior":
         room_type = params.get("room_type", "living")
         furniture = params.get("furniture") or DEFAULT_FURNITURE.get(room_type, ["sofa", "table", "chandelier"])
-        interior_params = {
+        script = generate_interior_script({
             "width": params.get("width_m", 6),
             "length": params.get("length_m", 8),
             "height": params.get("height_m", 3),
             "style": params.get("style", "modern"),
             "furniture": furniture,
-        }
-        script = generate_interior_script(interior_params)
+        })
     else:
-        building_params = {
+        script = generate_bpy_script({
             "width": params.get("width_m", 10),
             "length": params.get("length_m", 12),
             "floors": params.get("floors", 2),
             "roof_type": params.get("roof_type", "gabled"),
             "facade_material": params.get("material", "plaster"),
             "has_balcony": "balcony" in params.get("features", []),
-        }
-        script = generate_bpy_script(building_params)
+        })
 
-    # Add preview render settings (fast, low quality)
     job_id = uuid.uuid4().hex[:8]
     output_file = os.path.join(settings.OUTPUT_DIR, f"{job_id}_preview.png")
 
     script += f"""
-import bpy, math
-
-# Preview render settings (fast)
+import bpy
 bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
 bpy.context.scene.render.resolution_x = 1920
 bpy.context.scene.render.resolution_y = 1080
-bpy.context.scene.render.resolution_percentage = 100
 try:
     bpy.context.scene.eevee.taa_render_samples = 32
 except:
@@ -184,7 +203,6 @@ bpy.context.scene.render.filepath = r'{output_file}'
 bpy.ops.render.render(write_still=True)
 """
 
-    # Execute
     script_path = os.path.join(settings.OUTPUT_DIR, f"{job_id}_preview.py")
     os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
     with open(script_path, "w") as f:
@@ -193,30 +211,20 @@ bpy.ops.render.render(write_still=True)
     try:
         env = os.environ.copy()
         env.setdefault("DISPLAY", ":99")
-
         result = subprocess.run(
             [settings.BLENDER_PATH, "--background", "--factory-startup",
              "--log-level", "0", "--python", script_path],
             capture_output=True, text=True, timeout=60, env=env,
         )
-
         if result.returncode != 0:
-            raise HTTPException(500, detail=f"Preview render failed: {result.stderr[-500:]}")
-
+            raise HTTPException(500, detail=f"Preview failed: {result.stderr[-500:]}")
         if os.path.exists(output_file):
-            return FileResponse(
-                output_file,
-                media_type="image/png",
-                filename=f"preview_{job_id}.png",
-            )
+            return FileResponse(output_file, media_type="image/png", filename=f"preview_{job_id}.png")
         raise HTTPException(500, "Preview file not created")
-
     except subprocess.TimeoutExpired:
-        raise HTTPException(504, "Preview render timeout (60s)")
+        raise HTTPException(504, "Preview timeout (60s)")
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(500, str(e))
     finally:
         if os.path.exists(script_path):
             try:
@@ -226,24 +234,14 @@ bpy.ops.render.render(write_still=True)
 
 
 # ═══════════════════════════════════════════════════════════════
-# LEGACY: Generate building / Render interior
+# GENERATE — полная генерация (LLM-only парсинг)
 # ═══════════════════════════════════════════════════════════════
-
-async def _parse_via_shared(prompt: str) -> dict:
-    from shared.parser import parse_prompt_sync
-    return parse_prompt_sync(prompt)
-
-
-@app.get("/health")
-async def health():
-    return HealthResponse(status="ok", service="blender-service", version="4.0.0")
-
 
 @app.post("/api/v1/generate")
 async def generate(req: GenerateRequest):
-    """Единый endpoint: промт → парсинг → роутинг → генерация."""
-    params = await _parse_via_shared(req.prompt)
-    gen_type = get_generation_type(params)
+    """Генерация: промт → LLM парсинг → Blender → GLB/PNG."""
+    params = await _parse_via_llm_service(req.prompt)
+    gen_type = _detect_gen_type(params)
 
     if gen_type == "interior":
         return await _generate_interior(params)
@@ -252,15 +250,83 @@ async def generate(req: GenerateRequest):
 
 
 @app.post("/api/v1/generate/building")
-async def generate_building_legacy(req: GenerateRequest):
-    params = await _parse_via_shared(req.prompt)
+async def generate_building_endpoint(req: GenerateRequest):
+    params = await _parse_via_llm_service(req.prompt)
     return await _generate_building(params)
 
 
 @app.post("/api/v1/render/interior")
-async def render_interior_legacy(req: GenerateRequest):
-    params = await _parse_via_shared(req.prompt)
+async def render_interior_endpoint(req: GenerateRequest):
+    params = await _parse_via_llm_service(req.prompt)
     return await _generate_interior(params)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 16K TILED RENDER
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/render/16k")
+async def render_16k(req: dict):
+    """
+    Рендер 16K через tiled rendering.
+    Body: { "prompt": "...", "tiles_x": 4, "tiles_y": 3, "samples": 2048 }
+    """
+    prompt = req.get("prompt", "")
+    if not prompt:
+        raise HTTPException(400, "No prompt provided")
+
+    tiles_x = req.get("tiles_x", 4)
+    tiles_y = req.get("tiles_y", 3)
+    samples = req.get("samples", 2048)
+
+    # Парсинг через LLM-service
+    params = await _parse_via_llm_service(prompt)
+    gen_type = _detect_gen_type(params)
+
+    if gen_type == "interior":
+        room_type = params.get("room_type", "living")
+        furniture = params.get("furniture") or DEFAULT_FURNITURE.get(room_type, ["sofa", "table"])
+        scene_script = generate_interior_script({
+            "width": params.get("width_m", 6),
+            "length": params.get("length_m", 8),
+            "height": params.get("height_m", 3),
+            "style": params.get("style", "modern"),
+            "furniture": furniture,
+        })
+    else:
+        scene_script = generate_bpy_script({
+            "width": params.get("width_m", 10),
+            "length": params.get("length_m", 12),
+            "floors": params.get("floors", 2),
+            "roof_type": params.get("roof_type", "gabled"),
+            "facade_material": params.get("material", "plaster"),
+            "has_balcony": "balcony" in params.get("features", []),
+        })
+
+    job_id = uuid.uuid4().hex[:8]
+    output_path = os.path.join(settings.OUTPUT_DIR, f"{job_id}_16k.png")
+
+    try:
+        from shared.tiled_render import render_16k_tiled
+        result_path = render_16k_tiled(
+            scene_script=scene_script,
+            output_path=output_path,
+            total_x=15360,
+            total_y=8640,
+            tiles_x=tiles_x,
+            tiles_y=tiles_y,
+            samples=samples,
+            blender_path=settings.BLENDER_PATH,
+            output_dir=settings.OUTPUT_DIR,
+            timeout_per_tile=600,
+        )
+        return FileResponse(result_path, media_type="image/png", filename=f"archai_16k_{job_id}.png")
+    except TimeoutError as e:
+        raise HTTPException(504, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(500, detail=f"16K render failed: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -268,7 +334,6 @@ async def render_interior_legacy(req: GenerateRequest):
 # ═══════════════════════════════════════════════════════════════
 
 async def _generate_building(params: dict):
-    """Генерация здания → GLB файл."""
     building_params = {
         "width": params.get("width_m", 10),
         "length": params.get("length_m", 12),
@@ -298,7 +363,6 @@ async def _generate_building(params: dict):
 
 
 async def _generate_interior(params: dict):
-    """Генерация интерьера → PNG файл."""
     room_type = params.get("room_type", "living")
     furniture = params.get("furniture") or DEFAULT_FURNITURE.get(room_type, ["sofa", "table", "chandelier"])
 
@@ -334,10 +398,6 @@ async def _generate_interior(params: dict):
         return FileResponse(output_file, media_type="image/png", filename=f"archai_interior_{job_id}.png")
     raise HTTPException(500, detail="Render failed")
 
-
-# ═══════════════════════════════════════════════════════════════
-# STARTUP
-# ═══════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     import uvicorn

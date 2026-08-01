@@ -29,9 +29,10 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from shared.config import settings
 from shared.models import GenerateRequest, HealthResponse
-from shared.parser import parse_prompt_sync, fallback_regex_parse, get_generation_type
+from shared.parser import parse_prompt_sync, get_generation_type, get_cache_stats, AllModelsFailedError
 from shared.validation import DEFAULT_FURNITURE
 from shared.blender import generate_bpy_script, generate_interior_script, run_blender
+from shared.auth import get_api_key_optional, check_rate_limit
 
 OUTPUT_DIR = settings.OUTPUT_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -41,11 +42,15 @@ app = FastAPI(
     description="Монолитный сервер для локальной разработки",
     version="5.0.0",
 )
+# CORS: configurable via CORS_ORIGINS env (comma-separated)
+_cors_origins = os.environ.get("CORS_ORIGINS", "*")
+_origins_list = [o.strip() for o in _cors_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_origins_list,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
 
 
@@ -59,8 +64,13 @@ async def health():
     return HealthResponse(
         status="ok",
         service="archai-server",
-        version="5.0.0",
+        version="5.1.0",
         model=settings.LLM_MODEL,
+        services={
+            "llm": settings.LLM_SERVICE_URL,
+            "blender": settings.BLENDER_SERVICE_URL,
+            "cache_entries": str(get_cache_stats()["cached_entries"]),
+        },
     )
 
 
@@ -73,8 +83,8 @@ async def generate(req: GenerateRequest):
     """Быстрая генерация: промт → парсинг → Blender → GLB/PNG."""
     try:
         params = parse_prompt_sync(req.prompt)
-    except Exception:
-        params = fallback_regex_parse(req.prompt)
+    except AllModelsFailedError:
+        raise HTTPException(503, detail="Все LLM-модели недоступны. Проверьте OPENROUTER_API_KEY.")
 
     gen_type = get_generation_type(params)
 
@@ -225,7 +235,11 @@ async def preview(req: dict):
     if not prompt:
         raise HTTPException(400, "No prompt provided")
 
-    params = fallback_regex_parse(prompt)
+    try:
+        params = parse_prompt_sync(prompt)
+    except AllModelsFailedError:
+        params = {"width_m": 10, "length_m": 12, "floors": 2, "roof_type": "gabled",
+                  "material": "plaster", "features": [], "room_type": "living"}
     gen_type = get_generation_type(params)
 
     if gen_type == "interior":
@@ -290,8 +304,8 @@ async def parse_endpoint(req: dict):
     text = req.get("text", req.get("prompt", ""))
     try:
         params = parse_prompt_sync(text)
-    except Exception:
-        params = fallback_regex_parse(text)
+    except AllModelsFailedError:
+        raise HTTPException(503, detail="LLM parsing unavailable")
     plan = route_generation(text, params)
     return {
         "params": params,

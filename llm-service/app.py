@@ -1,20 +1,15 @@
 """
-LLM Microservice — proxy to OpenRouter + prompt parsing (FastAPI)
+LLM Microservice — LLM-only парсинг промтов через OpenRouter.
 
-Использует shared-пакет для парсинга и валидации.
-Нет дублирования кода.
-
-Endpoints:
-  GET  /health                        — Health check
-  POST /api/v1/chat/completions       — Chat proxy to OpenRouter
-  POST /api/v1/parse                  — Prompt → structured params (LLM + regex fallback)
-  GET  /docs                          — OpenAPI documentation
+v6.0 — БЕЗ REGEX FALLBACK.
+Каскад 7 моделей: сильная → средняя → слабая → бесплатные.
+Кеш: Redis (L2) + in-memory (L1).
+Если все модели недоступны → HTTP 503.
 """
 
 import sys
 import os
 
-# Добавить корень проекта в path для импорта shared
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import httpx
@@ -26,12 +21,15 @@ from shared.models import (
     ChatMessage, ChatRequest, ChatResponse,
     ParseRequest, ParsedParams, HealthResponse,
 )
-from shared.parser import parse_prompt_async, fallback_regex_parse
+from shared.parser import (
+    parse_prompt_async, AllModelsFailedError,
+    get_cache_stats, LLM_CASCADE,
+)
 
 app = FastAPI(
     title="Architect LLM Service",
-    description="Прокси к OpenRouter + парсинг архитектурных промтов",
-    version="4.0.0",
+    description="LLM-only парсинг архитектурных промтов (каскад 7 моделей, Redis кеш)",
+    version="6.0.0",
 )
 
 app.add_middleware(
@@ -42,17 +40,20 @@ app.add_middleware(
 )
 
 
-# ═══════════════════════════════════════════════════════════════
-# ROUTES
-# ═══════════════════════════════════════════════════════════════
-
 @app.get("/health")
 async def health():
+    cache = get_cache_stats()
     return HealthResponse(
         status="ok",
         service="llm-service",
-        version="4.0.0",
+        version="6.0.0",
         model=settings.LLM_MODEL,
+        services={
+            "redis": "connected" if cache["redis_connected"] else "disconnected",
+            "l1_cache": f"{cache['l1_entries']}/{cache['l1_max']}",
+            "l2_cache": str(cache["l2_redis_entries"]),
+            "cascade_models": str(len(cache["llm_cascade"])),
+        },
     )
 
 
@@ -94,22 +95,35 @@ async def chat_completions(req: ChatRequest):
 
 
 @app.post("/api/v1/parse", response_model=ParsedParams)
-async def parse_prompt(req: ParseRequest):
+async def parse_prompt_endpoint(req: ParseRequest):
     """
     Парсинг промта → структурированные параметры.
-    Использует shared.parser (LLM + regex fallback).
+    LLM-only (каскад 7 моделей). БЕЗ regex fallback.
+    Кеш: Redis + in-memory.
     """
-    params = await parse_prompt_async(req.text)
-    return ParsedParams(**params)
+    try:
+        params = await parse_prompt_async(req.text)
+        return ParsedParams(**params)
+    except AllModelsFailedError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "all_models_failed",
+                "message": str(e),
+                "cascade": [m["model"] for m in LLM_CASCADE],
+            },
+        )
 
 
-# ═══════════════════════════════════════════════════════════════
-# STARTUP
-# ═══════════════════════════════════════════════════════════════
+@app.get("/api/v1/cache/stats")
+async def cache_stats():
+    """Статистика кеша парсинга."""
+    return get_cache_stats()
+
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8081))
     print(f"LLM Service starting on port {port}")
-    print(f"Model: {settings.LLM_MODEL}")
+    print(f"Cascade: {[m['model'] for m in LLM_CASCADE]}")
     uvicorn.run(app, host="0.0.0.0", port=port)

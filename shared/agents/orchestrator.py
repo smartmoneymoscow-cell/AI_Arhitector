@@ -24,6 +24,7 @@ from shared.agents.geometry_agent import GeometryAgent
 from shared.agents.texture_agent import TextureAgent
 from shared.agents.render_agent import RenderAgent, QUALITY_PRESETS
 from shared.agents.export_agent import ExportAgent
+from shared.agents.quality_agent import QualityAgent
 from shared.router import route_generation
 from shared.clarification import ClarificationEngine, ClarificationResult
 from shared.streaming import ProgressStreamer, create_streamer
@@ -46,6 +47,7 @@ class Orchestrator:
             "texture": TextureAgent(),
             "render": RenderAgent(),
             "export": ExportAgent(),
+            "quality": QualityAgent(),
         }
         self.clarification = ClarificationEngine()
         self.jobs: dict[str, dict] = {}
@@ -215,6 +217,27 @@ class Orchestrator:
             else:
                 streamer.emit("render", "failed", progress=60,
                               message=render_result.error or "Render failed")
+
+            # ═══ Step 5.5: Quality Check ═══
+            if render_path:
+                streamer.emit("quality", "running", progress=82,
+                              message="Checking render quality...")
+                quality_result = self._run_step(
+                    job, "quality",
+                    Task(name="quality", agent="quality", params={
+                        "render_path": render_path,
+                        "quality": quality,
+                        "prompt": prompt,
+                    })
+                )
+                if quality_result.status == TaskStatus.DONE:
+                    qd = quality_result.data or {}
+                    if not qd.get("passed", True):
+                        streamer.emit("quality", "warning", progress=82,
+                                      message=f"Quality check failed: {qd.get('checks', {})}")
+                    else:
+                        streamer.emit("quality", "done", progress=85,
+                                      message="Quality check passed")
 
             # ═══ Step 6: Export ═══
             export_results = {}
