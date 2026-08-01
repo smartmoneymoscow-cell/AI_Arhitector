@@ -8,7 +8,7 @@ FROM python:3.11-slim
 WORKDIR /app
 COPY --from=builder /install /usr/local
 # Force fresh copy of shared (no Docker cache)
-ARG CACHEBUST=1
+ARG CACHEBUST=$(date +%s)
 RUN echo "Cache bust $CACHEBUST"
 COPY shared/ /app/shared/
 COPY llm-service/ /app/llm-service/
