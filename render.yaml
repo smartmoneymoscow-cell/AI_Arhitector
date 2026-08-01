@@ -1,17 +1,13 @@
 # ════════════════════════════════════════════════════════════
-# Render.com deployment — Architect v7.0
+# Render.com deployment — Architect v7.1
 # Only active services (3 + Redis)
-# Dead services removed: geometry, ifc, ml, data, cad, freecad, vectordb, graphdb
-# See ROADMAP.md for future service plans
 # ════════════════════════════════════════════════════════════
 
 services:
-  # ─── CORE SERVICES ───────────────────────────────────────
-
   - type: web
     name: architect
     runtime: docker
-    dockerfilePath: ./gateway/Dockerfile
+    dockerfilePath: ./gateway.Dockerfile
     rootDir: .
     region: oregon
     plan: starter
@@ -22,7 +18,7 @@ services:
       - key: BLENDER_SERVICE_URL
         value: https://ai-arch-blender3d.onrender.com
       - key: REDIS_URL
-        value: redis://red-xxx:6379  # Replace with actual Redis URL
+        value: redis://red-xxx:6379
       - key: FRONTEND_DIR
         value: /app/frontend
       - key: PORT
@@ -35,7 +31,7 @@ services:
   - type: web
     name: ai-arch-llmproxy
     runtime: docker
-    dockerfilePath: ./llm-service/Dockerfile
+    dockerfilePath: ./llm.Dockerfile
     rootDir: .
     region: oregon
     plan: starter
@@ -44,17 +40,17 @@ services:
       - key: OPENROUTER_API_KEY
         sync: false
       - key: REDIS_URL
-        value: redis://red-xxx:6379  # Replace with actual Redis URL
+        value: redis://red-xxx:6379
       - key: PORT
         value: "8081"
 
   - type: web
     name: ai-arch-blender3d
     runtime: docker
-    dockerfilePath: ./blender-service/Dockerfile
+    dockerfilePath: ./blender.Dockerfile
     rootDir: .
     region: oregon
-    plan: standard  # Blender needs more RAM
+    plan: standard
     healthCheckPath: /health
     envVars:
       - key: PORT
@@ -66,9 +62,7 @@ services:
       - key: LLM_SERVICE_URL
         value: https://ai-arch-llmproxy.onrender.com
       - key: REDIS_URL
-        value: redis://red-xxx:6379  # Replace with actual Redis URL
-
-  # ─── REDIS ───────────────────────────────────────────────
+        value: redis://red-xxx:6379
 
   - type: redis
     name: architect-redis
