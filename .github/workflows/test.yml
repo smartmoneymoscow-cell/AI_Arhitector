@@ -151,3 +151,4 @@ jobs:
     steps:
       - name: All tests passed
         run: echo "✅ All tests passed — release is safe to publish"
+# Visual QA enabled with MIMO_API_KEY
