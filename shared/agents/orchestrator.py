@@ -15,10 +15,13 @@ shared/agents/orchestrator.py — Оркестратор multi-agent систе�
 import os
 import time
 import uuid
+import logging
 import concurrent.futures
 from typing import Optional
 
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
+
+logger = logging.getLogger("archai.orchestrator")
 from shared.agents.parser_agent import ParserAgent
 from shared.agents.geometry_agent import GeometryAgent
 from shared.agents.texture_agent import TextureAgent
@@ -143,8 +146,9 @@ class Orchestrator:
             streamer.emit("route", "done", progress=25,
                           message=f"Plan: {len(plan.steps)} steps, type={gen_type}")
 
-            # ═══ Step 3: Geometry ═══
+            # ═══ Step 3+4: Geometry + Texture (PARALLEL) ═══
             streamer.emit("geometry", "running", progress=30, message="Generating 3D geometry...")
+            streamer.emit("texture", "running", progress=35, message="Generating PBR materials...")
 
             geom_params = {
                 "gen_type": gen_type,
@@ -157,10 +161,23 @@ class Orchestrator:
                     "furniture": params.get("furniture", []),
                 },
             }
-            geom_result = self._run_step(
-                job, "geometry",
-                Task(name="geometry", agent="geometry", params=geom_params)
-            )
+            texture_params = {
+                "material": params.get("material", "plaster"),
+                "resolution": 2048,
+            }
+
+            # Run geometry and texture in parallel (they are independent)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                geom_future = executor.submit(
+                    self._run_step, job, "geometry",
+                    Task(name="geometry", agent="geometry", params=geom_params)
+                )
+                texture_future = executor.submit(
+                    self._run_step, job, "texture",
+                    Task(name="texture", agent="texture", params=texture_params)
+                )
+                geom_result = geom_future.result()
+                texture_result = texture_future.result()
 
             geometry_script = ""
             if geom_result.status == TaskStatus.DONE:
@@ -172,16 +189,6 @@ class Orchestrator:
                 job["status"] = "failed"
                 job["error"] = f"Geometry generation failed: {geom_result.error}"
                 return job
-
-            # ═══ Step 4: Texture ═══
-            streamer.emit("texture", "running", progress=50, message="Generating PBR materials...")
-            texture_result = self._run_step(
-                job, "texture",
-                Task(name="texture", agent="texture", params={
-                    "material": params.get("material", "plaster"),
-                    "resolution": 2048,
-                })
-            )
 
             texture_script = ""
             if texture_result.status == TaskStatus.DONE:
@@ -290,13 +297,15 @@ class Orchestrator:
 
         return job
 
-    def _run_step(self, job: dict, step_name: str, task: Task) -> TaskResult:
-        """Выполняет один шаг pipeline."""
+    def _run_step(self, job: dict, step_name: str, task: Task,
+                   max_retries: int = 1, step_timeout: float = 300.0) -> TaskResult:
+        """Выполняет один шаг pipeline с retry и timeout."""
         step_info = {
             "name": step_name,
             "agent": task.agent,
             "status": "running",
             "started_at": time.time(),
+            "retries": 0,
         }
         job["steps"].append(step_info)
 
@@ -307,22 +316,41 @@ class Orchestrator:
             step_info["error"] = result.error
             return result
 
-        try:
-            task.start()
-            result = agent.process(task)
-            task.complete(result)
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                task.start()
+                result = agent.process(task)
+                task.complete(result)
 
-            step_info["status"] = result.status.value
-            step_info["duration_ms"] = result.duration_ms
-            if result.error:
-                step_info["error"] = result.error
+                step_info["status"] = result.status.value
+                step_info["duration_ms"] = result.duration_ms
+                step_info["retries"] = attempt
+                if result.error:
+                    step_info["error"] = result.error
 
-            return result
-        except Exception as e:
-            task.fail(str(e))
-            step_info["status"] = "failed"
-            step_info["error"] = str(e)
-            return TaskResult(status=TaskStatus.FAILED, error=str(e))
+                if result.status == TaskStatus.DONE:
+                    return result
+
+                last_error = result.error
+                if attempt < max_retries:
+                    logger.warning("Step %s failed (attempt %d/%d): %s — retrying",
+                                   step_name, attempt + 1, max_retries + 1, last_error)
+                    time.sleep(2 * (attempt + 1))
+
+            except Exception as e:
+                last_error = str(e)
+                if attempt < max_retries:
+                    logger.warning("Step %s exception (attempt %d/%d): %s — retrying",
+                                   step_name, attempt + 1, max_retries + 1, last_error)
+                    time.sleep(2 * (attempt + 1))
+                else:
+                    task.fail(last_error)
+                    step_info["status"] = "failed"
+                    step_info["error"] = last_error
+                    step_info["retries"] = attempt
+
+        return TaskResult(status=TaskStatus.FAILED, error=last_error or "Step failed after retries")
 
     def _build_camera(self, gen_type: str, params: dict, building_params: dict) -> dict:
         """Строит параметры камеры в зависимости от типа генерации."""

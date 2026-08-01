@@ -16,8 +16,66 @@ import time
 from typing import Optional
 
 import httpx
+from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger("archai.parser")
+
+
+# ═══════════════════════════════════════════════════════════════
+# PYDANTIC VALIDATION — strict schema for LLM responses
+# ═══════════════════════════════════════════════════════════════
+
+class LLMParsedResponse(BaseModel):
+    """Validated schema for LLM parser output."""
+    object_type: str = Field("building", pattern="^(building|interior|room)$")
+    building_type: str = Field("house", pattern="^(house|office|cottage|villa|apartment|townhouse|hotel|warehouse|school)$")
+    room_type: Optional[str] = Field(None, pattern="^(bedroom|kitchen|living|bathroom|children|study|dining|hall|laundry)$")
+    floors: int = Field(2, ge=1, le=20)
+    width_m: int = Field(10, ge=1, le=200)
+    length_m: int = Field(12, ge=1, le=200)
+    height_m: float = Field(3.0, ge=1.0, le=10.0)
+    style: str = Field("modern")
+    material: str = Field("plaster")
+    roof_type: str = Field("gabled")
+    features: list[str] = Field(default_factory=list)
+    furniture: list[str] = Field(default_factory=list)
+    confidence: float = Field(0.5, ge=0.0, le=1.0)
+
+    @field_validator("style")
+    @classmethod
+    def validate_style(cls, v):
+        valid = {"modern", "classic", "loft", "scandinavian", "minimalist", "hitech",
+                 "art_deco", "baroque", "brutalism", "japandi", "biophilic",
+                 "industrial", "colonial", "mediterranean", "provence"}
+        return v if v in valid else "modern"
+
+    @field_validator("material")
+    @classmethod
+    def validate_material(cls, v):
+        valid = {"brick", "wood", "glass", "stone", "concrete", "plaster",
+                 "marble", "granite", "ceramic", "metal", "composite",
+                 "aerated_concrete", "foam_block", "sip_panel", "timber_frame"}
+        return v if v in valid else "plaster"
+
+    @field_validator("roof_type")
+    @classmethod
+    def validate_roof_type(cls, v):
+        valid = {"gabled", "flat", "hip", "mansard", "shed", "dome"}
+        return v if v in valid else "gabled"
+
+    @field_validator("features")
+    @classmethod
+    def validate_features(cls, v):
+        valid = {"balcony", "terrace", "garage", "pool", "garden", "basement", "attic", "chimney", "bay_window"}
+        return [f for f in v if f in valid]
+
+    @field_validator("furniture")
+    @classmethod
+    def validate_furniture(cls, v):
+        valid = {"sofa", "table", "bed", "chandelier", "wardrobe", "bookshelf",
+                 "sink", "stove", "bathtub", "chair", "desk", "nightstand",
+                 "bench", "washing_machine", "shelf", "chairs"}
+        return [f for f in v if f in valid]
 
 OPENROUTER_BASE = os.environ.get("OPENROUTER_BASE", "https://openrouter.ai/api/v1")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
@@ -217,24 +275,32 @@ _FURNITURE = {
 
 
 def _validate(raw: dict) -> dict:
-    result = {**_DEFAULTS, "features": [], "furniture": []}
-    for field, valid in _VALID.items():
-        val = raw.get(field)
-        if field == "features":
-            result["features"] = [f for f in (val or []) if f in valid] if isinstance(val, list) else []
-        elif field == "room_type":
-            result["room_type"] = val if val and val in valid else ("living" if raw.get("object_type") == "room" else None)
-        else:
-            result[field] = val if val in valid else _DEFAULTS[field]
-    floors = raw.get("floors", 2)
-    result["floors"] = floors if isinstance(floors, int) and 1 <= floors <= 20 else 2
-    for key in ("width_m", "length_m", "height_m"):
-        val = raw.get(key, _DEFAULTS[key])
-        result[key] = (int if key != "height_m" else float)(val) if isinstance(val, (int, float)) and 1 <= val <= 200 else _DEFAULTS[key]
-    furniture = raw.get("furniture", [])
-    result["furniture"] = furniture if isinstance(furniture, list) and furniture else _FURNITURE.get(result["room_type"], ["sofa", "table"]) if result["room_type"] else []
-    conf = raw.get("confidence", 0.5)
-    result["confidence"] = max(0.0, min(1.0, conf)) if isinstance(conf, (int, float)) else 0.5
+    """Validate raw LLM output using Pydantic schema (strict validation)."""
+    try:
+        validated = LLMParsedResponse(**raw)
+        result = validated.model_dump()
+    except Exception as e:
+        logger.warning("Pydantic validation failed: %s — using fallback", e)
+        result = {**_DEFAULTS, "features": [], "furniture": []}
+        for field, valid in _VALID.items():
+            val = raw.get(field)
+            if field == "features":
+                result["features"] = [f for f in (val or []) if f in valid] if isinstance(val, list) else []
+            elif field == "room_type":
+                result["room_type"] = val if val and val in valid else ("living" if raw.get("object_type") == "room" else None)
+            else:
+                result[field] = val if val in valid else _DEFAULTS[field]
+        floors = raw.get("floors", 2)
+        result["floors"] = floors if isinstance(floors, int) and 1 <= floors <= 20 else 2
+        for key in ("width_m", "length_m", "height_m"):
+            val = raw.get(key, _DEFAULTS[key])
+            result[key] = (int if key != "height_m" else float)(val) if isinstance(val, (int, float)) and 1 <= val <= 200 else _DEFAULTS[key]
+        conf = raw.get("confidence", 0.5)
+        result["confidence"] = max(0.0, min(1.0, conf)) if isinstance(conf, (int, float)) else 0.5
+
+    # Auto-fill furniture if room_type is set but furniture is empty
+    if result.get("room_type") and not result.get("furniture"):
+        result["furniture"] = _FURNITURE.get(result["room_type"], ["sofa", "table"])
     return result
 
 

@@ -12,11 +12,27 @@ shared/blender.py — единый модуль генерации bpy-скри�
 """
 
 import os
+import re
 import uuid
 import subprocess
 
 from shared.config import settings
 from shared.validation import safe_val
+
+
+def _sanitize_identifier(value: str) -> str:
+    """Sanitize a string to be a safe Python/BPY identifier (no injection)."""
+    return re.sub(r'[^a-zA-Z0-9_]', '_', str(value))
+
+
+def _sanitize_string_literal(value: str) -> str:
+    """Escape a string for safe inclusion in a Python string literal inside bpy scripts."""
+    return str(value).replace('\\', '\\\\').replace('"', '\\"').replace("'", "\\'")
+
+
+def _safe_color(color: tuple) -> tuple:
+    """Clamp RGB values to [0, 1]."""
+    return tuple(max(0.0, min(1.0, float(c))) for c in color)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -384,8 +400,18 @@ def generate_interior_script(params: dict) -> str:
     w = params.get("width", 6)
     l = params.get("length", 8)
     h = params.get("height", 3)
-    style = params.get("style", "modern")
-    furniture = params.get("furniture", ["sofa", "table", "chandelier"])
+    style = _sanitize_identifier(params.get("style", "modern"))
+    # Validate style against known styles, fallback to modern
+    _VALID_STYLES = {"modern", "classic", "scandinavian", "loft", "minimalist", "hitech"}
+    if style not in _VALID_STYLES:
+        style = "modern"
+    # Sanitize furniture list — only allow known items
+    _VALID_FURNITURE = {"sofa", "table", "bed", "chandelier", "desk", "wardrobe",
+                        "nightstand", "bookshelf", "sink", "stove", "bathtub", "chair"}
+    raw_furniture = params.get("furniture", ["sofa", "table", "chandelier"])
+    furniture = [f for f in raw_furniture if f in _VALID_FURNITURE]
+    if not furniture:
+        furniture = ["sofa", "table", "chandelier"]
 
     style_colors = {
         "modern":       {"wall": (0.96, 0.96, 0.96), "floor": (0.77, 0.66, 0.51), "accent": (0.17, 0.24, 0.31)},

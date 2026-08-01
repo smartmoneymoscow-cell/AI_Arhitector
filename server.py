@@ -1,23 +1,16 @@
 """
 Architect — Monolith Server (FastAPI)
+
+⚠️  DEV ONLY — For local development. ⚠️
+For production, use docker-compose with microservices.
+
 Serves frontend + LLM parsing + Blender execution + Orchestrator.
-
-Use for LOCAL DEVELOPMENT. For production, use docker-compose with microservices.
-
-Endpoints:
-    GET  /                              — Web interface
-    GET  /health                        — Health check
-    POST /api/v1/generate               — Quick: text → GLB/PNG
-    POST /api/v1/orchestrator/execute   — Full pipeline via orchestrator
-    POST /api/v1/preview                — Fast preview (1920×1080)
-    POST /api/v1/parse                  — Parse prompt
-    GET  /api/v1/orchestrator/jobs/{id} — Job status
-    GET  /api/v1/orchestrator/jobs/{id}/stream — SSE progress
 """
 
 import os
 import uuid
 import sys
+import logging
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -28,11 +21,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from shared.config import settings
+from shared.logging_config import setup_logging
+
+setup_logging("server-monolith")
+logger = logging.getLogger("archai.server")
 from shared.models import GenerateRequest, HealthResponse
 from shared.parser import parse_prompt_sync, get_generation_type, get_cache_stats, AllModelsFailedError
 from shared.validation import DEFAULT_FURNITURE
 from shared.blender import generate_bpy_script, generate_interior_script, run_blender
-from shared.auth import get_api_key_optional, check_rate_limit
+from shared.auth import get_api_key_optional, rate_limit_middleware
 
 OUTPUT_DIR = settings.OUTPUT_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)

@@ -9,6 +9,7 @@ v6.0 — БЕЗ REGEX FALLBACK.
 
 import sys
 import os
+import logging
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -25,16 +26,23 @@ from shared.parser import (
     parse_prompt_async, AllModelsFailedError,
     get_cache_stats, LLM_CASCADE,
 )
+from shared.logging_config import setup_logging
+
+setup_logging("llm-service")
+logger = logging.getLogger("archai.llm")
 
 app = FastAPI(
     title="Architect LLM Service",
     description="LLM-only парсинг архитектурных промтов (каскад 7 моделей, Redis кеш)",
-    version="6.0.0",
+    version="7.0.0",
 )
+
+_cors_origins = os.environ.get("CORS_ORIGINS", "*")
+_origins_list = [o.strip() for o in _cors_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_origins_list,
     allow_methods=["*"],
     allow_headers=["*"],
 )

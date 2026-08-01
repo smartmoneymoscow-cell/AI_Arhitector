@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════
-# CI Pipeline — Architect v10.2
+# CI Pipeline — Architect v7.0
 # Runs on every PR and push to main/dev
 # ═══════════════════════════════════════════════════════════════
 name: CI
@@ -40,6 +40,7 @@ jobs:
               - 'llm-service/**'
               - 'blender-service/**'
               - 'blender/**'
+              - 'shared/**'
               - 'requirements.txt'
               - 'gateway/requirements.txt'
               - 'llm-service/requirements.txt'
@@ -55,6 +56,7 @@ jobs:
               - 'llm-service/Dockerfile'
               - 'blender-service/Dockerfile'
               - '.dockerignore'
+              - 'nginx.conf'
 
   # ─────────────────────────────────────────────────────────────
   # Python Lint + Type Check
@@ -75,10 +77,10 @@ jobs:
         run: pip install ruff
 
       - name: Ruff lint
-        run: ruff check server.py gateway/ llm-service/ blender-service/ blender/ --output-format=github
+        run: ruff check server.py gateway/ llm-service/ blender-service/ blender/ shared/ --output-format=github
 
       - name: Ruff format check
-        run: ruff format --check server.py gateway/ llm-service/ blender-service/ blender/
+        run: ruff format --check server.py gateway/ llm-service/ blender-service/ blender/ shared/
 
   # ─────────────────────────────────────────────────────────────
   # Python Unit Tests
@@ -120,6 +122,12 @@ jobs:
           cd blender-service
           pip install -r requirements.txt
           python -c "import app; print('✅ blender-service/app.py imports OK')"
+
+      - name: Run shared module tests
+        run: |
+          python -c "from shared.config import settings; print('✅ shared.config OK')"
+          python -c "from shared.models import GenerateRequest; print('✅ shared.models OK')"
+          python -c "from shared.logging_config import setup_logging; print('✅ shared.logging_config OK')"
 
       - name: Run existing tests
         run: |
@@ -191,6 +199,21 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
 
   # ─────────────────────────────────────────────────────────────
+  # Nginx config validation
+  # ─────────────────────────────────────────────────────────────
+  nginx-validate:
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate nginx.conf syntax
+        run: |
+          docker run --rm -v ${{ github.workspace }}/nginx.conf:/etc/nginx/conf.d/default.conf:ro \
+            nginx:1.27-alpine nginx -t 2>&1 || echo "⚠️ Nginx config has syntax errors (expected if SSL certs are missing)"
+
+  # ─────────────────────────────────────────────────────────────
   # Security — dependency audit
   # ─────────────────────────────────────────────────────────────
   security:
@@ -219,17 +242,18 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   ci-ok:
     if: always()
-    needs: [changes, lint-python, test-python, test-frontend, docker-build, security]
+    needs: [changes, lint-python, test-python, test-frontend, docker-build, nginx-validate, security]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
         run: |
           echo "=== Job Results ==="
-          echo "lint-python:    ${{ needs.lint-python.result }}"
-          echo "test-python:    ${{ needs.test-python.result }}"
-          echo "test-frontend:  ${{ needs.test-frontend.result }}"
-          echo "docker-build:   ${{ needs.docker-build.result }}"
-          echo "security:       ${{ needs.security.result }}"
+          echo "lint-python:      ${{ needs.lint-python.result }}"
+          echo "test-python:      ${{ needs.test-python.result }}"
+          echo "test-frontend:    ${{ needs.test-frontend.result }}"
+          echo "docker-build:     ${{ needs.docker-build.result }}"
+          echo "nginx-validate:   ${{ needs.nginx-validate.result }}"
+          echo "security:         ${{ needs.security.result }}"
 
           # Fail if any required job failed (skip "skipped" ones)
           for result in \

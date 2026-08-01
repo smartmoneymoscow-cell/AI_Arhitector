@@ -1,7 +1,12 @@
+# ════════════════════════════════════════════════════════════
+# Render.com deployment — Architect v7.0
+# Only active services (3 + Redis)
+# Dead services removed: geometry, ifc, ml, data, cad, freecad, vectordb, graphdb
+# See ROADMAP.md for future service plans
+# ════════════════════════════════════════════════════════════
+
 services:
-  # ════════════════════════════════════════════════════════════
-  # CORE SERVICES
-  # ════════════════════════════════════════════════════════════
+  # ─── CORE SERVICES ───────────────────────────────────────
 
   - type: web
     name: architect
@@ -9,33 +14,23 @@ services:
     dockerfilePath: ./gateway/Dockerfile
     rootDir: .
     region: oregon
-    plan: free
+    plan: starter
     healthCheckPath: /health
     envVars:
       - key: LLM_SERVICE_URL
         value: https://ai-arch-llmproxy.onrender.com
       - key: BLENDER_SERVICE_URL
         value: https://ai-arch-blender3d.onrender.com
-      - key: GEOMETRY_SERVICE_URL
-        value: https://architect-geometry.onrender.com
-      - key: IFC_SERVICE_URL
-        value: https://architect-ifc.onrender.com
-      - key: ML_SERVICE_URL
-        value: https://architect-ml.onrender.com
-      - key: DATA_SERVICE_URL
-        value: https://architect-data.onrender.com
-      - key: CAD_SERVICE_URL
-        value: https://architect-cad.onrender.com
-      - key: FREECAD_SERVICE_URL
-        value: https://architect-freecad.onrender.com
-      - key: VECTORDB_SERVICE_URL
-        value: https://architect-vectordb.onrender.com
-      - key: GRAPHDB_SERVICE_URL
-        value: https://architect-graphdb.onrender.com
+      - key: REDIS_URL
+        value: redis://red-xxx:6379  # Replace with actual Redis URL
       - key: FRONTEND_DIR
         value: /app/frontend
       - key: PORT
         value: "8080"
+      - key: ARCH_API_KEYS
+        sync: false
+      - key: CORS_ORIGINS
+        value: "https://smartmoneymoscow-cell.github.io"
 
   - type: web
     name: ai-arch-llmproxy
@@ -43,13 +38,13 @@ services:
     dockerfilePath: ./llm-service/Dockerfile
     rootDir: .
     region: oregon
-    plan: free
+    plan: starter
     healthCheckPath: /health
     envVars:
       - key: OPENROUTER_API_KEY
         sync: false
-      - key: OPENROUTER_API_KEY_2
-        sync: false
+      - key: REDIS_URL
+        value: redis://red-xxx:6379  # Replace with actual Redis URL
       - key: PORT
         value: "8081"
 
@@ -59,7 +54,7 @@ services:
     dockerfilePath: ./blender-service/Dockerfile
     rootDir: .
     region: oregon
-    plan: free
+    plan: standard  # Blender needs more RAM
     healthCheckPath: /health
     envVars:
       - key: PORT
@@ -70,127 +65,13 @@ services:
         value: /app/output
       - key: LLM_SERVICE_URL
         value: https://ai-arch-llmproxy.onrender.com
+      - key: REDIS_URL
+        value: redis://red-xxx:6379  # Replace with actual Redis URL
 
-  # ════════════════════════════════════════════════════════════
-  # GEOMETRY & CAD SERVICES
-  # ════════════════════════════════════════════════════════════
+  # ─── REDIS ───────────────────────────────────────────────
 
-  - type: web
-    name: architect-geometry
-    runtime: docker
-    dockerfilePath: ./geometry-service/Dockerfile
-    rootDir: geometry-service
-    region: oregon
-    plan: free
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: "8083"
-
-  - type: web
-    name: architect-cad
-    runtime: docker
-    dockerfilePath: ./cad-service/Dockerfile
-    rootDir: cad-service
-    region: oregon
-    plan: free
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: "8087"
-      - key: OUTPUT_DIR
-        value: /app/output
-
-  - type: web
-    name: architect-freecad
-    runtime: docker
-    dockerfilePath: ./freecad-service/Dockerfile
-    rootDir: freecad-service
-    region: oregon
-    plan: free
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: "8088"
-      - key: OUTPUT_DIR
-        value: /app/output
-
-  # ════════════════════════════════════════════════════════════
-  # IFC & ML SERVICES
-  # ════════════════════════════════════════════════════════════
-
-  - type: web
-    name: architect-ifc
-    runtime: docker
-    dockerfilePath: ./ifc-service/Dockerfile
-    rootDir: ifc-service
-    region: oregon
-    plan: free
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: "8084"
-      - key: OUTPUT_DIR
-        value: /app/output
-
-  - type: web
-    name: architect-ml
-    runtime: docker
-    dockerfilePath: ./ml-service/Dockerfile
-    rootDir: ml-service
-    region: oregon
-    plan: free
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: "8085"
-
-  # ════════════════════════════════════════════════════════════
-  # DATA & SEARCH SERVICES
-  # ════════════════════════════════════════════════════════════
-
-  - type: web
-    name: architect-data
-    runtime: docker
-    dockerfilePath: ./data-service/Dockerfile
-    rootDir: data-service
-    region: oregon
-    plan: free
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: "8086"
-      - key: DATA_DIR
-        value: /app/data
-
-  - type: web
-    name: architect-vectordb
-    runtime: docker
-    dockerfilePath: ./vectordb-service/Dockerfile
-    rootDir: vectordb-service
-    region: oregon
-    plan: free
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: "8089"
-      - key: QDRANT_URL
-        value: http://localhost:6333
-
-  - type: web
-    name: architect-graphdb
-    runtime: docker
-    dockerfilePath: ./graphdb-service/Dockerfile
-    rootDir: graphdb-service
-    region: oregon
-    plan: free
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: "8090"
-      - key: NEO4J_URL
-        value: http://localhost:7474
-      - key: NEO4J_USER
-        value: neo4j
-      - key: NEO4J_PASSWORD
-        sync: false
+  - type: redis
+    name: architect-redis
+    plan: starter
+    ipAllowList: []
+    maxmemoryPolicy: allkeys-lru

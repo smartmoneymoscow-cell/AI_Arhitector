@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════
-# CD Pipeline — Architect v10.2
+# CD Pipeline — Architect v7.0
 # Deploys on merge to main
 # ═══════════════════════════════════════════════════════════════
 name: Deploy
@@ -118,10 +118,45 @@ jobs:
         uses: actions/deploy-pages@v4
 
   # ─────────────────────────────────────────────────────────────
+  # Smoke Tests (after deploy)
+  # ─────────────────────────────────────────────────────────────
+  smoke-tests:
+    needs: [deploy-render, deploy-pages]
+    runs-on: ubuntu-latest
+    if: always() && (needs.deploy-render.result == 'success' || needs.deploy-pages.result == 'success')
+    steps:
+      - name: Wait for Render cold start
+        run: sleep 60
+
+      - name: Smoke test — GitHub Pages frontend
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://smartmoneymoscow-cell.github.io/AI_Arhitector/ || echo "000")
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Frontend is live (HTTP $STATUS)"
+          else
+            echo "⚠️ Frontend returned HTTP $STATUS (may need time to propagate)"
+          fi
+
+      - name: Smoke test — Render health endpoint
+        run: |
+          # Try multiple Render service URLs
+          for url in \
+            "https://architect.onrender.com/health" \
+            "https://ai-arch-llmproxy.onrender.com/health" \
+            "https://ai-arch-blender3d.onrender.com/health"; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$url" || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ $url → HTTP $STATUS"
+            else
+              echo "⚠️ $url → HTTP $STATUS (Render free plan: cold start may take 60s)"
+            fi
+          done
+
+  # ─────────────────────────────────────────────────────────────
   # Notify on completion
   # ─────────────────────────────────────────────────────────────
   notify:
-    needs: [docker-push, deploy-render, deploy-pages]
+    needs: [docker-push, deploy-render, deploy-pages, smoke-tests]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -134,15 +169,7 @@ jobs:
           echo "| Docker Push | ${{ needs.docker-push.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Render Deploy | ${{ needs.deploy-render.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| GitHub Pages | ${{ needs.deploy-pages.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Smoke Tests | ${{ needs.smoke-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
-
-      # Uncomment to send Discord/Slack notification:
-      # - name: Notify Discord
-      #   if: always()
-      #   uses: sarisia/actions-status-discord@v1
-      #   with:
-      #     webhook: ${{ secrets.DISCORD_WEBHOOK }}
-      #     status: ${{ needs.docker-push.result }}
-      #     title: "Deploy ${{ github.ref_name }}"

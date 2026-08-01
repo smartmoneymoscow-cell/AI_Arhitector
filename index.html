@@ -1468,8 +1468,6 @@ function addFurniture(tag,x,yB,z,W,D,fH,grp){
     m.position.set(x+ox,yB+oy,z+oz);m.castShadow=true;grp.add(m);
   };
 
-  const handleColor = 0xaaaaaa; // shared handle color for all room types
-
   if(tag==='l'){
     // ── SOFA (3-seat sectional) ──────────────────────────
     const fc=0x4a5568,frame=0x2d3748,leg=0x8b7355,cushC=0x6b7280;
@@ -1509,7 +1507,7 @@ function addFurniture(tag,x,yB,z,W,D,fH,grp){
 
   }else if(tag==='k'){
     // ── KITCHEN ──────────────────────────────────────────
-    const cab=0xf5f5f0,counter=0xe0d8d0,app=0xd0d0d0;
+    const cab=0xf5f5f0,counter=0xe0d8d0,handle=0xaaaaaa,app=0xd0d0d0;
     // Base cabinets along back wall
     bx(W*.7,.86,.58,cab,-W*.05,.43,-D*.35,.88);
     bx(W*.7,.04,.62,counter,-W*.05,.88,-D*.33,.3);
@@ -1518,12 +1516,12 @@ function addFurniture(tag,x,yB,z,W,D,fH,grp){
     // Cabinet handles (row)
     for(let i=0;i<4;i++){
       const hx=-W*.28+i*(W*.7/4);
-      bx(.08,.015,.015,handleColor,hx,.72,-D*.35+.3,.4,.7);  // lower
-      bx(.08,.015,.015,handleColor,hx,1.74,-D*.4+.165,.4,.7);// upper
+      bx(.08,.015,.015,handle,hx,.72,-D*.35+.3,.4,.7);  // lower
+      bx(.08,.015,.015,handle,hx,1.74,-D*.4+.165,.4,.7);// upper
     }
     // Sink (inset into counter)
     bx(.55,.08,.45,0x9aa0a8,-W*.05,.91,-D*.34,.2,.05);
-    cy(.02,.18,handleColor,-W*.05+.14,.98,-D*.34,8,.4);// tap body
+    cy(.02,.18,handle,-W*.05+.14,.98,-D*.34,8,.4);// tap body
     bx(.32,.01,.08,0x888888,-W*.05+.1,1.08,-D*.34,.3,.8);// tap spout
     // Island / dining table
     bx(W*.5,.04,.8,counter,W*.22,.74,D*.15,.3);
@@ -1537,7 +1535,7 @@ function addFurniture(tag,x,yB,z,W,D,fH,grp){
     // Refrigerator
     bx(.7,1.85,.65,app,W*.35,.92,-D*.3,.3,.05);
     bx(.68,1.82,.01,0x333333,W*.35,.92,-D*.3+.33,.4,.2);
-    bx(.015,.4,.015,handleColor,W*.35-.26,1.2,-D*.3+.34,.4,.6);
+    bx(.015,.4,.015,handle,W*.35-.26,1.2,-D*.3+.34,.4,.6);
     // Microwave on upper shelf
     bx(.5,.32,.35,app,-W*.3,2.28,-D*.38,.3,.05);
     bx(.46,.28,.01,0x111111,-W*.3,2.28,-D*.38+.18,.05);
@@ -1577,12 +1575,13 @@ function addFurniture(tag,x,yB,z,W,D,fH,grp){
     bx(.87,2.16,.02,0xe8e4de,W*.3-.45,1.11,D*.04+.30,.7);
     bx(.87,2.16,.02,0xe8e4de,W*.3+.45,1.11,D*.04+.30,.7);
     // Handles
-    bx(.015,.2,.015,handleColor,W*.3-.03,1.2,D*.04+.32,.4,.7);
-    bx(.015,.2,.015,handleColor,W*.3+.03,1.2,D*.04+.32,.4,.7);
+    bx(.015,.2,.015,handle,W*.3-.03,1.2,D*.04+.32,.4,.7);
+    bx(.015,.2,.015,handle,W*.3+.03,1.2,D*.04+.32,.4,.7);
     // Curtains
     bx(.06,fH*.7,.06,0x9ab0c4,-W*.42,fH*.42,-D*.44,.95);
     bx(.06,fH*.7,.06,0x9ab0c4,-W*.42+.9,fH*.42,-D*.44,.95);
     bx(.9,.06,.06,0x9ab0c4,-W*.42+.45,fH*.75,-D*.44,.9);
+    const handle=0xaaaaaa; // re-scope
 
   }else if(tag==='b'){
     // ── BATHROOM ──────────────────────────────────────────
@@ -2822,6 +2821,64 @@ window.addEventListener('resize',()=>{checkMobile();resizeR();if(ST.hasModel&&ST
 
 
 
+
+// ═══════════════════ VOICE INPUT ═══════════════════════════════
+let recognition = null;
+let isListening = false;
+
+function toggleMic() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showNotif('Голосовой ввод не поддерживается', 'warn');
+    return;
+  }
+
+  const btn = document.getElementById('mic-btn');
+  const inp = document.getElementById('ci');
+
+  if (isListening && recognition) {
+    recognition.stop();
+    return;
+  }
+
+  recognition = new SpeechRecognition();
+  recognition.lang = 'ru-RU';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  recognition.onresult = (event) => {
+    let transcript = '';
+    for (let i = 0; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+    }
+    if (inp) {
+      inp.value = transcript;
+      inp.style.height = 'auto';
+      inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
+    }
+  };
+
+  recognition.onstart = () => {
+    isListening = true;
+    if (btn) { btn.style.background = '#ef4444'; btn.textContent = '⏹'; }
+  };
+
+  recognition.onend = () => {
+    isListening = false;
+    recognition = null;
+    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
+  };
+
+  recognition.onerror = (e) => {
+    console.warn('Voice error:', e.error);
+    isListening = false;
+    recognition = null;
+    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
+    if (e.error === 'not-allowed') showNotif('Разрешите доступ к микрофону', 'warn');
+  };
+
+  recognition.start();
+}
 
 // ═══════════════════ SETTINGS ═══════════════════════════════
 function openSettings(){

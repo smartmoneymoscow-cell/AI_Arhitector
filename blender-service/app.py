@@ -23,18 +23,23 @@ from shared.config import settings
 from shared.models import GenerateRequest, HealthResponse
 from shared.validation import DEFAULT_FURNITURE
 from shared.blender import generate_bpy_script, generate_interior_script, run_blender
+from shared.logging_config import setup_logging
 
+setup_logging("blender-service")
 logger = logging.getLogger("archai.blender")
 
 app = FastAPI(
     title="Architect Blender Service",
     description="Blender CLI: генерация 3D, рендер (до 16K tiled), экспорт",
-    version="6.0.0",
+    version="7.0.0",
 )
+
+_cors_origins = os.environ.get("CORS_ORIGINS", "*")
+_origins_list = [o.strip() for o in _cors_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_origins_list,
     allow_methods=["*"],
     allow_headers=["*"],
 )

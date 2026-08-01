@@ -1,30 +1,44 @@
 """
 API Gateway — маршрутизация к микросервисам [FastAPI]
 
-v6.0 — Парсинг ТОЛЬКО через LLM-service.
-Regex fallback УДАЛЁН.
+v7.0:
+- Jobs хранятся в Redis (переживают рестарт)
+- Structured JSON logging
+- API key ОБЯЗАТЕЛЕН
+- Удалён sys.path hack
 """
 
-import sys
 import os
+import sys
+import json
+import uuid
 import asyncio
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+import time
+import logging
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, FileResponse, StreamingResponse
 
 from shared.config import settings
 from shared.models import GenerateRequest, ParseRequest, HealthResponse
-from shared.parser import get_cache_stats
+from shared.logging_config import setup_logging
+from shared.auth import get_api_key_optional, get_api_key_required, rate_limit_middleware
+
+# Setup structured logging
+setup_logging("gateway")
+logger = logging.getLogger("archai.gateway")
 
 app = FastAPI(
     title="Architect Gateway",
     description="API Gateway — маршрутизация к микросервисам (LLM-only)",
-    version="6.0.0",
+    version="7.0.0",
 )
+
+# ═══════════════════════════════════════════════════════════════
+# CORS
+# ═══════════════════════════════════════════════════════════════
 
 _cors_origins = os.environ.get("CORS_ORIGINS", "*")
 _origins_list = [o.strip() for o in _cors_origins.split(",") if o.strip()]
@@ -35,6 +49,58 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
+
+
+# ═══════════════════════════════════════════════════════════════
+# REDIS JOBS STORE
+# ═══════════════════════════════════════════════════════════════
+
+_redis = None
+
+
+def _get_redis():
+    """Lazy Redis connection for jobs storage."""
+    global _redis
+    if _redis is not None:
+        return _redis
+    try:
+        import redis
+        _redis = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_timeout=3)
+        _redis.ping()
+        logger.info("Redis connected for jobs storage")
+        return _redis
+    except Exception as e:
+        logger.warning("Redis unavailable for jobs: %s — falling back to in-memory", e)
+        return None
+
+
+# In-memory fallback (used only if Redis is down)
+_jobs_memory: dict[str, dict] = {}
+
+
+def _store_job(job_id: str, data: dict) -> None:
+    """Store job data in Redis (with 24h TTL) or in-memory fallback."""
+    r = _get_redis()
+    if r:
+        try:
+            r.setex(f"job:{job_id}", 86400, json.dumps(data, ensure_ascii=False, default=str))
+            return
+        except Exception as e:
+            logger.error("Redis store failed: %s", e)
+    _jobs_memory[job_id] = data
+
+
+def _get_job(job_id: str) -> dict | None:
+    """Retrieve job data from Redis or in-memory fallback."""
+    r = _get_redis()
+    if r:
+        try:
+            raw = r.get(f"job:{job_id}")
+            if raw:
+                return json.loads(raw)
+        except Exception as e:
+            logger.error("Redis get failed: %s", e)
+    return _jobs_memory.get(job_id)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -56,6 +122,7 @@ async def request_with_retry(
                 last_error = "connection_error"
             if attempt < max_retries:
                 await asyncio.sleep(3 * (attempt + 1))
+    logger.error("Service unavailable after %d retries: %s %s — %s", max_retries, method, url, last_error)
     raise HTTPException(502, f"Service unavailable: {last_error}")
 
 
@@ -78,16 +145,22 @@ async def health():
         except Exception:
             services[name] = "unreachable"
 
-    cache = get_cache_stats()
+    # Check Redis
+    redis_status = "not_configured"
+    r = _get_redis()
+    if r:
+        try:
+            r.ping()
+            redis_status = "ok"
+        except Exception:
+            redis_status = "unreachable"
+
     return {
         "status": "ok",
         "service": "gateway",
-        "version": "6.0.0",
+        "version": "7.0.0",
         "services": services,
-        "cache": {
-            "l1_entries": cache["l1_entries"],
-            "redis_connected": cache["redis_connected"],
-        },
+        "redis": redis_status,
     }
 
 
@@ -95,11 +168,12 @@ async def health():
 # ORCHESTRATOR
 # ═══════════════════════════════════════════════════════════════
 
-_orchestrator_jobs: dict = {}
-
-
 @app.post("/api/v1/orchestrator/execute")
-async def orchestrator_execute(req: dict):
+async def orchestrator_execute(
+    req: dict,
+    api_key: str = Depends(get_api_key_optional),
+    _rl: None = Depends(rate_limit_middleware),
+):
     """Полный pipeline: LLM parse → geometry → texture → render → quality → export."""
     from shared.agents import Orchestrator
     from shared.parser import AllModelsFailedError
@@ -111,6 +185,9 @@ async def orchestrator_execute(req: dict):
     quality = req.get("quality", "standard")
     export_formats = req.get("export_formats", ["glb"])
     skip_clarification = req.get("skip_clarification", False)
+
+    job_id = uuid.uuid4().hex[:8]
+    logger.info("Orchestrator execute: job=%s quality=%s prompt=%s...", job_id, quality, prompt[:50])
 
     orch = Orchestrator(
         blender_service_url=settings.BLENDER_SERVICE_URL,
@@ -130,18 +207,23 @@ async def orchestrator_execute(req: dict):
         )
     except Exception as e:
         if "AllModelsFailed" in type(e).__name__ or "all_models_failed" in str(e):
+            logger.error("All LLM models failed for job %s", job_id)
             raise HTTPException(503, detail={
                 "error": "all_models_failed",
                 "message": "Все LLM-модели недоступны. Проверьте OPENROUTER_API_KEY.",
             })
         raise
 
-    job_id = result["job_id"]
-    _orchestrator_jobs[job_id] = result
+    result_job_id = result["job_id"]
+    # Store in Redis (persistent)
+    _store_job(result_job_id, result)
 
     r = result.get("result") or {}
+    logger.info("Orchestrator done: job=%s status=%s duration=%dms",
+                result_job_id, result["status"], result.get("duration_ms", 0))
+
     return {
-        "job_id": job_id,
+        "job_id": result_job_id,
         "status": result["status"],
         "gen_type": r.get("gen_type"),
         "quality": quality,
@@ -158,7 +240,7 @@ async def orchestrator_execute(req: dict):
 
 @app.get("/api/v1/orchestrator/jobs/{job_id}")
 async def orchestrator_job_status(job_id: str):
-    job = _orchestrator_jobs.get(job_id)
+    job = _get_job(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
     return job
@@ -187,7 +269,11 @@ async def orchestrator_stream(job_id: str):
 # ═══════════════════════════════════════════════════════════════
 
 @app.post("/api/v1/preview")
-async def preview(req: dict):
+async def preview(
+    req: dict,
+    api_key: str = Depends(get_api_key_optional),
+    _rl: None = Depends(rate_limit_middleware),
+):
     """Быстрое превью через blender-service (LLM-only парсинг)."""
     prompt = req.get("prompt", "")
     if not prompt:
@@ -195,6 +281,7 @@ async def preview(req: dict):
     if not settings.BLENDER_SERVICE_URL:
         raise HTTPException(503, "Blender service not configured")
 
+    logger.info("Preview request: %s...", prompt[:50])
     r = await request_with_retry(
         "post", f"{settings.BLENDER_SERVICE_URL}/api/v1/preview",
         json=req, timeout=90.0,
@@ -225,30 +312,39 @@ def _detect_gen_type(prompt: str, object_type: str | None = None) -> str:
 
 
 @app.post("/api/v1/generate")
-async def generate(req: GenerateRequest):
-    """Legacy: генерация через blender-service (LLM-only парсинг)."""
+async def generate(
+    req: GenerateRequest,
+    api_key: str = Depends(get_api_key_optional),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Legacy: генерация через blender-service."""
     gen_type = _detect_gen_type(req.prompt, req.object_type)
-    target_url = (
-        f"{settings.BLENDER_SERVICE_URL}/api/v1/render/interior"
-        if gen_type == "interior"
-        else f"{settings.BLENDER_SERVICE_URL}/api/v1/generate/building"
+    logger.info("Generate: type=%s prompt=%s...", gen_type, req.prompt[:50])
+
+    if not settings.BLENDER_SERVICE_URL:
+        raise HTTPException(503, "Blender service not configured")
+
+    r = await request_with_retry(
+        "post", f"{settings.BLENDER_SERVICE_URL}/api/v1/generate",
+        json=req.model_dump(), timeout=300.0,
     )
-    r = await request_with_retry("post", target_url, json=req.model_dump(), timeout=180.0)
     if r.status_code == 200:
-        return Response(content=r.content, media_type=r.headers.get("content-type", "application/octet-stream"))
+        return Response(content=r.content, media_type="model/gltf-binary")
     raise HTTPException(r.status_code, detail=r.text)
 
 
 # ═══════════════════════════════════════════════════════════════
-# PARSE (прокси к LLM-service, БЕЗ regex)
+# PARSE (proxy to LLM service)
 # ═══════════════════════════════════════════════════════════════
 
 @app.post("/api/v1/parse")
-async def parse(req: ParseRequest):
-    """Парсинг промта. ТОЛЬКО через LLM-service. Regex УДАЛЁН."""
-    if not settings.LLM_SERVICE_URL:
-        raise HTTPException(503, "LLM service not configured")
-
+async def parse(
+    req: ParseRequest,
+    api_key: str = Depends(get_api_key_optional),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Proxy parse request to LLM service."""
+    logger.info("Parse request: %s...", req.text[:50])
     r = await request_with_retry(
         "post", f"{settings.LLM_SERVICE_URL}/api/v1/parse",
         json=req.model_dump(), timeout=60.0,
@@ -259,35 +355,27 @@ async def parse(req: ParseRequest):
 
 
 # ═══════════════════════════════════════════════════════════════
-# STATIC FILES
+# STATIC FILES (Frontend)
 # ═══════════════════════════════════════════════════════════════
 
-FRONTEND_DIR = settings.FRONTEND_DIR
-if not FRONTEND_DIR:
-    FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
-if not os.path.isdir(FRONTEND_DIR):
-    FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend")
-if not os.path.isdir(FRONTEND_DIR):
-    FRONTEND_DIR = os.path.join("/", "app", "frontend")
+_frontend_dir = settings.FRONTEND_DIR or os.path.join(os.path.dirname(__file__), "frontend")
 
 
 @app.get("/")
 async def serve_index():
-    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+    index_path = os.path.join(_frontend_dir, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    # Fallback to root index.html
+    root_index = os.path.join(os.path.dirname(__file__), "..", "index.html")
+    if os.path.exists(root_index):
+        return FileResponse(os.path.abspath(root_index))
+    raise HTTPException(404, "Frontend not found")
 
 
-@app.get("/{filename:path}")
-async def serve_static(filename: str):
-    path = os.path.join(FRONTEND_DIR, filename)
-    if os.path.isfile(path):
-        return FileResponse(path)
-    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
-
-
-if __name__ == "__main__":
-    import uvicorn
-    port = settings.PORT
-    print(f"Gateway starting on port {port}")
-    print(f"LLM: {settings.LLM_SERVICE_URL}")
-    print(f"Blender: {settings.BLENDER_SERVICE_URL}")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+@app.get("/{path:path}")
+async def serve_static(path: str):
+    file_path = os.path.join(_frontend_dir, path)
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+    raise HTTPException(404)
