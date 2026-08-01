@@ -22,31 +22,36 @@ import time
 import uuid
 
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
-from shared.agents.brand_agent import BrandAgent
-from shared.agents.compliance_agent import ComplianceAgent
-from shared.agents.concept_agent import ConceptAgent
-from shared.agents.export_agent import ExportAgent
-from shared.agents.financial_agent import FinancialAgent
-from shared.agents.furniture_agent import FurnitureAgent
-from shared.agents.geometry_agent import GeometryAgent
-from shared.agents.landscape_agent import LandscapeAgent
-from shared.agents.lighting_agent import LightingAgent
-from shared.agents.market_agent import MarketAgent
-from shared.agents.masterplan_agent import MasterplanAgent
-from shared.agents.mep_agent import MEPAgent
-from shared.agents.parser_agent import ParserAgent
-from shared.agents.presentation_agent import PresentationAgent
-from shared.agents.quality_agent import QualityAgent
-from shared.agents.render_agent import RenderAgent
 
-# Новые агенты
-from shared.agents.research_agent import ResearchAgent
-from shared.agents.structural_agent import StructuralAgent
-from shared.agents.style_agent import StyleAgent
-from shared.agents.texture_agent import TextureAgent
-from shared.clarification import ClarificationEngine
-from shared.router import route_generation
-from shared.streaming import create_streamer
+# ═══ Lazy imports — only load agents when actually needed ═══
+def _import_agent(name: str):
+    import importlib
+    _map = {
+        "parser": "shared.agents.parser_agent.ParserAgent",
+        "geometry": "shared.agents.geometry_agent.GeometryAgent",
+        "texture": "shared.agents.texture_agent.TextureAgent",
+        "render": "shared.agents.render_agent.RenderAgent",
+        "export": "shared.agents.export_agent.ExportAgent",
+        "quality": "shared.agents.quality_agent.QualityAgent",
+        "research": "shared.agents.research_agent.ResearchAgent",
+        "market": "shared.agents.market_agent.MarketAgent",
+        "concept": "shared.agents.concept_agent.ConceptAgent",
+        "masterplan": "shared.agents.masterplan_agent.MasterplanAgent",
+        "landscape": "shared.agents.landscape_agent.LandscapeAgent",
+        "brand": "shared.agents.brand_agent.BrandAgent",
+        "financial": "shared.agents.financial_agent.FinancialAgent",
+        "presentation": "shared.agents.presentation_agent.PresentationAgent",
+        "style": "shared.agents.style_agent.StyleAgent",
+        "lighting": "shared.agents.lighting_agent.LightingAgent",
+        "furniture": "shared.agents.furniture_agent.FurnitureAgent",
+        "mep": "shared.agents.mep_agent.MEPAgent",
+        "structural": "shared.agents.structural_agent.StructuralAgent",
+        "compliance": "shared.agents.compliance_agent.ComplianceAgent",
+    }
+    path = _map[name]
+    module_path, class_name = path.rsplit(".", 1)
+    module = importlib.import_module(module_path)
+    return getattr(module, class_name)()
 
 logger = logging.getLogger("archai.orchestrator")
 
