@@ -16,6 +16,7 @@ COPY gateway/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY gateway/ .
 COPY frontend/ ./frontend/
+RUN mkdir -p /app/output
 
 EXPOSE ${PORT}
 CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT}"]
