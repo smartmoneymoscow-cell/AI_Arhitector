@@ -128,12 +128,15 @@ def _call_mimo_api_direct(screenshot_path: str, question: str) -> str | None:
     with open(screenshot_path, "rb") as f:
         img_b64 = base64.b64encode(f.read()).decode()
 
+    api_url = os.environ.get("MIMO_API_BASE_URL", "https://api-sgp-oc.xiaomimimo.com/v1")
+    model = os.environ.get("MIMO_OMNI_MODEL", "mimo-v2.5")
+
     try:
         r = httpx.post(
-            "https://api.mimo.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            f"{api_url}/chat/completions",
+            headers={"api-key": api_key, "User-Agent": "architect-ci", "Content-Type": "application/json"},
             json={
-                "model": "mimo-vl",
+                "model": model,
                 "messages": [{"role": "user", "content": [
                     {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}},
                     {"type": "text", "text": question}
