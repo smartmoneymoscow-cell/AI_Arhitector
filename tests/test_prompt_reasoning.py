@@ -650,7 +650,7 @@ def run_dry_test(prompt: str) -> TestReport:
         print("[2/5] Парсинг через LLM (мок)...")
         t0 = time.time()
 
-        from shared.parser import parse_prompt, _validate
+        from shared.parser import parse_prompt_sync as parse_prompt
 
         # Create mock LLM response based on expected
         mock_response = {
@@ -669,10 +669,10 @@ def run_dry_test(prompt: str) -> TestReport:
             "confidence": 0.9,
         }
 
-        def mock_call_llm(text, cfg):
+        async def mock_call_openrouter(model, prompt, timeout, api_key):
             return mock_response
 
-        with patch("shared.parser._call_llm", side_effect=mock_call_llm):
+        with patch("shared.parser._get_api_keys", return_value=["fake-key"]),              patch("shared.parser._call_openrouter", side_effect=mock_call_openrouter):
             parsed = parse_prompt(prompt)
 
         accuracy, mismatches = compare_params(expected, parsed)
