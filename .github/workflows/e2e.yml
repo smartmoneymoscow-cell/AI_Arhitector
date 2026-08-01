@@ -11,7 +11,6 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: staging
     steps:
       - uses: actions/checkout@v4
 
@@ -54,7 +53,7 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         env:
           E2E_BASE_URL: ${{ secrets.STAGING_URL }}
-          E2E_API_KEY: ${{ secrets.STAGING_API_KEY }}
+          E2E_API_KEY: *** secrets.STAGING_API_KEY }}
         run: |
           pytest tests/e2e/test_chat_e2e.py \
             -v \
@@ -78,35 +77,3 @@ jobs:
         with:
           name: e2e-report
           path: e2e-report.html
-
-      - name: Comment on PR with results
-        if: always() && steps.check.outputs.skip != 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            let report = { validations: [] };
-            try {
-              report = JSON.parse(fs.readFileSync('test_screenshots/analysis_report.json', 'utf8'));
-            } catch {}
-            
-            const passed = report.validations.filter(v => v.keyword_match).length;
-            const total = report.validations.length;
-            
-            const body = `## 🧪 E2E Test Results
-            
-            | Metric | Value |
-            |--------|-------|
-            | Prompts tested | ${total} |
-            Keywords matched | ${passed}/${total} |
-            | Screenshots | See artifact |
-            
-            ${passed === total ? '✅ All prompts matched!' : '⚠️ Some prompts did not match expected keywords'}
-            `;
-            
-            github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: body,
-            });
