@@ -174,7 +174,12 @@ async function runTest(tc, browser) {
     }
 
     // Save report
-    const report = { prompt: tc.prompt, name: tc.name, result: r, checks, passed: allOk, timestamp: new Date().toISOString() };
+    const report = { prompt: tc.prompt, name: tc.name, result: r, checks, passed: allOk, timestamp: new Date().toISOString(), screenshots: {
+      loaded: path.join(SCREENSHOTS_DIR, `${tc.name}_01_loaded.png`),
+      typed: path.join(SCREENSHOTS_DIR, `${tc.name}_02_typed.png`),
+      sending: path.join(SCREENSHOTS_DIR, `${tc.name}_03_sending.png`),
+      generated: path.join(SCREENSHOTS_DIR, `${tc.name}_04_generated.png`),
+    }};
     fs.writeFileSync(
       path.join(SCREENSHOTS_DIR, `${tc.name}_report.json`),
       JSON.stringify(report, null, 2)

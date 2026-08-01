@@ -77,7 +77,6 @@ jobs:
       - name: Run E2E browser tests
         continue-on-error: true
         run: |
-          # Try with file:// protocol (no server needed)
           node tests/test_e2e_browser.js "file://$(pwd)/index.html" || true
         env:
           CI: true
@@ -99,7 +98,50 @@ jobs:
           retention-days: 90
 
   # ═══════════════════════════════════════════════════════════
-  # JOB 4: Release gate — blocks release if tests fail
+  # JOB 4: Visual QA — AI analysis of screenshots
+  # ═══════════════════════════════════════════════════════════
+  visual-qa:
+    name: Visual QA (AI Screenshot Analysis)
+    runs-on: ubuntu-latest
+    needs: [e2e-browser]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install httpx
+
+      - name: Download screenshots
+        uses: actions/download-artifact@v4
+        with:
+          name: test-screenshots
+          path: .openclaw/tmp/test_screenshots/
+
+      - name: Run visual QA analysis
+        continue-on-error: true
+        run: |
+          python3 tests/visual_qa.py \
+            --dir .openclaw/tmp/test_screenshots \
+            --prompt "архитектурная 3D-модель" \
+            --type building \
+            --output .openclaw/tmp/test_screenshots/visual_qa_report.json
+        env:
+          MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
+
+      - name: Upload visual QA report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-qa-report
+          path: .openclaw/tmp/test_screenshots/visual_qa_report.json
+          retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 5: Release gate — blocks release if tests fail
   # ═══════════════════════════════════════════════════════════
   release-gate:
     name: Release Gate
