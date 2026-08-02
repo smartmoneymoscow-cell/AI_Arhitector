@@ -2334,7 +2334,10 @@ async function _sendInner(){
           '• reasoning — массив 3-6 шагов: как ты понял запрос, ключевые решения. '+
           '• decomposition — массив этапов генерации: парсинг, геометрия, материалы, рендер и т.д. '+
           '• comparison — массив 2-3 вариантов реализации с плюсами/минусами/ценой. Только если есть реальная развилка. Пустой массив если однозначно. '+
-          '• Ты решаешь ЧТО показывать в reasoning/decomposition/comparison — адаптируй под тип задачи. Для интерьера — про стиль/мебель. Для здания — про материалы/кровлю. Для ландшафта — про растения/рельеф. Для отеля — про номера/инфраструктуру. '+
+          '• clarification — массив уточняющих вопросов. Задавай ЕСЛИ запрос неоднозначен (confidence < 0.7) или критичные параметры не указаны. Не задавай если всё ясно. '+
+          '  Каждый вопрос: {field:"имя_поля", text:"вопрос", options:["вар1","вар2"], visual_options:[{id:"A", title:"Название", description:"описание", pros:["+"], cons:["-"], price_range:"цена", recommended:false}]} '+
+          '  visual_options — для важных решений (материал, кровля, фундамент). options — для простых (этажность, размер). '+
+          '• Ты решаешь ЧТО показывать — адаптируй под тип задачи. Для интерьера — про стиль/мебель. Для здания — про материалы/кровлю. Для ландшафта — про растения/рельеф. Для отеля — про номера/инфраструктуру. '+
           'Только JSON, ничего больше.',
           500);
         const j=JSON.parse(raw.replace(/```json|```/g,'').trim());
@@ -2370,6 +2373,11 @@ async function _sendInner(){
           // ═══ PREMIUM: Dynamic comparison from LLM ═══
           if(j.comparison && j.comparison.length > 1) {
             setTimeout(() => addComparisonCards(j.comparison), 600);
+          }
+          
+          // ═══ PREMIUM: Dynamic clarification questions from LLM ═══
+          if(j.clarification && j.clarification.length > 0) {
+            setTimeout(() => addClarification(j.clarification, j, 0.5), 900);
           }
         }
       }catch(e){console.warn('LLM parse failed:',e.message);}
@@ -2409,6 +2417,11 @@ async function _sendInner(){
       // ═══ PREMIUM: Dynamic comparison from LLM ═══
       if(j.comparison && j.comparison.length > 1) {
         setTimeout(() => addComparisonCards(j.comparison), 600);
+      }
+      
+      // ═══ PREMIUM: Dynamic clarification questions from LLM ═══
+      if(j.clarification && j.clarification.length > 0) {
+        setTimeout(() => addClarification(j.clarification, j, 0.5), 900);
       }
       return;
     }
