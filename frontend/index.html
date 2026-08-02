@@ -176,7 +176,7 @@ body{display:flex;flex-direction:column}
       <div class="ibox">
         <input type="file" id="fileIn" accept="image/*,.pdf" style="display:none" onchange="handleFile(this.files[0])">
         <button class="sbtn" style="background:#475569" onclick="document.getElementById('fileIn').click()" title="Загрузить фото дома или чертёж">📷</button>
-        <textarea class="ita" id="ci" placeholder="Опишите здание или прикрепите фото/чертёж…" rows="3"
+        <textarea class="ita" id="ci" placeholder="Опишите что хотите построить или спроектировать…" rows="3"
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"
           oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
         <button class="sbtn" id="mic-btn" onclick="toggleMic()" style="background:#64748b" title="Голосовой ввод">🎤</button>
@@ -1678,14 +1678,9 @@ function renderGS(ai){
 
 // ═══════════════════ UNIFIED GENERATE WITH FALLBACK (Step 1.4) ═══════════════════
 async function generateWithFallback(prompt, params) {
-  /*
-   * Единая функция генерации.
-   * 1. Пытается /api/v1/generate (unified endpoint)
-   * 2. Fallback на Three.js при недоступности
-   * Возвращает true если сервер сгенерировал, false если использован fallback.
-   */
   const objType = (params && params.object_type) || 'building';
   const isInterior = objType === 'interior' || objType === 'room';
+  const isLandscape = objType === 'landscape';
 
   // Шаг 1: Попробовать сервер
   if(API_BASE) {
@@ -1696,8 +1691,7 @@ async function generateWithFallback(prompt, params) {
       try {
         addThink(['🖥 Запрос к серверу рендеринга…']);
         const ctrl = new AbortController();
-        const tid = setTimeout(()=>ctrl.abort(), 90000); // 90s timeout для Render cold start
-
+        const tid = setTimeout(()=>ctrl.abort(), 90000);
         const r = await fetch(API_BASE + '/api/v1/generate', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
@@ -1705,7 +1699,6 @@ async function generateWithFallback(prompt, params) {
           body: JSON.stringify({prompt: prompt, ...params})
         });
         clearTimeout(tid);
-
         if(r.ok) {
           const ct = r.headers.get('content-type') || '';
           const blob = await r.blob();
@@ -1716,14 +1709,10 @@ async function generateWithFallback(prompt, params) {
               return _showInteriorImage(blob);
             }
           }
-          console.warn('Server returned empty or invalid response');
-        } else {
-          console.warn('Server returned status:', r.status);
         }
       } catch(e) {
         if(e.name === 'AbortError') {
-          console.warn('Server request timed out');
-          addMsg('a', '⚠️ Сервер не ответил за 90 секунд. Использую локальный рендер…');
+          addMsg('a', '⚠️ Сервер не ответил за 90 секунд. Перехожу на локальный рендер…');
         } else {
           console.warn('Server generate failed:', e.message);
         }
@@ -1731,9 +1720,28 @@ async function generateWithFallback(prompt, params) {
     }
   }
 
-  // Шаг 2: Fallback на Three.js
-  addThink(['⚠️ Сервер недоступен, рендерю локально…']);
-  return false;
+  // Шаг 2: Fallback на локальный Three.js
+  addThink(['⚠️ Сервер недоступен, рендерю локально в браузере…']);
+
+  if(isInterior || isLandscape) {
+    // Interior/landscape → локальная генерация через parseLocal + startGen
+    const parsed = parseLocal(prompt);
+    parsed.isInterior = isInterior;
+    if(isInterior) {
+      const ip = parseInteriorParams(prompt);
+      parsed.style = ip.style;
+      parsed.furniture = ip.furniture;
+    }
+    const bld = applyParams(prompt, parsed);
+    startGen(bld);
+    return true;
+  }
+
+  // Building → локальная генерация
+  const parsed = parseLocal(prompt);
+  const bld = applyParams(prompt, parsed);
+  startGen(bld);
+  return true;
 }
 
 async function _loadGLBBlob(blob) {
@@ -2168,32 +2176,21 @@ async function _sendInner(){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🛋 Определяю параметры интерьера…']);
     const ip = parseInteriorParams(text);
     addThink(['✅ Стиль: '+ip.style+' | Мебель: '+ip.furniture.join(', '),'🖥 Генерирую интерьер…']);
-    const ok = await renderInteriorViaServer(text, ip.style, ip.furniture);
-    if(ok) return;
-    // Server unavailable — show error instead of wrong local model
-    addMsg('a', '❌ Сервер рендеринга недоступен. Генерация интерьера требует сервер (Blender). Попробуйте позже.');
-    showNotif('Сервер недоступен','warn');
+    await generateWithFallback(text, {object_type: 'interior', style: ip.style, furniture: ip.furniture});
     return;
   }
 
   // ── LANDSCAPE PATH ───────────────────────────────────
   if(LANDSCAPE_RE.test(text)){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🌳 Планирую ландшафт…']);
-    // Send to server for landscape generation
-    const lOk = await generateWithFallback(text, {object_type: 'landscape'});
-    if(lOk) return;
-    addMsg('a', '❌ Сервер рендеринга недоступен. Ландшафтный дизайн требует серверную генерацию. Попробуйте позже.');
-    showNotif('Сервер недоступен','warn');
+    await generateWithFallback(text, {object_type: 'landscape'});
     return;
   }
 
   // ── CONSTRUCTION PATH ────────────────────────────────
   if(CONSTRUCT_RE.test(text)){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🏗 Анализирую конструкцию…']);
-    const cOk = await generateWithFallback(text, {object_type: 'building'});
-    if(cOk) return;
-    addMsg('a', '❌ Сервер рендеринга недоступен. Генерация конструкций требует сервер. Попробуйте позже.');
-    showNotif('Сервер недоступен','warn');
+    await generateWithFallback(text, {object_type: 'building'});
     return;
   }
 
@@ -2247,30 +2244,24 @@ async function _sendInner(){
       const furnitureMap = {children:['bed','desk','wardrobe','bookshelf'],bedroom:['bed','nightstand','wardrobe','dresser'],living:['sofa','tv','coffee_table','bookshelf'],kitchen:['fridge','stove','table','chairs'],bathroom:['bathtub','sink','toilet','mirror'],study:['desk','chair','bookshelf','lamp'],dining:['table','chairs','sideboard','chandelier']};
       const furniture = furnitureMap[roomType] || furnitureMap.living;
       addThink(['✅ Комната: '+roomType+' | Стиль: '+style,'🖥 Генерирую интерьер…']);
-      const ok = await renderInteriorViaServer(text, style, furniture);
-      if(ok) return;
-      addMsg('a', '❌ Сервер рендеринга недоступен. Генерация интерьера требует сервер. Попробуйте позже.');
-      showNotif('Сервер недоступен','warn');
+      await generateWithFallback(text, {object_type: 'interior', style: style, furniture: furniture});
       return;
     }
 
-    // Step 3: Try Blender server
-    const serverOk = await generateViaBlenderServer(text);
-    if(serverOk) return;
-    
-    // Step 4: Server and LLM both failed — show error
-    addMsg('a', '❌ Сервер рендеринга недоступен, LLM-парсинг не удался. Не могу сгенерировать модель. Попробуйте позже.');
-    showNotif('Сервер недоступен','warn');
+    // Step 3: Try Blender server, fallback to local Three.js
+    addThink(['🖥 Генерирую 3D модель…']);
+    await generateWithFallback(text, {object_type: 'building'});
     return;
   }
-  // General chat — needs backend
-  if(!_backendOk){
-    addMsg('a','Опишите здание (например «дом 2 этажа кирпич 10×12») — сразу сгенерирую 3D.');
+  // General chat — try local generation as last resort
+  const parsed = parseLocal(text);
+  if(parsed && (parsed.type || parsed.width)) {
+    addThink(['📝 Локальный анализ…','🖥 Генерирую 3D модель…']);
+    const bld = applyParams(text, parsed);
+    startGen(bld);
     return;
   }
-  showTyping();
-  try{const r=await callAI('Ты архитектурный ИИ. 2 предл.: '+text,'',250);removeTyping();addMsg('a',r);}
-  catch(e){removeTyping();addMsg('a','Опишите здание — сразу сгенерирую 3D без вопросов.');}
+  addMsg('a','Опишите здание или интерьер — сразу сгенерирую 3D модель.');
 }
 
 // ═══════════════════ VIEWS ════════════════════════════════════
@@ -3272,64 +3263,6 @@ window.addEventListener('resize',()=>{checkMobile();resizeR();if(ST.hasModel&&ST
 
 
 
-
-// ═══════════════════ VOICE INPUT ═══════════════════════════════
-let recognition = null;
-let isListening = false;
-
-function toggleMic() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    showNotif('Голосовой ввод не поддерживается', 'warn');
-    return;
-  }
-
-  const btn = document.getElementById('mic-btn');
-  const inp = document.getElementById('ci');
-
-  if (isListening && recognition) {
-    recognition.stop();
-    return;
-  }
-
-  recognition = new SpeechRecognition();
-  recognition.lang = 'ru-RU';
-  recognition.continuous = true;
-  recognition.interimResults = true;
-
-  recognition.onresult = (event) => {
-    let transcript = '';
-    for (let i = 0; i < event.results.length; i++) {
-      transcript += event.results[i][0].transcript;
-    }
-    if (inp) {
-      inp.value = transcript;
-      inp.style.height = 'auto';
-      inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
-    }
-  };
-
-  recognition.onstart = () => {
-    isListening = true;
-    if (btn) { btn.style.background = '#ef4444'; btn.textContent = '⏹'; }
-  };
-
-  recognition.onend = () => {
-    isListening = false;
-    recognition = null;
-    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
-  };
-
-  recognition.onerror = (e) => {
-    console.warn('Voice error:', e.error);
-    isListening = false;
-    recognition = null;
-    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
-    if (e.error === 'not-allowed') showNotif('Разрешите доступ к микрофону', 'warn');
-  };
-
-  recognition.start();
-}
 
 
 </script>
