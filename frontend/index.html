@@ -2234,16 +2234,64 @@ async function _sendInner(){
     return;
   }
 
-  // ── LANDSCAPE PATH ───────────────────────────────────
+  // ── LANDSCAPE PATH (goes through LLM for premium UX) ──
   if(LANDSCAPE_RE.test(text)){
-    addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🌳 Планирую ландшафт…']);
+    const thinkIdL = addLiveThinking('Анализирую ландшафт...');
+    appendLiveStep(thinkIdL, '🌳', 'Читаю: "'+text.slice(0,60)+'"');
+    appendLiveStep(thinkIdL, '🧠', 'AI анализирует описание участка...');
+    if(_backendOk){
+      try{
+        const rawL=await callAI(text,
+          'Ты — архитектурный AI-ассистент для ландшафтного дизайна. Отвечай СТРОГО валидным JSON (без markdown). '+
+          'Формат: {"type":"landscape","object_type":"landscape","style":"natural|japanese|english|french|minimalist|null",'+
+          '"width":30,"length":40,'+
+          '"reasoning":[{"icon":"🔍","text":"шаг","confidence":0.9}],'+
+          '"decomposition":[{"name":"Этап","description":"что делаем","service":"сервис"}],'+
+          '"comparison":[{"name":"Вариант","emoji":"🌿","description":"описание","pros":["плюс"],"cons":["минус"],"price":"цена","recommended":false}]'+
+          '} '+
+          'Адаптируй reasoning под ландшафт: рельеф, растения, зонирование, освещение. '+
+          'comparison — стили ландшафта (японский, английский, минималистичный и т.д.). '+
+          'Только JSON.', 400);
+        const jL=JSON.parse(rawL.replace(/```json|```/g,'').trim());
+        if(jL.reasoning && jL.reasoning.length>0){
+          const avg=jL.reasoning.reduce((s,r)=>s+(r.confidence||0.8),0)/jL.reasoning.length;
+          addReasoning(jL.reasoning, avg);
+        }
+        if(jL.decomposition && jL.decomposition.length>0) addDecomposition(jL.decomposition);
+        if(jL.comparison && jL.comparison.length>1) setTimeout(()=>addComparisonCards(jL.comparison),600);
+      }catch(e){console.warn('Landscape LLM failed:',e.message);}
+    }
+    appendLiveStep(thinkIdL, '🖥', 'Генерирую ландшафт...');
     await generateWithFallback(text, {object_type: 'landscape'});
     return;
   }
 
-  // ── CONSTRUCTION PATH ────────────────────────────────
+  // ── CONSTRUCTION PATH (premium UX) ──────────────────
   if(CONSTRUCT_RE.test(text)){
-    addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🏗 Анализирую конструкцию…']);
+    const thinkIdC = addLiveThinking('Анализирую конструкцию...');
+    appendLiveStep(thinkIdC, '🏗', 'Читаю: "'+text.slice(0,60)+'"');
+    if(_backendOk){
+      try{
+        const rawC=await callAI(text,
+          'Ты — архитектурный AI-ассистент для конструктивных решений. Отвечай СТРОГО валидным JSON (без markdown). '+
+          'Формат: {"type":"house","object_type":"building","floors":2,"width":10,"length":12,'+
+          '"reasoning":[{"icon":"🔍","text":"шаг","confidence":0.9}],'+
+          '"decomposition":[{"name":"Этап","description":"что делаем","service":"сервис"}],'+
+          '"comparison":[{"name":"Вариант","emoji":"🏗","description":"описание","pros":["плюс"],"cons":["минус"],"price":"цена","recommended":false}]'+
+          '} '+
+          'Адаптируй reasoning под конструкцию: фундамент, каркас, перекрытия, кровля. '+
+          'comparison — типы конструкций (каркасная, монолитная, модульная и т.д.). '+
+          'Только JSON.', 400);
+        const jC=JSON.parse(rawC.replace(/```json|```/g,'').trim());
+        if(jC.reasoning && jC.reasoning.length>0){
+          const avg=jC.reasoning.reduce((s,r)=>s+(r.confidence||0.8),0)/jC.reasoning.length;
+          addReasoning(jC.reasoning, avg);
+        }
+        if(jC.decomposition && jC.decomposition.length>0) addDecomposition(jC.decomposition);
+        if(jC.comparison && jC.comparison.length>1) setTimeout(()=>addComparisonCards(jC.comparison),600);
+      }catch(e){console.warn('Construction LLM failed:',e.message);}
+    }
+    appendLiveStep(thinkIdC, '🖥', 'Генерирую конструкцию...');
     await generateWithFallback(text, {object_type: 'building'});
     return;
   }
@@ -2263,11 +2311,32 @@ async function _sendInner(){
         appendLiveStep(thinkId, '🧠', 'AI анализирует описание через каскад LLM...');
         await new Promise(r => setTimeout(r, 200));
         const raw=await callAI(text,
-          'Ты — парсер архитектурных описаний для 3D-генератора. Отвечай ТОЛЬКО валидным JSON, без markdown. '+
-          'Формат: {"type":"house|office|cottage|villa|hotel|tourism_complex|bathhouse|warehouse|school|apartment|townhouse|interior|room","object_type":"building|interior|room","room_type":"children|bedroom|living|kitchen|bathroom|study|dining|null","style":"classic|modern|minimalist|loft|scandinavian|provence|null","floors":2,"width":10,"length":12,"roof_type":"gabled|flat|hip","facade_material":"brick|wood|glass|plaster|stone","facade_color":null,"has_balcony":false,"has_terrace":false,"has_garage":false} '+
-          'Правила: null = не упомянуто. «база отдыха», «гостиница», «отель», «курорт» → type="hotel". «туристический комплекс», «мастер-план» → type="tourism_complex". «премиальный", "элитный" → facade_material="stone". '+
-          '"64 кв метра" → width=8, length=8. Если пользователь описывает комнату/интерьер (детская, спальня, кухня и т.д.) → type="room", object_type="interior". Только JSON, ничего больше.',
-          300);
+          'Ты — архитектурный AI-ассистент. Анализируешь запрос пользователя и возвращаешь СТРОГО валидный JSON (без markdown). '+
+          'Формат: {'+
+          '"type":"house|office|cottage|villa|hotel|tourism_complex|bathhouse|warehouse|school|apartment|townhouse|interior|room",'+
+          '"object_type":"building|interior|room|landscape",'+
+          '"room_type":"children|bedroom|living|kitchen|bathroom|study|dining|null",'+
+          '"style":"classic|modern|minimalist|loft|scandinavian|provence|hitech|japanese|null",'+
+          '"floors":2,"width":10,"length":12,"roof_type":"gabled|flat|hip",'+
+          '"facade_material":"brick|wood|glass|plaster|stone","facade_color":null,'+
+          '"has_balcony":false,"has_terrace":false,"has_garage":false,'+
+          '"reasoning":[{"icon":"🔍","text":"описание шага","confidence":0.9}],'+
+          '"decomposition":[{"name":"Этап","description":"что делаем","service":"сервис"}],'+
+          '"comparison":[{"name":"Вариант","emoji":"🏗","description":"описание","pros":["плюс"],"cons":["минус"],"price":"цена","recommended":false}]'+
+          '} '+
+          'Правила: '+
+          '• null = не упомянуто. '+
+          '• «база отдыха», «отель», «курорт» → type="hotel". '+
+          '• «премиальный", "элитный" → facade_material="stone". '+
+          '• "64 кв метра" → width=8, length=8. '+
+          '• Описание комнаты/интерьера → type="room", object_type="interior". '+
+          '• Ландшафт/сад/двор → object_type="landscape". '+
+          '• reasoning — массив 3-6 шагов: как ты понял запрос, ключевые решения. '+
+          '• decomposition — массив этапов генерации: парсинг, геометрия, материалы, рендер и т.д. '+
+          '• comparison — массив 2-3 вариантов реализации с плюсами/минусами/ценой. Только если есть реальная развилка. Пустой массив если однозначно. '+
+          '• Ты решаешь ЧТО показывать в reasoning/decomposition/comparison — адаптируй под тип задачи. Для интерьера — про стиль/мебель. Для здания — про материалы/кровлю. Для ландшафта — про растения/рельеф. Для отеля — про номера/инфраструктуру. '+
+          'Только JSON, ничего больше.',
+          500);
         const j=JSON.parse(raw.replace(/```json|```/g,'').trim());
         if(j&&j.type){
           parsed={
@@ -2287,27 +2356,21 @@ async function _sendInner(){
           };
           appendLiveStep(thinkId, '✅', 'Определено: '+parsed.type+(parsed.floors?', '+parsed.floors+' этажей':'')+(parsed.width?', '+parsed.width+'×'+parsed.length+'м':''));
           
-          // ═══ PREMIUM: Show reasoning card ═══
-          const reasonSteps = [
-            {icon:'📖', text:'Прочитал описание: "'+text.slice(0,80)+'"', confidence: 0.95},
-            {icon:'🏗', text:'Тип объекта: '+parsed.type+(parsed.object_type==='interior'?' (интерьер)':' (здание)'), confidence: 0.9},
-            {icon:'📐', text:'Размеры: '+parsed.width+'×'+parsed.length+'м, '+parsed.floors+' этажей', confidence: 0.85},
-            {icon:'🎨', text:'Стиль: '+(parsed.style||'современный')+', материал: '+(parsed.facade_material||'штукатурка'), confidence: 0.8},
-          ];
-          if(parsed.has_balcony) reasonSteps.push({icon:'🏗', text:'Добавлен балкон'});
-          if(parsed.has_terrace) reasonSteps.push({icon:'🌿', text:'Добавлена терраса'});
-          if(parsed.has_garage) reasonSteps.push({icon:'🚗', text:'Добавлен гараж'});
-          addReasoning(reasonSteps, 0.85);
+          // ═══ PREMIUM: Dynamic reasoning from LLM ═══
+          if(j.reasoning && j.reasoning.length > 0) {
+            const avgConf = j.reasoning.reduce((s,r) => s + (r.confidence||0.8), 0) / j.reasoning.length;
+            addReasoning(j.reasoning, avgConf);
+          }
           
-          // ═══ PREMIUM: Show decomposition ═══
-          addDecomposition([
-            {name:'Парсинг промта', description:'LLM извлекает параметры', service:'LLM'},
-            {name:'Генерация геометрии', description:'Стены, крыша, окна, двери', service:'Geometry'},
-            {name:'Материалы и текстуры', description:parsed.facade_material||'штукатурка', service:'Texture'},
-            {name:'Освещение', description:'HDRI + искусственный свет', service:'Lighting'},
-            {name:'Рендер', description:'4K EEVEE / 16K Cycles', service:'Blender'},
-            {name:'Экспорт', description:'GLB + IFC + SVG планы', service:'Export'},
-          ]);
+          // ═══ PREMIUM: Dynamic decomposition from LLM ═══
+          if(j.decomposition && j.decomposition.length > 0) {
+            addDecomposition(j.decomposition);
+          }
+          
+          // ═══ PREMIUM: Dynamic comparison from LLM ═══
+          if(j.comparison && j.comparison.length > 1) {
+            setTimeout(() => addComparisonCards(j.comparison), 600);
+          }
         }
       }catch(e){console.warn('LLM parse failed:',e.message);}
     }
@@ -2329,47 +2392,24 @@ async function _sendInner(){
       appendLiveStep(thinkId, '🎨', 'Стиль: '+style);
       appendLiveStep(thinkId, '🪑', 'Мебель: '+furniture.join(', '));
       
-      // ═══ PREMIUM: Interior reasoning ═══
-      addReasoning([
-        {icon:'📖', text:'Прочитал: "'+text.slice(0,80)+'"', confidence:0.95},
-        {icon:'🏠', text:'Помещение: '+(roomNames[roomType]||roomType), confidence:0.9},
-        {icon:'🎨', text:'Стиль интерьера: '+style, confidence:0.85},
-        {icon:'🪑', text:'Мебель: '+furniture.length+' предметов', confidence:0.8},
-        {icon:'📐', text:'Планировка и расстановка мебели', confidence:0.75},
-      ], 0.85);
+      // ═══ PREMIUM: Dynamic reasoning from LLM ═══
+      if(j.reasoning && j.reasoning.length > 0) {
+        const avgConf = j.reasoning.reduce((s,r) => s + (r.confidence||0.8), 0) / j.reasoning.length;
+        addReasoning(j.reasoning, avgConf);
+      }
       
-      // ═══ PREMIUM: Interior decomposition ═══
-      addDecomposition([
-        {name:'Анализ стиля', description:style, service:'Style'},
-        {name:'Планировка', description:'Расстановка стен и проёмов', service:'Geometry'},
-        {name:'Мебель', description:furniture.join(', '), service:'Furniture'},
-        {name:'Материалы', description:'Пол, стены, потолок', service:'Texture'},
-        {name:'Освещение', description:'Естественное + искусственное', service:'Lighting'},
-        {name:'Рендер', description:'4K EEVEE интерьер', service:'Blender'},
-      ]);
+      // ═══ PREMIUM: Dynamic decomposition from LLM ═══
+      if(j.decomposition && j.decomposition.length > 0) {
+        addDecomposition(j.decomposition);
+      }
       
       appendLiveStep(thinkId, '🖥', 'Генерирую 3D интерьер...');
       await generateWithFallback(text, {object_type: 'interior', style: style, furniture: furniture});
       
-      // ═══ PREMIUM: Interior style comparison ═══
-      setTimeout(()=>{
-        const styleOptions = {
-          modern:{emoji:'🏢',name:'Современный',desc:'Чистые линии, минимализм',pros:['Универсальный','Легко ухаживать'],cons:['Может быть холодным'],price:'Средний бюджет'},
-          loft:{emoji:'🏭',name:'Лофт',desc:'Кирпич, металл, открытые коммуникации',pros:['Стильно','Просторно'],cons:['Шумно','Холодно зимой'],price:'Выше среднего'},
-          scandinavian:{emoji:'🌲',name:'Скандинавский',desc:'Светлое дерево, белые стены',pros:['Уютно','Светло'],cons:['Мало цвета'],price:'Средний'},
-          minimalist:{emoji:'⬜',name:'Минимализм',desc:'Максимум пространства',pros:['Легко убирать','Спокойно'],cons:['Пустовато для некоторых'],price:'Низкий'},
-          classic:{emoji:'🏛',name:'Классический',desc:'Дерево, лепнина, ткани',pros:['Престижно','Тепло'],cons:['Дорого','Сложный уход'],price:'Высокий'},
-        };
-        const current = styleOptions[style] || styleOptions.modern;
-        const others = Object.entries(styleOptions)
-          .filter(([k]) => k !== style)
-          .slice(0, 2)
-          .map(([k, v]) => ({...v, recommended: false}));
-        addComparisonCards([
-          {...current, recommended: true},
-          ...others,
-        ]);
-      }, 600);
+      // ═══ PREMIUM: Dynamic comparison from LLM ═══
+      if(j.comparison && j.comparison.length > 1) {
+        setTimeout(() => addComparisonCards(j.comparison), 600);
+      }
       return;
     }
 
