@@ -137,7 +137,8 @@ def _store_job(job_id: str, data: dict) -> None:
             return
         except Exception as e:
             logger.error("Redis store failed: %s", e)
-    raise HTTPException(503, "Cannot store job — Redis unavailable")
+    # Fallback: in-memory (survives within same process)
+    _jobs_memory[job_id] = data
 
 
 def _get_job(job_id: str) -> dict | None:
