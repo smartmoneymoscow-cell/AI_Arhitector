@@ -27,14 +27,13 @@
 
 ## Таблица аккаунтов
 
-| # | Название сервиса | URL | Переменная ключа | Что работает | План | Статус |
-|---|-----------------|-----|------------------|--------------|------|--------|
-| 1 | Gateway | `https://______.onrender.com` | `ARCH_API_KEYS` | API Gateway, frontend, оркестрация, Redis | starter | ⬜ Не заполнено |
-| 1 | Redis | `redis://red-______:6379` | — | Кеш LLM, Celery broker | starter | ⬜ Не заполнено |
-| 2 | LLM Service | `https://______.onrender.com` | `OPENROUTER_API_KEY` | Парсинг промтов через каскад 7 LLM | starter | ❌ Не отвечает |
+| # | Аккаунт | URL сервисов | Ключи | Что работает | План | Статус |
+|---|---------|-------------|-------|--------------|------|--------|
+| 1 | Gateway + Redis | `https://______.onrender.com` + `redis://red-______:6379` | `ARCH_API_KEYS` | API Gateway, frontend, оркестрация, Redis кеш | starter | ⬜ Не заполнено |
+| 2 | LLM Service | `https://______.onrender.com` | `OPENROUTER_API_KEY` | Парсинг промтов через каскад 7 LLM, Redis кеш | starter | ❌ Не отвечает |
 | 3 | Blender #1 | `https://ai-arch-blender3d.onrender.com` | — | EEVEE 4K рендер, превью, экспорт GLB | standard | ✅ Живой |
-| 4 | Blender #2 | `https://______.onrender.com` | — | EEVEE 4K рендер (параллельный) | starter | ⬜ Не заполнено |
-| 5 | Blender #3 | `https://______.onrender.com` | — | Tiled Cycles 16K рендер | starter | ⬜ Не заполнено |
+| 4 | Blender #2 | `https://______.onrender.com` | — | EEVEE 4K рендер (параллельный, failover) | starter | ⬜ Не заполнено |
+| 5 | Blender #3 | `https://______.onrender.com` | — | Tiled Cycles 16K рендер (тяжёлый) | starter | ⬜ Не заполнено |
 
 ## Как заполнить
 
