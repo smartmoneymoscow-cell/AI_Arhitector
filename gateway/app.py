@@ -56,35 +56,40 @@ async def global_exception_handler(request, exc):
 
 
 # ═══════════════════════════════════════════════════════════════
-# RETRY with circuit breaker
+# BLENDER LOAD BALANCER — multiple instances
 # ═══════════════════════════════════════════════════════════════
 
-_circuit_state: dict[str, dict] = {}
+def _get_blender_urls() -> list[str]:
+    """Get all Blender service URLs (primary + secondary instances)."""
+    urls = []
+    primary = settings.BLENDER_SERVICE_URL
+    if primary:
+        urls.append(primary)
+    # Additional instances from env
+    for i in range(2, 6):
+        url = os.environ.get(f"BLENDER_SERVICE_URL_{i}", "")
+        if url and url not in urls:
+            urls.append(url)
+    return urls
 
+_blender_rr_index = 0  # round-robin counter
 
-def _check_circuit(service: str) -> bool:
-    """Returns True if circuit is OPEN (service unavailable)."""
-    state = _circuit_state.get(service, {"failures": 0, "last_failure": 0})
-    if state["failures"] >= 5:
-        import time
+def _next_blender_url() -> str:
+    """Get next Blender URL using round-robin with circuit breaker."""
+    global _blender_rr_index
+    urls = _get_blender_urls()
+    if not urls:
+        return ""
 
-        if time.time() - state["last_failure"] < 60:  # 60s cooldown
-            return True
-        # Half-open: allow one retry
-        state["failures"] = 3
-    return False
+    # Filter out circuits that are open
+    available = [u for u in urls if not _check_circuit(u)]
+    if not available:
+        # All circuits open — try primary anyway
+        return urls[0]
 
-
-def _record_failure(service: str):
-    import time
-
-    state = _circuit_state.setdefault(service, {"failures": 0, "last_failure": 0})
-    state["failures"] += 1
-    state["last_failure"] = time.time()
-
-
-def _record_success(service: str):
-    _circuit_state[service] = {"failures": 0, "last_failure": 0}
+    url = available[_blender_rr_index % len(available)]
+    _blender_rr_index += 1
+    return url
 
 
 async def request_with_retry(
@@ -94,7 +99,7 @@ async def request_with_retry(
     timeout: float = 120,
     **kwargs,
 ) -> httpx.Response:
-    service = "llm" if ":8081" in url else "blender" if ":8082" in url else "unknown"
+    service = "llm" if ":8081" in url or "llm" in url else "blender" if "blender" in url else "unknown"
 
     if _check_circuit(service):
         raise HTTPException(503, f"Service {service} circuit breaker OPEN — try again later")
@@ -116,6 +121,34 @@ async def request_with_retry(
     _record_failure(service)
     logger.error("Service unavailable after %d retries: %s %s — %s", max_retries, method, url, last_error)
     raise HTTPException(502, f"Service {service} unavailable: {last_error}")
+
+
+async def blender_request_with_fallback(
+    method: str,
+    path: str,
+    max_retries: int = 2,
+    timeout: float = 120,
+    **kwargs,
+) -> httpx.Response:
+    """Try Blender request with failover across multiple instances."""
+    urls = _get_blender_urls()
+    if not urls:
+        raise HTTPException(503, "No Blender service configured")
+
+    last_error = None
+    for url in urls:
+        if _check_circuit(url):
+            continue
+        try:
+            result = await request_with_retry(method, f"{url}{path}", max_retries=1, timeout=timeout, **kwargs)
+            _record_success(url)
+            return result
+        except (HTTPException, Exception) as e:
+            last_error = str(e)
+            _record_failure(url)
+            logger.warning("Blender %s failed: %s, trying next", url, last_error[:100])
+
+    raise HTTPException(502, f"All Blender instances failed: {last_error}")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -177,10 +210,22 @@ def _get_job(job_id: str) -> dict | None:
 @app.get("/api/v1/health")
 async def health():
     services = {}
-    for name, url in {"llm": settings.LLM_SERVICE_URL, "blender": settings.BLENDER_SERVICE_URL}.items():
-        if not url:
-            services[name] = "not_configured"
-            continue
+    # LLM service
+    llm_url = settings.LLM_SERVICE_URL
+    if llm_url:
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(f"{llm_url}/health", timeout=15.0)
+                services["llm"] = "ok" if r.status_code == 200 else "error"
+        except Exception:
+            services["llm"] = "unreachable"
+    else:
+        services["llm"] = "not_configured"
+
+    # Blender instances (all)
+    blender_urls = _get_blender_urls()
+    for i, url in enumerate(blender_urls):
+        name = "blender" if i == 0 else f"blender_{i+1}"
         try:
             async with httpx.AsyncClient() as client:
                 r = await client.get(f"{url}/health", timeout=15.0)
@@ -200,9 +245,10 @@ async def health():
     return {
         "status": "ok",
         "service": "gateway",
-        "version": "8.0.0",
+        "version": "8.1.0",
         "services": services,
         "redis": redis_status,
+        "blender_instances": len(blender_urls),
     }
 
 
@@ -242,10 +288,9 @@ async def generate_proxy(
     api_key: str = Depends(get_api_key_required),
     _rl: None = Depends(rate_limit_middleware),
 ):
-    """Proxy generate request to Blender Service."""
-    r = await request_with_retry(
-        "post",
-        f"{settings.BLENDER_SERVICE_URL}/api/v1/generate",
+    """Proxy generate request to Blender Service (with failover)."""
+    r = await blender_request_with_fallback(
+        "post", "/api/v1/generate",
         json=req,
         timeout=300,
     )
@@ -253,7 +298,7 @@ async def generate_proxy(
 
 
 # ═══════════════════════════════════════════════════════════════
-# PREVIEW → routes to Blender Service
+# PREVIEW → routes to Blender Service (with failover)
 # ═══════════════════════════════════════════════════════════════
 
 
@@ -263,10 +308,9 @@ async def preview_proxy(
     api_key: str = Depends(get_api_key_required),
     _rl: None = Depends(rate_limit_middleware),
 ):
-    """Proxy preview request to Blender Service."""
-    r = await request_with_retry(
-        "post",
-        f"{settings.BLENDER_SERVICE_URL}/api/v1/preview",
+    """Proxy preview request to Blender Service (with failover)."""
+    r = await blender_request_with_fallback(
+        "post", "/api/v1/preview",
         json=req,
         timeout=120,
     )
