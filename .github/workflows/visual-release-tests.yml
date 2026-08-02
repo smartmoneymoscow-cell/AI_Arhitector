@@ -182,11 +182,17 @@ jobs:
           pip install playwright pytest-playwright
           playwright install chromium --with-deps
 
+      - name: Start local HTTP server
+        run: |
+          python3 -m http.server 8765 &
+          sleep 2
+          curl -s http://localhost:8765/ | head -5
+
       - name: Run visual tests (local file)
         run: |
           python3 -m pytest tests/test_visual_release.py -v --tb=short -k "not APIEndpoints" 2>&1 | tail -40
         env:
-          GATEWAY_URL: http://localhost:8080
+          GATEWAY_URL: http://localhost:8765
           API_KEY: test-key
           SCREENSHOT_DIR: .openclaw/tmp/test_screenshots
         continue-on-error: true
