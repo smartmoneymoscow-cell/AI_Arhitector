@@ -1,0 +1,564 @@
+<!-- 
+  ═══════════════════════════════════════════════════════════════
+  COMPLIANCE PANEL — Панель проверки нормативов для AI_Arhitector
+  
+  Встраивается в frontend/index.html
+  
+  Использование:
+    1. Добавить HTML блок #compliance-panel внутрь .props-panel
+    2. Добавить вкладку "Нормативы" в .vtabs
+    3. Добавить JS-функцию renderCompliance(data) в <script>
+  
+  Данные приходят из orchestrator response:
+    response.agent_results.compliance → ComplianceResult
+    response.agent_results.structural_analysis → StructuralResult
+    response.agent_results.foundation → FoundationResult
+    response.agent_results.seismic → SeismicResult
+  ═══════════════════════════════════════════════════════════════
+-->
+
+<!-- ═══ CSS ═══ -->
+<style>
+/* Compliance Panel */
+.compliance-panel {
+  padding: 12px;
+  overflow-y: auto;
+  flex: 1;
+  display: none;
+}
+.compliance-panel.show { display: flex; flex-direction: column; gap: 10px; }
+
+/* Score Card */
+.compliance-score {
+  background: var(--surface);
+  border: 1px solid var(--bdr);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+}
+.score-ring {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 10px;
+  position: relative;
+}
+.score-ring svg { transform: rotate(-90deg); }
+.score-ring-bg { fill: none; stroke: var(--bg4); stroke-width: 6; }
+.score-ring-fill { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 0.8s ease; }
+.score-ring-fill.ok { stroke: var(--ok); }
+.score-ring-fill.warn { stroke: var(--warn); }
+.score-ring-fill.err { stroke: var(--err); }
+.score-value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--txt);
+}
+.score-label { font-size: 11px; color: var(--txt3); margin-top: 4px; }
+
+/* Overall Status */
+.compliance-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+.compliance-status.passed {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: var(--ok);
+}
+.compliance-status.failed {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--err);
+}
+
+/* Category Cards */
+.category-card {
+  background: var(--surface);
+  border: 1px solid var(--bdr);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.category-header:hover { background: var(--bg3); }
+.category-header h4 {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--txt);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  border: none;
+  padding: 0;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.category-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 9px;
+  font-weight: 700;
+}
+.category-badge.ok { background: rgba(34,197,94,0.15); color: var(--ok); }
+.category-badge.warn { background: rgba(245,158,11,0.15); color: var(--warn); }
+.category-badge.err { background: rgba(239,68,68,0.15); color: var(--err); }
+.category-badge.skip { background: rgba(113,113,122,0.15); color: var(--txt3); }
+
+.category-body {
+  display: none;
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--bdr);
+}
+.category-body.open { display: block; }
+
+/* Check Items */
+.check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(46,46,53,0.5);
+  font-size: 11px;
+}
+.check-item:last-child { border-bottom: none; }
+.check-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.check-icon.pass { background: rgba(34,197,94,0.2); color: var(--ok); }
+.check-icon.fail { background: rgba(239,68,68,0.2); color: var(--err); }
+.check-icon.info { background: rgba(139,92,246,0.2); color: var(--acc2); }
+.check-text { color: var(--txt2); line-height: 1.4; }
+.check-fix {
+  display: block;
+  font-size: 10px;
+  color: var(--acc2);
+  margin-top: 2px;
+  padding-left: 24px;
+}
+.check-norm {
+  display: inline-block;
+  font-size: 9px;
+  color: var(--txt3);
+  background: var(--bg4);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+
+/* Structural Section */
+.structural-section {
+  background: var(--surface);
+  border: 1px solid var(--bdr);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+.structural-section h4 {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--txt3);
+  margin-bottom: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--bdr);
+}
+.struct-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.struct-key { color: var(--txt3); }
+.struct-val { color: var(--txt); font-weight: 500; }
+.struct-val.ok { color: var(--ok); }
+.struct-val.err { color: var(--err); }
+
+/* Norms List */
+.norms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.norm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg3);
+  border-radius: 6px;
+  font-size: 11px;
+}
+.norm-code {
+  font-weight: 600;
+  color: var(--acc2);
+  white-space: nowrap;
+}
+.norm-name {
+  color: var(--txt2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Action Plan */
+.action-plan {
+  background: linear-gradient(135deg, rgba(139,92,246,0.05), rgba(99,102,241,0.05));
+  border: 1px solid rgba(139,92,246,0.2);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+.action-plan h4 {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--acc2);
+  margin-bottom: 8px;
+}
+.action-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 11px;
+  color: var(--txt2);
+  line-height: 1.4;
+}
+.action-icon { flex-shrink: 0; margin-top: 1px; }
+</style>
+
+<!-- ═══ HTML: Вкладка в .vtabs ═══ -->
+<!--
+Добавить внутрь <div class="vtabs">:
+  <button class="vtab" data-tab="compliance" onclick="switchTab('compliance')">📋 Нормативы</button>
+-->
+
+<!-- ═══ HTML: Панель (встраивается в .viewer или .props-panel) ═══ -->
+<div id="compliance-panel" class="compliance-panel">
+  
+  <!-- Оценка -->
+  <div class="compliance-score">
+    <div class="score-ring">
+      <svg viewBox="0 0 36 36" width="80" height="80">
+        <circle class="score-ring-bg" cx="18" cy="18" r="15.5"/>
+        <circle id="score-arc" class="score-ring-fill ok" cx="18" cy="18" r="15.5"
+                stroke-dasharray="97.4" stroke-dashoffset="97.4"/>
+      </svg>
+      <div id="score-value" class="score-value">—</div>
+    </div>
+    <div id="score-label" class="score-label">Оценка соответствия</div>
+    <div id="compliance-status" class="compliance-status passed" style="display:none">
+      <span>✓</span> <span id="status-text">Все проверки пройдены</span>
+    </div>
+  </div>
+
+  <!-- Применённые нормативы -->
+  <div class="category-card" id="norms-card" style="display:none">
+    <div class="category-header" onclick="toggleCategory(this)">
+      <h4>📖 Применённые нормативы</h4>
+      <span id="norms-count" class="category-badge ok">0</span>
+    </div>
+    <div class="category-body">
+      <div id="norms-list" class="norms-list"></div>
+    </div>
+  </div>
+
+  <!-- Конструктивные решения -->
+  <div class="structural-section" id="structural-section" style="display:none">
+    <h4>🔧 Конструктивные решения</h4>
+    <div id="structural-details"></div>
+  </div>
+
+  <!-- Категории проверок -->
+  <div id="categories-container"></div>
+
+  <!-- План мероприятий -->
+  <div class="action-plan" id="action-plan" style="display:none">
+    <h4>📝 План мероприятий</h4>
+    <div id="action-list"></div>
+  </div>
+</div>
+
+<!-- ═══ JavaScript ═══ -->
+<script>
+/**
+ * Рендер результатов compliance в UI.
+ * Вызывается после получения response от /api/v1/orchestrator/execute
+ * 
+ * @param {Object} data - response.agent_results или весь response
+ */
+function renderCompliance(data) {
+  // Извлекаем данные из разных агентов
+  const compliance = data.compliance || data;
+  const structural = data.structural_analysis || {};
+  const foundation = data.foundation || {};
+  const seismic = data.seismic || {};
+
+  // ── Оценка ──
+  const score = Math.round((compliance.overall_score || compliance.score || 0) * 100);
+  const passed = compliance.overall_passed !== undefined ? compliance.overall_passed : compliance.passed;
+  
+  document.getElementById('score-value').textContent = score + '%';
+  
+  // Цвет кольца
+  const arc = document.getElementById('score-arc');
+  const circumference = 97.4; // 2π × 15.5
+  const offset = circumference - (circumference * score / 100);
+  arc.style.strokeDashoffset = offset;
+  arc.className.baseVal = 'score-ring-fill ' + (score >= 80 ? 'ok' : score >= 60 ? 'warn' : 'err');
+
+  // Статус
+  const statusEl = document.getElementById('compliance-status');
+  const statusText = document.getElementById('status-text');
+  statusEl.style.display = 'flex';
+  if (passed) {
+    statusEl.className = 'compliance-status passed';
+    statusText.textContent = '✅ Все проверки пройдены';
+  } else {
+    statusEl.className = 'compliance-status failed';
+    statusText.textContent = '⚠️ Есть нарушения';
+  }
+
+  // ── Нормативы ──
+  const norms = compliance.applicable_norms || [];
+  if (norms.length > 0) {
+    document.getElementById('norms-card').style.display = 'block';
+    document.getElementById('norms-count').textContent = norms.length;
+    const list = document.getElementById('norms-list');
+    list.innerHTML = norms.map(n => `
+      <div class="norm-item">
+        <span class="norm-code">${n.code || ''}</span>
+        <span class="norm-name">${n.full_name || n.name || ''}</span>
+      </div>
+    `).join('');
+  }
+
+  // ── Конструктивные решения ──
+  const structData = structural.checks || structural;
+  const hasStructural = Object.keys(structData).length > 0 || 
+                         compliance.structural || foundation.summary || seismic.summary;
+  
+  if (hasStructural) {
+    document.getElementById('structural-section').style.display = 'block';
+    const details = document.getElementById('structural-details');
+    let html = '';
+
+    // Из compliance
+    if (compliance.structural) {
+      const s = compliance.structural;
+      html += `<div class="struct-row"><span class="struct-key">Конструкции</span><span class="struct-val ${s.passed ? 'ok' : 'err'}">${s.score}%</span></div>`;
+    }
+
+    // Из foundation
+    if (foundation.summary) {
+      html += `<div class="struct-row"><span class="struct-key">Основание</span><span class="struct-val">${foundation.summary.foundation_type || '—'}</span></div>`;
+      html += `<div class="struct-row"><span class="struct-key">Грунт</span><span class="struct-val">Категория ${foundation.summary.soil_type || '—'}</span></div>`;
+      html += `<div class="struct-row"><span class="struct-key">R грунта</span><span class="struct-val">${foundation.summary.R_kPa || '—'} кПа</span></div>`;
+    }
+
+    // Из seismic
+    if (seismic.summary) {
+      html += `<div class="struct-row"><span class="struct-key">Сейсмика</span><span class="struct-val">${seismic.summary.seismic_zone || '—'} баллов</span></div>`;
+      html += `<div class="struct-row"><span class="struct-key">Сейсм. сила</span><span class="struct-val">${seismic.summary.seismic_force_kN || '—'} кН</span></div>`;
+    }
+
+    // Из load combinations
+    if (structData.load_combinations) {
+      const lc = structData.load_combinations;
+      html += `<div class="struct-row"><span class="struct-key">Нагрузка ППУ</span><span class="struct-val">${lc.total_with_snow_wind_kN || '—'} кН</span></div>`;
+    }
+
+    // Из beam check
+    if (structData.beam_bending) {
+      html += `<div class="struct-row"><span class="struct-key">M_Rd балки</span><span class="struct-val">${structData.beam_bending.M_Rd_kNm || '—'} кН·м</span></div>`;
+    }
+
+    // Из deflection
+    if (structData.deflection) {
+      const d = structData.deflection;
+      html += `<div class="struct-row"><span class="struct-key">Прогиб</span><span class="struct-val ${d.passed ? 'ok' : 'err'}">${d.delta_actual_mm}мм ≤ ${d.delta_limit_mm}мм</span></div>`;
+    }
+
+    details.innerHTML = html;
+  }
+
+  // ── Категории проверок ──
+  const categories = {
+    structural: { icon: '🏗', name: 'Конструкции', checks: [] },
+    fire: { icon: '🔥', name: 'Пожарная безопасность', checks: [] },
+    layout: { icon: '📐', name: 'Планировка', checks: [] },
+    energy: { icon: '⚡', name: 'Энергоэффективность', checks: [] },
+    accessibility: { icon: '♿', name: 'Доступность', checks: [] },
+    mep: { icon: '🔧', name: 'Инженерные системы', checks: [] },
+    roof: { icon: '🏠', name: 'Кровля', checks: [] },
+  };
+
+  // Собираем все issues/warnings
+  const issues = compliance.issues || [];
+  const warnings = compliance.warnings || [];
+  
+  [...issues, ...warnings].forEach(item => {
+    const cat = categories[item.category] || categories.structural;
+    cat.checks.push(item);
+  });
+
+  // Добавляем checks от других агентов
+  if (compliance.fire_safety) {
+    (compliance.fire_safety.checks || []).forEach(c => {
+      if (typeof c === 'string') categories.fire.checks.push({ message: c, severity: 'info' });
+    });
+  }
+  if (compliance.accessibility) {
+    (compliance.accessibility.checks || []).forEach(c => {
+      if (typeof c === 'string') categories.accessibility.checks.push({ message: c, severity: 'info' });
+    });
+  }
+  if (compliance.energy_efficiency) {
+    (compliance.energy_efficiency.checks || []).forEach(c => {
+      if (typeof c === 'string') categories.energy.checks.push({ message: c, severity: 'info' });
+    });
+  }
+
+  const container = document.getElementById('categories-container');
+  container.innerHTML = '';
+
+  Object.entries(categories).forEach(([key, cat]) => {
+    if (cat.checks.length === 0) return;
+
+    const hasErrors = cat.checks.some(c => c.severity === 'error');
+    const hasWarnings = cat.checks.some(c => c.severity === 'warning');
+    const badgeClass = hasErrors ? 'err' : hasWarnings ? 'warn' : 'ok';
+    const badgeText = hasErrors ? '✗' : hasWarnings ? '⚠' : '✓';
+
+    const card = document.createElement('div');
+    card.className = 'category-card';
+    card.innerHTML = `
+      <div class="category-header" onclick="toggleCategory(this)">
+        <h4>${cat.icon} ${cat.name} <span style="font-weight:400;color:var(--txt3)">(${cat.checks.length})</span></h4>
+        <span class="category-badge ${badgeClass}">${badgeText}</span>
+      </div>
+      <div class="category-body">
+        ${cat.checks.map(c => {
+          const iconClass = c.severity === 'error' ? 'fail' : c.severity === 'warning' ? 'info' : 'pass';
+          const icon = c.severity === 'error' ? '✗' : c.severity === 'warning' ? '!' : '✓';
+          return `
+            <div class="check-item">
+              <span class="check-icon ${iconClass}">${icon}</span>
+              <div>
+                <span class="check-text">${c.message || ''}</span>
+                ${c.standard ? `<span class="check-norm">${c.standard}</span>` : ''}
+                ${c.fix ? `<span class="check-fix">→ ${c.fix}</span>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+    container.appendChild(card);
+  });
+
+  // ── План мероприятий ──
+  if (compliance.action_plan && compliance.action_plan.length > 0) {
+    document.getElementById('action-plan').style.display = 'block';
+    document.getElementById('action-list').innerHTML = compliance.action_plan.map(a => `
+      <div class="action-item">
+        <span class="action-icon">${a.startsWith('✅') ? '✓' : '→'}</span>
+        <span>${a}</span>
+      </div>
+    `).join('');
+  }
+
+  // Показываем панель
+  document.getElementById('compliance-panel').style.display = 'flex';
+}
+
+/**
+ * Переключение раскрытия категории
+ */
+function toggleCategory(header) {
+  const body = header.nextElementSibling;
+  body.classList.toggle('open');
+}
+
+/**
+ * Переключение вкладок (добавить 'compliance' в switchTab)
+ */
+// В существующую функцию switchTab добавить:
+// case 'compliance':
+//   document.getElementById('compliance-panel').classList.add('show');
+//   document.getElementById('compliance-panel').style.display = 'flex';
+//   break;
+
+/**
+ * Интеграция с orchestrator response.
+ * Вызвать после получения ответа от /api/v1/orchestrator/execute
+ */
+function handleOrchestratorResponse(response) {
+  // ... существующий код обработки ...
+  
+  // Новый блок: рендер compliance
+  if (response.agent_results) {
+    renderCompliance(response.agent_results);
+  }
+}
+
+// ═══ Пример данных для тестирования ═══
+const EXAMPLE_COMPLIANCE = {
+  overall_passed: false,
+  overall_score: 0.58,
+  structural: { passed: true, score: 85, checks: ["✅ Класс бетона: B30", "✅ Защитный слой: ≥25мм"] },
+  fire_safety: { passed: true, score: 80, checks: ["📋 Класс огнестойкости: REI 120", "✅ Эвакуационных выходов: ≥2"] },
+  accessibility: { passed: true, score: 80, checks: ["⚠️ Нет лифта", "✅ Пандус на входе"] },
+  energy_efficiency: { passed: true, score: 75, energy_class: "B", checks: ["✅ Коэффициент компактности S/V = 0.35"] },
+  foundation: { passed: true, score: 80, checks: ["✅ Глубина заложения 1.5м ≥ 0.7м"] },
+  seismic: { passed: true, score: 90, checks: ["✅ Зона не сейсмическая"] },
+  mep: { passed: true, score: 85, checks: ["📋 Отопление: autonomous"] },
+  issues: [],
+  warnings: [
+    { code: "SP_1_13130_5.2", severity: "warning", message: "Лестничный марш ≥1.2м", fix: "Проверить ширину лестницы", standard: "СП 1.13130.2020", category: "fire" },
+    { code: "SP_2_13130_5.1", severity: "warning", message: "Площадь 3000м² > лимита 2500м²", fix: "Разделить на пожарные отсеки", standard: "СП 2.13130.2020", category: "fire" },
+    { code: "ACCESS_ELEVATOR", severity: "warning", message: "Нужен лифт для 5-этажного офиса", fix: "Добавить пассажирский лифт", standard: "СП 59.13330.2016", category: "accessibility" },
+    { code: "SP_63_COVER", severity: "warning", message: "Защитный слой ≥20мм", fix: "Обеспечить защитный слой", standard: "СП 63.13330.2018", category: "structural" },
+  ],
+  action_plan: [
+    "[Пожар] Разделить на пожарные отсеки (площадь > 2500м²)",
+    "[Доступность] Добавить пассажирский лифт",
+    "[Энерго] Проверить остекление ≤ 40% площади стен",
+    "✅ Конструктивные решения соответствуют нормам",
+  ],
+  applicable_norms: [
+    { code: "СП 20.13330.2016", full_name: "Нагрузки и воздействия" },
+    { code: "СП 63.13330.2018", full_name: "Бетонные и ЖБ конструкции" },
+    { code: "СП 2.13130.2020", full_name: "Противопожарная защита" },
+    { code: "СП 59.13330.2016", full_name: "Доступность МГН" },
+    { code: "СП 50.13330.2012", full_name: "Теплозащита" },
+    { code: "ФЗ № 384-ФЗ", full_name: "О безопасности зданий" },
+  ],
+};
+
+// Для тестирования: renderCompliance(EXAMPLE_COMPLIANCE);
+</script>

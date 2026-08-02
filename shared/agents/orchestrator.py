@@ -24,8 +24,8 @@ logger = logging.getLogger("archai.orchestrator")
 
 # ═══ Pipeline profiles ═══
 PIPELINE_PROFILES = {
-    "quick": ["parser", "geometry", "texture", "render", "export"],
-    "standard": ["parser", "style", "geometry", "texture", "lighting", "render", "quality", "export"],
+    "quick": ["parser", "geometry", "texture", "render", "quality", "compliance", "export"],
+    "standard": ["parser", "style", "geometry", "texture", "lighting", "structural", "compliance", "render", "quality", "export"],
     "cad": ["parser", "style", "cad", "geometry", "texture", "lighting", "render", "quality", "compliance", "export"],
     "interactive": ["dialog", "parser", "style", "geometry", "texture", "lighting", "render", "quality", "export"],
     "full": [
@@ -75,6 +75,7 @@ PIPELINE_PROFILES = {
         "texture",
         "render",
         "quality",
+        "compliance",
         "export",
     ],
     "presentation": [
@@ -636,7 +637,7 @@ class Orchestrator:
         return self.runner.run(agent_name, task_params, timeout=timeout)
 
     def _build_agent_params(self, agent_name: str, params: dict, gen_type: str, building_params: dict) -> dict:
-        """Build parameters for specific agent."""
+        """Build parameters for specific agent, enriched with norms data."""
         base = {
             "params": params,
             "gen_type": gen_type,
@@ -649,6 +650,55 @@ class Orchestrator:
             base["room_type"] = params.get("room_type", "living")
         if agent_name == "lighting":
             base["style"] = params.get("style", "modern")
+
+        # ═══ Нормативные данные для ВСЕХ агентов ═══
+        # Определяем применимые нормативы
+        try:
+            from shared.norms_reference import get_applicable_norms
+            norms = get_applicable_norms(
+                params.get("building_type", params.get("type", "house")),
+                params.get("floors", building_params.get("floors", 2)),
+                params.get("height_m", building_params.get("fH", 3.0)) * params.get("floors", building_params.get("floors", 2)),
+                params.get("material", building_params.get("mat", "brick")),
+            )
+            base["applicable_norms"] = norms
+        except Exception:
+            base["applicable_norms"] = []
+
+        # Структурные параметры
+        if agent_name in ("geometry", "structural", "compliance", "mep", "el"):
+            base["structural_system"] = params.get("structural_system", "frame")
+            base["foundation_type"] = params.get("foundation_type", "strip")
+            base["material_concrete_class"] = params.get("material_concrete_class", "B25")
+            base["steel_grade"] = params.get("steel_grade", "C345")
+            base["seismic_zone"] = params.get("seismic_zone", "none")
+            base["soil_type"] = params.get("soil_type", "III")
+            base["fire_resistance_rating"] = params.get("fire_resistance_rating", "R45")
+            base["exposure_class"] = params.get("exposure_class", "XC1")
+
+        # Инженерные системы
+        if agent_name in ("mep", "el", "compliance"):
+            base["heating_type"] = params.get("heating_type", "autonomous")
+            base["ventilation_type"] = params.get("ventilation_type", "natural")
+            base["water_supply"] = params.get("water_supply", "central")
+            base["sewage"] = params.get("sewage", "central")
+
+        # Для structural agent — добавляем нагрузки
+        if agent_name == "structural":
+            base["dead_load_kN_m2"] = params.get("dead_load_kN_m2", 5.0)
+            base["live_load_kN_m2"] = params.get("live_load_kN_m2", 2.0)
+            base["snow_load_kN_m2"] = params.get("snow_load_kN_m2", 1.8)
+            base["wind_load_kN_m2"] = params.get("wind_load_kN_m2", 0.4)
+            base["total_mass_kg"] = params.get("total_mass_kg",
+                building_params.get("W", 10) * building_params.get("L", 12) * building_params.get("floors", 2) * 15000)
+            base["period_s"] = params.get("period_s", 0.5)
+
+        # Для foundation agent
+        if agent_name in ("structural", "compliance"):
+            base["foundation_depth_m"] = params.get("foundation_depth_m", 1.2)
+            base["pile_diameter_m"] = params.get("pile_diameter_m", 0.3)
+            base["pile_length_m"] = params.get("pile_length_m", 6.0)
+
         return base
 
     def get_progress(self, job_id: str) -> dict:

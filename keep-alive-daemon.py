@@ -1,64 +1,61 @@
-#!/usr/bin/env python3
-"""Keep-alive daemon for Render free tier services.
-Pings all services every 10 minutes to prevent cold starts.
-Run: python3 keep-alive-daemon.py
 """
-import subprocess
+Keep-Alive daemon для Render free tier.
+Пингует все сервисы каждые 10 минут, чтобы не засыпали.
+
+Запуск: python3 keep-alive-daemon.py
+Или через cron: */10 * * * * python3 /path/to/keep-alive-daemon.py --once
+"""
+
+import urllib.request
+import json
 import time
-import os
 import sys
+import os
+from datetime import datetime
 
-LOG = os.path.join(os.path.dirname(__file__), 'keep-alive.log')
 SERVICES = [
-    'https://architect-gateway.onrender.com/health',
-    'https://ai-arch-blender3d.onrender.com/health',
-    'https://architect-blender.onrender.com/health',
-    'https://architect-llm-1s1j.onrender.com/health',
+    {"name": "Gateway",  "url": "https://architect-gateway.onrender.com/health"},
+    {"name": "LLM",      "url": "https://architect-llm-1s1j.onrender.com/health"},
+    {"name": "Blender1", "url": "https://ai-arch-blender3d.onrender.com/health"},
+    {"name": "Blender2", "url": "https://architect-blender.onrender.com/health"},
 ]
-INTERVAL = 180  # 3 minutes
 
-def ping_all():
-    ts = time.strftime('%Y-%m-%d %H:%M:%S')
+INTERVAL = 600  # 10 минут
+TIMEOUT = 30
+
+def ping_services():
     results = []
-    for url in SERVICES:
-        name = url.split('//')[1].split('.onrender')[0]
+    ts = datetime.now().strftime("%H:%M:%S")
+    for svc in SERVICES:
         try:
-            r = subprocess.run(
-                ['curl', '-s', '-o', '/dev/null', '-w', '%{http_code}',
-                 '--connect-timeout', '15', '--max-time', '30', url],
-                capture_output=True, text=True, timeout=45
-            )
-            code = r.stdout.strip()
-            status = '✅' if code == '200' else '❌'
-            results.append(f'[{ts}] {status} {name} ({code})')
+            req = urllib.request.Request(svc["url"], headers={"User-Agent": "keep-alive/1.0"})
+            resp = urllib.request.urlopen(req, timeout=TIMEOUT)
+            data = json.loads(resp.read())
+            status = data.get("status", "unknown")
+            results.append(f"  ✅ {svc['name']}: {status}")
         except Exception as e:
-            results.append(f'[{ts}] ❌ {name} (error: {e})')
+            results.append(f"  ❌ {svc['name']}: {str(e)[:50]}")
     
-    # Write to log
-    with open(LOG, 'a') as f:
-        f.write(f'[{ts}] Keep-alive ping...\n')
-        for r in results:
-            f.write(r + '\n')
-    
-    # Trim log
-    try:
-        with open(LOG) as f:
-            lines = f.readlines()
-        if len(lines) > 500:
-            with open(LOG, 'w') as f:
-                f.writelines(lines[-500:])
-    except:
-        pass
-    
-    # Print to stdout
-    print(f'[{ts}] Keep-alive: {sum(1 for r in results if "✅" in r)}/{len(results)} services up')
-    sys.stdout.flush()
+    log = f"[{ts}] Ping {len(SERVICES)} services:\n" + "\n".join(results)
+    print(log)
+    return log
 
-if __name__ == '__main__':
-    print(f'Starting keep-alive daemon (interval: {INTERVAL}s)')
+def main():
+    if "--once" in sys.argv:
+        ping_services()
+        return
+
+    print(f"Keep-alive daemon started. Interval: {INTERVAL}s")
+    print(f"Services: {len(SERVICES)}")
+    print("Press Ctrl+C to stop\n")
+    
     while True:
         try:
-            ping_all()
-        except Exception as e:
-            print(f'Error: {e}')
-        time.sleep(INTERVAL)
+            ping_services()
+            time.sleep(INTERVAL)
+        except KeyboardInterrupt:
+            print("\nStopped.")
+            break
+
+if __name__ == "__main__":
+    main()

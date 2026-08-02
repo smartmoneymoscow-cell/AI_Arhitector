@@ -1,0 +1,33 @@
+name: Keep-Alive Pinger
+on:
+  schedule:
+    - cron: '*/10 * * * *'  # Every 10 minutes
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Gateway
+        run: curl -sf --max-time 30 https://architect-gateway.onrender.com/health || echo "Gateway DOWN"
+      
+      - name: Ping LLM
+        run: curl -sf --max-time 30 https://architect-llm-1s1j.onrender.com/health || echo "LLM DOWN"
+      
+      - name: Ping Blender 1
+        run: curl -sf --max-time 30 https://ai-arch-blender3d.onrender.com/health || echo "Blender1 DOWN"
+      
+      - name: Ping Blender 2
+        run: curl -sf --max-time 30 https://architect-blender.onrender.com/health || echo "Blender2 DOWN"
+      
+      - name: Report
+        run: |
+          echo "=== Keep-Alive Ping $(date -u) ==="
+          for url in \
+            "https://architect-gateway.onrender.com/health" \
+            "https://architect-llm-1s1j.onrender.com/health" \
+            "https://ai-arch-blender3d.onrender.com/health" \
+            "https://architect-blender.onrender.com/health"; do
+            STATUS=$(curl -sf --max-time 30 "$url" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','error'))" 2>/dev/null || echo "DOWN")
+            echo "  $url → $STATUS"
+          done

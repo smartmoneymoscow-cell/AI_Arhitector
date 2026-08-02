@@ -1,397 +1,364 @@
 """
-shared/compliance.py — Building code compliance checker.
+shared/compliance.py — Расширенная проверка соответствия нормативам (v2.0)
 
-Validates building designs against Russian (SP/GOST) and international (IBC) codes.
-
-Standards implemented:
-  - СП 1.13130.2020 — Fire safety, evacuation routes
-  - СП 54.13330.2016 — Residential buildings
-  - ГОСТ 21.501-2018 — Construction drawings
-  - IBC 2021 — International Building Code (basic)
-
-Usage:
-    from shared.compliance import ComplianceChecker
-
-    checker = ComplianceChecker()
-    result = checker.check_building(params, building_params)
-    # result = {
-    #     "passed": True/False,
-    #     "issues": [{"code": "SP_54_3.7", "severity": "error", "message": "...", "fix": "..."}],
-    #     "warnings": [...],
-    #     "score": 0.85,
-    # }
+Нормы:
+  СП 54.13330.2016  — Жилые здания
+  СП 1.13130.2020   — Эвакуационные пути
+  СП 2.13130.2020   — Противопожарная защита
+  СП 50.13330.2012  — Теплозащита
+  СП 59.13330.2016  — Доступность МГН
+  СП 63.13330.2018  — ЖБ конструкции
+  СП 16.13330.2017  — Стальные конструкции
+  СП 22.13330.2016  — Основания
+  СП 24.13330.2011  — Свайные фундаменты
+  СП 7.13130.2013   — HVAC
+  СП 30.13330.2020  — Водопровод/канализация
+  СП 76.13330.2016  — Электрооборудование
+  ГОСТ 30247.0      — Огнестойкость
 """
 
 import logging
 from dataclasses import dataclass, field
+from typing import List, Dict, Optional
+import math
 
 logger = logging.getLogger("archai.compliance")
 
 
 @dataclass
 class ComplianceIssue:
-    """Single compliance issue."""
-
-    code: str  # e.g. "SP_54_3.7"
+    code: str
     severity: str  # "error" | "warning" | "info"
     message: str
-    fix: str = ""  # suggested fix
-    standard: str = ""  # which standard
-    category: str = ""  # fire | structural | accessibility | energy | layout
+    fix: str = ""
+    standard: str = ""
+    category: str = ""
 
 
 @dataclass
 class ComplianceResult:
-    """Result of compliance check."""
-
     passed: bool = True
-    issues: list[ComplianceIssue] = field(default_factory=list)
-    warnings: list[ComplianceIssue] = field(default_factory=list)
-    score: float = 1.0  # 0.0 - 1.0
-    checks_run: list[str] = field(default_factory=list)
+    issues: List[ComplianceIssue] = field(default_factory=list)
+    warnings: List[ComplianceIssue] = field(default_factory=list)
+    score: float = 1.0
+    checks_run: List[str] = field(default_factory=list)
 
-    def add_error(self, code: str, message: str, fix: str = "", standard: str = "", category: str = ""):
-        issue = ComplianceIssue(
-            code=code, severity="error", message=message, fix=fix, standard=standard, category=category
-        )
-        self.issues.append(issue)
+    def add_error(self, code, message, fix="", standard="", category=""):
+        self.issues.append(ComplianceIssue(code=code, severity="error", message=message, fix=fix, standard=standard, category=category))
         self.passed = False
 
-    def add_warning(self, code: str, message: str, fix: str = "", standard: str = "", category: str = ""):
-        issue = ComplianceIssue(
-            code=code, severity="warning", message=message, fix=fix, standard=standard, category=category
-        )
-        self.warnings.append(issue)
+    def add_warning(self, code, message, fix="", standard="", category=""):
+        self.warnings.append(ComplianceIssue(code=code, severity="warning", message=message, fix=fix, standard=standard, category=category))
 
-    def to_dict(self) -> dict:
+    def to_dict(self):
         return {
             "passed": self.passed,
-            "issues": [
-                {
-                    "code": i.code,
-                    "severity": i.severity,
-                    "message": i.message,
-                    "fix": i.fix,
-                    "standard": i.standard,
-                    "category": i.category,
-                }
-                for i in self.issues
-            ],
-            "warnings": [
-                {
-                    "code": w.code,
-                    "severity": w.severity,
-                    "message": w.message,
-                    "fix": w.fix,
-                    "standard": w.standard,
-                    "category": w.category,
-                }
-                for w in self.warnings
-            ],
+            "issues": [{"code": i.code, "severity": i.severity, "message": i.message, "fix": i.fix, "standard": i.standard, "category": i.category} for i in self.issues],
+            "warnings": [{"code": w.code, "severity": w.severity, "message": w.message, "fix": w.fix, "standard": w.standard, "category": w.category} for w in self.warnings],
             "score": self.score,
             "checks_run": self.checks_run,
         }
 
 
 class ComplianceChecker:
-    """
-    Multi-standard building compliance checker.
-
-    Runs all applicable checks and returns aggregated result.
-    """
+    """Полная проверка соответствия всем нормативам."""
 
     def check_building(self, params: dict, building_params: dict) -> ComplianceResult:
-        """
-        Run all compliance checks on building params.
-
-        Args:
-            params: parsed LLM params
-            building_params: building params from router
-
-        Returns:
-            ComplianceResult with issues and score
-        """
+        """Запустить все проверки."""
         result = ComplianceResult()
 
-        # Determine building category for applicable standards
-        building_type = params.get("building_type", "house")
-        floors = building_params.get("floors", 2)
-        height = building_params.get("fH", 2.8) * floors
-
-        # Run applicable checks
         self._check_sp54_residential(params, building_params, result)
         self._check_sp113130_fire(params, building_params, result)
+        self._check_sp213130_fire_protection(params, building_params, result)
         self._check_room_sizes(params, building_params, result)
         self._check_natural_light(params, building_params, result)
         self._check_accessibility(params, building_params, result)
         self._check_energy_efficiency(params, building_params, result)
+        self._check_structural_concrete(params, building_params, result)
+        self._check_structural_steel(params, building_params, result)
+        self._check_foundation(params, building_params, result)
+        self._check_mep_hvac(params, building_params, result)
+        self._check_mep_plumbing(params, building_params, result)
+        self._check_mep_electrical(params, building_params, result)
+        self._check_roof(params, building_params, result)
 
-        # Calculate score
         error_count = len(result.issues)
         warning_count = len(result.warnings)
-        total_checks = len(result.checks_run)
-
-        if total_checks > 0:
-            # Each error costs 0.15, each warning costs 0.05
-            penalty = error_count * 0.15 + warning_count * 0.05
-            result.score = max(0.0, 1.0 - penalty)
-        else:
-            result.score = 1.0
-
+        penalty = error_count * 0.1 + warning_count * 0.03
+        result.score = max(0.0, 1.0 - penalty)
         result.passed = error_count == 0
 
         return result
 
-    def _check_sp54_residential(self, params: dict, building_params: dict, result: ComplianceResult):
-        """СП 54.13330.2016 — Residential buildings."""
+    # ── СП 54.13330 — Жилые здания ───────────────────────────────
+    def _check_sp54_residential(self, params, bp, result):
         result.checks_run.append("SP_54")
+        floors = bp.get("floors", 2)
+        fh = bp.get("fH", 2.8)
+        rooms = bp.get("rooms", [])
 
-        floors = building_params.get("floors", 2)
-        floor_height = building_params.get("fH", 2.8)
-        rooms = building_params.get("rooms", [])
+        if fh < 2.5:
+            result.add_error("SP_54_3.7", f"Высота потолка {fh}м < 2.5м", "Увеличить до ≥2.5м", "СП 54.13330.2016", "layout")
+        elif fh < 2.7:
+            result.add_warning("SP_54_3.7", f"Высота потолка {fh}м < 2.7м (рекомендуется)", "Увеличить до ≥2.7м", "СП 54.13330.2016", "layout")
 
-        # 3.7 — Minimum ceiling height for residential
-        if floor_height < 2.5:
-            result.add_error(
-                "SP_54_3.7",
-                f"Высота потолка {floor_height}м < 2.5м (СП 54.13330 п.3.7)",
-                fix="Увеличить высоту этажа до ≥2.5м",
-                standard="СП 54.13330.2016",
-                category="layout",
-            )
-        elif floor_height < 2.7:
-            result.add_warning(
-                "SP_54_3.7",
-                f"Высота потолка {floor_height}м < 2.7м (рекомендуется для жилых помещений)",
-                fix="Увеличить высоту до ≥2.7м для комфорта",
-                standard="СП 54.13330.2016",
-                category="layout",
-            )
-
-        # 3.8 — Minimum room areas
         for room in rooms:
-            name = room.get("n", "")
+            tag = room.get("tag", "")
             area = room.get("a", 0)
-            room_tag = room.get("tag", "")
+            name = room.get("n", "")
+            if tag == "l" and area < 12:
+                result.add_error("SP_54_3.8", f"Гостиная '{name}' = {area}м² < 12м²", "Увеличить ≥12м²", "СП 54.13330.2016", "layout")
+            elif tag == "k" and area < 8:
+                result.add_error("SP_54_3.8", f"Кухня '{name}' = {area}м² < 8м²", "Увеличить ≥8м²", "СП 54.13330.2016", "layout")
+            elif tag == "s" and area < 9:
+                result.add_error("SP_54_3.8", f"Спальня '{name}' = {area}м² < 9м²", "Увеличить ≥9м²", "СП 54.13330.2016", "layout")
 
-            if room_tag == "l":  # living room
-                if area < 12:
-                    result.add_error(
-                        "SP_54_3.8",
-                        f"Площадь гостиной '{name}' = {area}м² < 12м² (СП 54.13330 п.3.8)",
-                        fix="Увеличить площадь гостиной до ≥12м²",
-                        standard="СП 54.13330.2016",
-                        category="layout",
-                    )
-            elif room_tag == "k":  # kitchen
-                if area < 8:
-                    result.add_error(
-                        "SP_54_3.8",
-                        f"Площадь кухни '{name}' = {area}м² < 8м² (СП 54.13330 п.3.8)",
-                        fix="Увеличить площадь кухни до ≥8м²",
-                        standard="СП 54.13330.2016",
-                        category="layout",
-                    )
-            elif room_tag == "s":  # bedroom
-                if area < 9:
-                    result.add_error(
-                        "SP_54_3.8",
-                        f"Площадь спальни '{name}' = {area}м² < 9м² (СП 54.13330 п.3.8)",
-                        fix="Увеличить площадь спальни до ≥9м²",
-                        standard="СП 54.13330.2016",
-                        category="layout",
-                    )
+        if fh * floors > 75:
+            result.add_error("SP_54_3.10", f"Высота здания {fh*floors}м > 75м — высотное здание", "Применить доп. требования", "СП 54.13330.2016", "structural")
 
-        # 3.10 — Building height limit for residential
-        total_height = floor_height * floors
-        if total_height > 75:
-            result.add_error(
-                "SP_54_3.10",
-                f"Высота здания {total_height}м > 75м — требуется классификация как высотное",
-                fix="Применить дополнительные требования для высотных зданий",
-                standard="СП 54.13330.2016",
-                category="structural",
-            )
-
-    def _check_sp113130_fire(self, params: dict, building_params: dict, result: ComplianceResult):
-        """СП 1.13130.2020 — Fire safety, evacuation routes."""
+    # ── СП 1.13130 — Эвакуация ──────────────────────────────────
+    def _check_sp113130_fire(self, params, bp, result):
         result.checks_run.append("SP_1_13130")
+        w, L = bp.get("W", 10), bp.get("L", 12)
+        floors = bp.get("floors", 2)
+        rooms = bp.get("rooms", [])
 
-        floors = building_params.get("floors", 2)
-        floor_height = building_params.get("fH", 2.8)
-        rooms = building_params.get("rooms", [])
-        width = building_params.get("W", 10)
-        length = building_params.get("L", 12)
-        building_type = params.get("building_type", "house")
+        if max(w, L) > 40:
+            result.add_warning("SP_1_13130_4.2", f"Расстояние до выхода {max(w,L)}м > 40м", "Добавить эвакуационный выход", "СП 1.13130.2020", "fire")
 
-        # 4.2 — Evacuation route length
-        # Max distance to exit: residential ≤40m (with sprinkler: +25%)
-        max_dimension = max(width, length)
-        if max_dimension > 40:
-            result.add_warning(
-                "SP_1_13130_4.2",
-                f"Макс. расстояние до выхода {max_dimension}м > 40м",
-                fix="Добавить дополнительный эвакуационный выход или установить спринклерную систему",
-                standard="СП 1.13130.2020",
-                category="fire",
-            )
+        for r in rooms:
+            if r.get("tag") == "h" and r.get("w", 0) < 1.2:
+                result.add_error("SP_1_13130_4.3", f"Коридор '{r.get('n','')}' шириной {r.get('w',0)}м < 1.2м", "Увеличить ≥1.2м", "СП 1.13130.2020", "fire")
 
-        # 4.3 — Corridor width
-        corridor_rooms = [r for r in rooms if r.get("tag") == "h"]
-        for corridor in corridor_rooms:
-            cw = corridor.get("w", 0)
-            if cw < 1.2:
-                result.add_error(
-                    "SP_1_13130_4.3",
-                    f"Ширина коридора '{corridor.get('n', '')}' = {cw}м < 1.2м",
-                    fix="Увеличить ширину коридора до ≥1.2м",
-                    standard="СП 1.13130.2020",
-                    category="fire",
-                )
-
-        # 5.1 — Number of exits
-        if floors > 1 and building_type not in ("house", "cottage"):
-            # Multi-story non-residential needs 2+ exits
-            exit_count = sum(1 for r in rooms if r.get("tag") == "h")
-            if exit_count < 2:
-                result.add_warning(
-                    "SP_1_13130_5.1",
-                    "Многоэтажное здание рекомендуется иметь ≥2 эвакуационных выхода",
-                    fix="Добавить второй эвакуационный выход",
-                    standard="СП 1.13130.2020",
-                    category="fire",
-                )
-
-        # 5.2 — Staircase width
         if floors > 1:
-            # Minimum staircase width: 0.9m for residential, 1.2m for public
-            min_stair_width = 0.9 if building_type in ("house", "cottage") else 1.2
-            # Assume staircase is part of corridor
-            if corridor_rooms:
-                stair_width = corridor_rooms[0].get("w", 1.5)
-                if stair_width < min_stair_width:
-                    result.add_error(
-                        "SP_1_13130_5.2",
-                        f"Ширина лестничного марша {stair_width}м < {min_stair_width}м",
-                        fix=f"Увеличить ширину лестницы до ≥{min_stair_width}м",
-                        standard="СП 1.13130.2020",
-                        category="fire",
-                    )
+            min_sw = 0.9 if params.get("building_type") in ("house", "cottage") else 1.2
+            result.add_warning("SP_1_13130_5.2", f"Лестничный марш ≥{min_sw}м", "Проверить ширину лестницы", "СП 1.13130.2020", "fire")
 
-    def _check_room_sizes(self, params: dict, building_params: dict, result: ComplianceResult):
-        """Check minimum room dimensions (not from code, but best practices)."""
+    # ── СП 2.13130 — Противопожарная защита ──────────────────────
+    def _check_sp213130_fire_protection(self, params, bp, result):
+        result.checks_run.append("SP_2_13130")
+        floors = bp.get("floors", 2)
+        bt = params.get("building_type", "house")
+        material = bp.get("mat", params.get("material", "brick"))
+
+        # Класс огнестойкости по типу здания
+        required_rei = {"house": "R45", "office": "R60", "hotel": "R60",
+                        "commercial": "R60", "school": "R60", "hospital": "R90"}
+        required = required_rei.get(bt, "R45")
+
+        # Определение фактического класса
+        if material in ("concrete", "brick"):
+            actual = "R120" if floors > 3 else "R60"
+        elif material == "steel":
+            actual = "R30"
+        elif material == "wood":
+            actual = "R15"
+        else:
+            actual = "R45"
+
+        rei_values = {"R15": 15, "R30": 30, "R45": 45, "R60": 60, "R90": 90, "R120": 120, "R150": 150, "R180": 180}
+        if rei_values.get(actual, 0) < rei_values.get(required, 0):
+            result.add_error("SP_2_13130", f"Огнестойкость {actual} < требуемой {required} для '{bt}'",
+                             f"Усилить конструкцию до {required}", "СП 2.13130.2020", "fire")
+
+        # Площадь пожарного отсека
+        area = bp.get("W", 10) * bp.get("L", 12) * floors
+        max_compartment = {"house": 1500, "office": 2500, "hotel": 2500, "commercial": 2000}
+        limit = max_compartment.get(bt, 2500)
+        if area > limit:
+            result.add_warning("SP_2_13130_5.1", f"Площадь {area}м² > лимита пожарного отсека {limit}м²",
+                               "Разделить на пожарные отсеки", "СП 2.13130.2020", "fire")
+
+    # ── Проверка размеров помещений ──────────────────────────────
+    def _check_room_sizes(self, params, bp, result):
         result.checks_run.append("room_sizes")
+        for r in bp.get("rooms", []):
+            if r.get("w", 0) < 2.0 and r.get("d", 0) < 2.0:
+                result.add_warning("ROOM_SIZE", f"Комната '{r.get('n','')}' слишком маленькая ({r.get('w',0)}×{r.get('d',0)}м)",
+                                   "Увеличить ≥2.0м", category="layout")
 
-        rooms = building_params.get("rooms", [])
-        for room in rooms:
-            name = room.get("n", "")
-            w = room.get("w", 0)
-            d = room.get("d", 0)
-            area = room.get("a", w * d)
-
-            # Minimum width check
-            if w < 2.0 and d < 2.0:
-                result.add_warning(
-                    "ROOM_SIZE",
-                    f"Комната '{name}' слишком маленькая ({w}×{d}м)",
-                    fix="Увеличить минимальный размер до 2.0м",
-                    category="layout",
-                )
-
-    def _check_natural_light(self, params: dict, building_params: dict, result: ComplianceResult):
-        """Check natural light requirements (KEO — коэффициент естественной освещённости)."""
+    # ── Естественное освещение ───────────────────────────────────
+    def _check_natural_light(self, params, bp, result):
         result.checks_run.append("natural_light")
+        for r in bp.get("rooms", []):
+            if r.get("tag") in ("l", "s") and r.get("a", 0) > 20:
+                needed = r["a"] / 8
+                result.add_warning("NATURAL_LIGHT", f"'{r.get('n','')}' ({r['a']}м²) — остекление ≥{needed:.1f}м²",
+                                   "Добавить окна", "СП 54.13330.2016 п.6.2", "layout")
 
-        rooms = building_params.get("rooms", [])
-        for room in rooms:
-            name = room.get("n", "")
-            room_tag = room.get("tag", "")
-            area = room.get("a", 0)
-
-            # Living rooms and bedrooms need windows
-            if room_tag in ("l", "s") and area > 0:
-                # Rough check: window area should be ≥ 1/8 of floor area
-                # We don't have window data here, so just warn
-                if area > 20:
-                    result.add_warning(
-                        "NATURAL_LIGHT",
-                        f"Комната '{name}' ({area}м²) — убедитесь что площадь остекления ≥ {area / 8:.1f}м² (1/8 площади пола)",
-                        fix="Добавить окна или увеличить площадь остекления",
-                        standard="СП 54.13330.2016 п.6.2",
-                        category="layout",
-                    )
-
-    def _check_accessibility(self, params: dict, building_params: dict, result: ComplianceResult):
-        """Check accessibility requirements."""
+    # ── Доступность МГН (СП 59) ─────────────────────────────────
+    def _check_accessibility(self, params, bp, result):
         result.checks_run.append("accessibility")
+        floors = bp.get("floors", 2)
+        bt = params.get("building_type", "house")
 
-        floors = building_params.get("floors", 2)
-        building_type = params.get("building_type", "house")
+        if bt in ("office", "hotel", "commercial") and floors > 1:
+            if not params.get("has_elevator"):
+                result.add_warning("ACCESS_ELEVATOR", f"'{bt}' с {floors} этажами — нужен лифт",
+                                   "Добавить пассажирский лифт", "СП 59.13330.2016", "accessibility")
 
-        # For public/commercial buildings — need accessible entrance
-        if building_type in ("office", "hotel", "commercial"):
-            if floors > 1:
-                result.add_warning(
-                    "ACCESS_ELEVATOR",
-                    f"Здание типа '{building_type}' с {floors} этажами — рекомендуется лифт",
-                    fix="Добавить пассажирский лифт для маломобильных групп",
-                    standard="СП 59.13330.2016",
-                    category="accessibility",
-                )
+        if bt in ("office", "hotel", "commercial", "public"):
+            result.add_warning("ACCESS_RAMP", "Требуется пандус на входе (уклон ≤ 1:12)",
+                               "Спроектировать пандус", "СП 59.13330.2016", "accessibility")
+            result.add_warning("ACCESS_DOOR", "Ширина дверных проёмов ≥ 0.9м",
+                               "Проверить все двери", "СП 59.13330.2016", "accessibility")
 
-    def _check_energy_efficiency(self, params: dict, building_params: dict, result: ComplianceResult):
-        """Check energy efficiency requirements."""
+        if bt in ("office", "hotel", "commercial"):
+            result.add_warning("ACCESS_BATHROOM", "Требуется доступный санузел (2.2×2.2м мин.)",
+                               "Выделить доступный санузел", "СП 59.13330.2016", "accessibility")
+            result.add_warning("ACCESS_TACTILE", "Тактильная навигация и визуальные оповещатели",
+                               "Добавить тактильные таблички и световые оповещатели", "СП 59.13330.2016", "accessibility")
+
+    # ── Теплозащита (СП 50) ─────────────────────────────────────
+    def _check_energy_efficiency(self, params, bp, result):
         result.checks_run.append("energy")
+        material = bp.get("mat", params.get("material", "plaster"))
+        floors = bp.get("floors", 2)
+        fh = bp.get("fH", 2.8)
+        wt = bp.get("wall_thickness", 0.3)
 
-        material = building_params.get("mat", "plaster")
-        floors = building_params.get("floors", 2)
-        floor_height = building_params.get("fH", 2.8)
+        # U-value check (СП 50.13330)
+        if material == "brick" and wt < 0.4:
+            result.add_warning("ENERGY_WALL", f"Кирпичная стена {wt}м — нужно утепление",
+                               "Добавить 100-150мм утеплителя", "СП 50.13330.2012", "energy")
 
-        # Wall thickness for insulation
-        wall_thickness = building_params.get("wall_thickness", 0.3)
+        w, L = bp.get("W", 10), bp.get("L", 12)
+        wall_area = 2 * (w + L) * fh * floors
+        result.add_warning("ENERGY_WINDOW", f"Площадь стен ≈{wall_area:.0f}м² — окна ≤40% ({wall_area*0.4:.0f}м²)",
+                           "Проверить остекление", "СП 50.13330.2012", "energy")
 
-        # Basic U-value check (simplified)
-        # Brick 250mm: U ≈ 1.5 W/(m²·K) — needs insulation
-        # With 100mm insulation: U ≈ 0.35 W/(m²·K) — OK
-        if material == "brick" and wall_thickness < 0.4:
-            result.add_warning(
-                "ENERGY_WALL",
-                f"Стена из кирпича толщиной {wall_thickness}м — требуется утепление (СП 50.13330.2012)",
-                fix="Добавить 100-150мм утеплителя (минвата/EPS) или увеличить толщину стены",
-                standard="СП 50.13330.2012",
-                category="energy",
-            )
+        # Проверка конденсации (упрощённая)
+        if material == "glass" or (material in ("стекло",) and wt < 0.05):
+            result.add_warning("ENERGY_CONDENSATION", "Стеклянный фасад — риск конденсации",
+                               "Применить двухкамерные стеклопакеты", "СП 50.13330.2012", "energy")
 
-        # Window-to-wall ratio
-        width = building_params.get("W", 10)
-        length = building_params.get("L", 12)
-        perimeter = 2 * (width + length)
-        wall_area = perimeter * floor_height * floors
+    # ── СП 63 — ЖБ конструкции ──────────────────────────────────
+    def _check_structural_concrete(self, params, bp, result):
+        result.checks_run.append("SP_63")
+        material = params.get("material", "brick")
 
-        # Max 40% glazing for energy efficiency
-        # We don't have exact window data, so informational
-        result.add_warning(
-            "ENERGY_WINDOW",
-            f"Площадь стен ≈{wall_area:.0f}м² — площадь окон не должна превышать 40% ({wall_area * 0.4:.0f}м²)",
-            fix="Проверить соотношение площади окон и стен",
-            standard="СП 50.13330.2012",
-            category="energy",
-        )
-        # Remove the last warning since it's informational — convert to info
-        if result.warnings and result.warnings[-1].code == "ENERGY_WINDOW":
-            result.warnings[-1].severity = "info"
+        if material not in ("concrete", "reinforced_concrete", "железобетон", "бетон"):
+            return
 
+        concrete_class = params.get("concrete_class", "B25")
+        floors = bp.get("floors", 2)
 
-# ═══════════════════════════════════════════════════════════════
-# QUICK CHECK — lightweight check for orchestrator
-# ═══════════════════════════════════════════════════════════════
+        # Минимальная толщина защитного слоя (СП 63 п.10.2)
+        cover_table = {"XC1": 20, "XC2": 25, "XC3": 30, "XC4": 35, "XD1": 35}
+        exposure = params.get("exposure_class", "XC1")
+        min_cover = cover_table.get(exposure, 25)
+
+        result.add_warning("SP_63_COVER", f"Защитный слой бетона ≥{min_cover}мм (класс условий {exposure})",
+                           f"Обеспечить защитный слой ≥{min_cover}мм", "СП 63.13330.2018", "structural")
+
+        # Минимальный % армирования (СП 63 п.10.3.6)
+        result.add_warning("SP_63_REBAR_MIN", "Минимальное армирование: 0.1% для изгибаемых, 0.05% для сжатых",
+                           "Проверить процент армирования", "СП 63.13330.2018", "structural")
+
+        # Максимальный % армирования
+        result.add_warning("SP_63_REBAR_MAX", "Максимальный % армирования: 5% для сжатых, 4% для изгибаемых",
+                           "Не превышать максимум", "СП 63.13330.2018", "structural")
+
+    # ── СП 16 — Стальные конструкции ─────────────────────────────
+    def _check_structural_steel(self, params, bp, result):
+        result.checks_run.append("SP_16")
+        material = params.get("material", "brick")
+
+        if material not in ("steel", "сталь"):
+            return
+
+        steel_grade = params.get("steel_grade", "C345")
+        floors = bp.get("floors", 2)
+        L = bp.get("L", 12)
+
+        # Предел прогиба (СП 16 табл. 18)
+        result.add_warning("SP_16_DEFLECTION", f"Предел прогиба: L/250 = {L/250*1000:.0f}мм",
+                           "Проверить прогиб балок", "СП 16.13330.2017", "structural")
+
+        # Защита от коррозии
+        result.add_warning("SP_16_CORROSION", "Стальные конструкции требуют антикоррозийной защиты",
+                           "Нанести грунтовку + 2 слоя эмали", "СП 16.13330.2017", "structural")
+
+        # Огнезащита
+        if floors > 1:
+            result.add_warning("SP_16_FIRE_PROTECT", "Стальные конструкции в многоэтажках — огнезащита обязательна",
+                               "Применить огнезащитные покрытия", "СП 2.13130.2020", "fire")
+
+    # ── СП 22/24 — Основания ─────────────────────────────────────
+    def _check_foundation(self, params, bp, result):
+        result.checks_run.append("SP_22")
+        ft = params.get("foundation_type", "strip")
+        soil = params.get("soil_type", "III")
+        floors = bp.get("floors", 2)
+
+        # Минимальная глубина заложения (СП 22 п.12.3)
+        min_depth_map = {"I": 0.5, "II": 0.5, "III": 0.7, "IV": 1.0, "V": 1.2}
+        min_depth = min_depth_map.get(soil, 0.7)
+        actual_depth = params.get("foundation_depth_m", min_depth)
+
+        if actual_depth < min_depth:
+            result.add_error("SP_22_DEPTH", f"Глубина заложения {actual_depth}м < {min_depth}м для грунта '{soil}'",
+                             f"Увеличить глубину до ≥{min_depth}м", "СП 22.13330.2016", "structural")
+
+        if ft == "pile":
+            pile_d = params.get("pile_diameter_m", 0.3)
+            pile_spacing = params.get("pile_spacing_m", 0.9)
+            min_spacing = 3 * pile_d
+            if pile_spacing < min_spacing:
+                result.add_error("SP_24_SPACING", f"Расстояние между сваями {pile_spacing}м < {min_spacing}м",
+                                 f"Увеличить расстояние до ≥{min_spacing}м", "СП 24.13330.2011", "structural")
+
+    # ── СП 7 — HVAC ─────────────────────────────────────────────
+    def _check_mep_hvac(self, params, bp, result):
+        result.checks_run.append("SP_7_HVAC")
+        bt = params.get("building_type", "house")
+
+        if bt in ("office", "hotel", "commercial"):
+            result.add_warning("SP_7_VENT", "Требуется приточно-вытяжная вентиляция (60м³/ч на человека)",
+                               "Спроектировать систему вентиляции", "СП 7.13130.2013", "mep")
+
+        if bt == "house":
+            result.add_warning("SP_7_VENT_RESID", "Естественная вентиляция: 3м³/ч на 1м² жилой площади",
+                               "Обеспечить приточные клапаны", "СП 7.13130.2013", "mep")
+
+    # ── СП 30 — Водоснабжение ────────────────────────────────────
+    def _check_mep_plumbing(self, params, bp, result):
+        result.checks_run.append("SP_30")
+        rooms = bp.get("rooms", [])
+        has_bathroom = any(r.get("tag") in ("bath", "bathroom") for r in rooms)
+        has_kitchen = any(r.get("tag") == "k" for r in rooms)
+
+        if has_bathroom:
+            result.add_warning("SP_30_HOT_WATER", "Горячее водоснабжение: 60-75°C",
+                               "Обеспечить ГВС", "СП 30.13330.2020", "mep")
+        if has_kitchen:
+            result.add_warning("SP_30_COLD_WATER", "Холодное водоснабжение: ≤75°C",
+                               "Обеспечить ХВС", "СП 30.13330.2020", "mep")
+
+    # ── СП 76 — Электрика ────────────────────────────────────────
+    def _check_mep_electrical(self, params, bp, result):
+        result.checks_run.append("SP_76")
+        bt = params.get("building_type", "house")
+
+        load_map = {"house": "5-7 кВт на дом", "office": "50-80 Вт/м²", "commercial": "80-120 Вт/м²"}
+        result.add_warning("SP_76_LOAD", f"Удельная электрическая нагрузка: {load_map.get(bt, '50-80 Вт/м²')}",
+                           "Рассчитать электрическую нагрузку", "СП 76.13330.2016", "mep")
+
+    # ── СП 17 — Кровли ──────────────────────────────────────────
+    def _check_roof(self, params, bp, result):
+        result.checks_run.append("SP_17")
+        roof = params.get("roof_type", "gabled")
+
+        if roof == "flat":
+            result.add_warning("SP_17_FLAT", "Плоская кровля — требуется усиленная гидроизоляция и дренаж",
+                               "Применить ПВХ/ТПО мембрану + организовать внутренний водосток", "СП 17.13330.2017", "roof")
+        elif roof in ("gabled", "hip"):
+            result.add_warning("SP_17_SLOPED", f"Скатная кровля ({roof}) — уклон ≥ 15%",
+                               "Проверить уклон и водосточную систему", "СП 17.13330.2017", "roof")
 
 
 def quick_compliance_check(params: dict, building_params: dict) -> dict:
-    """
-    Lightweight compliance check for orchestrator pipeline.
-    Returns simplified result dict.
-    """
+    """Быстрая проверка для оркестратора."""
     checker = ComplianceChecker()
     result = checker.check_building(params, building_params)
     return result.to_dict()

@@ -83,7 +83,20 @@ object_type определяет ЧТО генерировать:
   "furniture": ["ЛЮБАЯ мебель для интерьера"],
   "special_requirements": ["ЛЮБЫЕ особые требования"],
   "confidence": 0.0-1.0,
-  "reasoning": "кратко почему решил именно так"
+  "reasoning": "кратко почему решил именно так",
+
+  "structural_system": "frame|shear_wall|tube|braced|hybrid",
+  "foundation_type": "strip|slab|pile|raft|combined",
+  "material_concrete_class": "B15|B20|B25|B30|B35|B40|B45|B50|B60",
+  "steel_grade": "C235|C245|C255|C345|C375|C390|C440",
+  "seismic_zone": "none|5|6|7|8|9",
+  "soil_type": "I|II|III|IV|V",
+  "fire_resistance_rating": "R15|R30|R45|R60|R90|R120|R150|R180",
+  "heating_type": "central|autonomous|individual|none",
+  "ventilation_type": "natural|mechanical|mixed",
+  "water_supply": "central|well|none",
+  "sewage": "central|septic|none",
+  "exposure_class": "XC1|XC2|XC3|XC4"
 }
 
 ═══ ПРАВИЛА ═══

@@ -598,6 +598,91 @@ async def clarify_answer_endpoint(
 
 
 # ═══════════════════════════════════════════════════════════════
+# COMPLIANCE — проверка нормативов (без генерации)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/compliance/check")
+async def compliance_check(
+    req: dict,
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Проверка соответствия нормативам без генерации."""
+    from shared.compliance import ComplianceChecker
+    from shared.norms_reference import get_applicable_norms
+    from shared.structural_analysis import (
+        StructuralEngine, LoadCombiner, DynamicsAnalyzer, FoundationAnalyzer
+    )
+
+    params = req.get("params", {})
+    prompt = req.get("prompt", "")
+
+    # Если нет params — парсим промт
+    if not params and prompt:
+        r = await request_with_retry(
+            "post",
+            f"{settings.LLM_SERVICE_URL}/api/v1/parse",
+            json={"text": prompt},
+            timeout=60,
+        )
+        parsed = r.json()
+        params = parsed.get("params", parsed)
+
+    building_params = {
+        "floors": params.get("floors", 2),
+        "W": params.get("width_m", 10),
+        "L": params.get("length_m", 12),
+        "fH": params.get("height_m", 3.0),
+        "mat": params.get("material", "brick"),
+        "rooms": [],
+    }
+
+    # Compliance check
+    checker = ComplianceChecker()
+    result = checker.check_building(params, building_params)
+
+    # Norms
+    norms = get_applicable_norms(
+        params.get("building_type", params.get("type", "house")),
+        params.get("floors", 2),
+        params.get("height_m", 6.0),
+        params.get("material", "brick"),
+    )
+
+    # Structural analysis
+    engine = StructuralEngine()
+    structural = {}
+    try:
+        dead = params.get("dead_load_kN_m2", 5.0)
+        live = params.get("live_load_kN_m2", 2.0)
+        snow = params.get("snow_load_kN_m2", 1.8)
+        wind = params.get("wind_load_kN_m2", 0.4)
+        structural["load_combinations"] = engine.loads.basic_combination(dead, live, snow, wind)
+
+        seismic_zone = int(params.get("seismic_zone", 0) or 0)
+        if seismic_zone > 0:
+            structural["response_spectrum"] = engine.dynamics.response_spectrum(
+                0.5, soil_type=params.get("soil_type", "II"), seismic_zone=seismic_zone
+            )
+            mass = building_params["W"] * building_params["L"] * building_params["floors"] * 15000
+            structural["seismic_force"] = engine.dynamics.seismic_force(mass)
+
+        soil = params.get("soil_type", "III")
+        structural["foundation"] = engine.foundation.bearing_capacity_sand(
+            soil, params.get("foundation_depth_m", 1.2), building_params["W"]
+        )
+    except Exception as e:
+        structural["error"] = str(e)
+
+    return {
+        "compliance": result.to_dict(),
+        "applicable_norms": norms,
+        "structural": structural,
+        "params": params,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
 # VARIANTS — варианты реализации
 # ═══════════════════════════════════════════════════════════════
 

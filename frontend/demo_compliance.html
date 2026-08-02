@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Architect AI — Демо панели нормативов</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0f0f11;--bg2:#18181b;--bg3:#1e1e23;--bg4:#27272a;
+  --surface:#1c1c21;--surface2:#232329;--surface3:#2a2a32;
+  --acc:#8b5cf6;--acc2:#a78bfa;--acc3:#c4b5fd;
+  --txt:#fafafa;--txt2:#a1a1aa;--txt3:#71717a;
+  --bdr:#2e2e35;--bdr2:#3f3f46;
+  --ok:#22c55e;--warn:#f59e0b;--err:#ef4444;
+  --radius:12px;--radius-sm:8px;
+}
+body{font-family:'Inter',sans-serif;color:var(--txt);background:var(--bg);padding:20px;min-height:100vh}
+h1{font-size:18px;font-weight:700;margin-bottom:6px;color:var(--txt)}
+h2{font-size:14px;font-weight:600;color:var(--txt2);margin-bottom:16px}
+.subtitle{font-size:12px;color:var(--txt3);margin-bottom:24px}
+.grid{display:grid;grid-template-columns:340px 1fr;gap:16px;max-width:1200px}
+.panel{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--radius);overflow:hidden}
+.panel-header{padding:12px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between}
+.panel-header h3{font-size:13px;font-weight:600}
+.panel-body{padding:12px;display:flex;flex-direction:column;gap:10px;max-height:80vh;overflow-y:auto}
+.prompt-box{background:var(--surface);border:1px solid var(--bdr);border-radius:var(--radius-sm);padding:12px;font-size:12px;color:var(--txt2);line-height:1.5}
+.prompt-box strong{color:var(--txt)}
+.badge{padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700}
+.badge.ok{background:rgba(34,197,94,0.15);color:var(--ok)}
+.badge.err{background:rgba(239,68,68,0.15);color:var(--err)}
+.btn{padding:8px 16px;border-radius:var(--radius-sm);border:1px solid var(--bdr);background:var(--surface);color:var(--txt2);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .2s}
+.btn:hover{background:var(--bg3);color:var(--txt);border-color:var(--bdr2)}
+.btn.primary{background:linear-gradient(135deg,#8b5cf6,#6366f1);border-color:transparent;color:#fff}
+.btn.primary:hover{background:linear-gradient(135deg,#a78bfa,#818cf8)}
+</style>
+</head>
+<body>
+
+<h1>🏗 Architect AI — Демо панели нормативов</h1>
+<h2>Как compliance данные отображаются в интерфейсе</h2>
+<p class="subtitle">Промт: "Построй 5-этажный офис из монолитного ЖБ в 7-балльной сейсмической зоне"</p>
+
+<div class="grid">
+  <!-- Левая панель: Промт и параметры -->
+  <div class="panel">
+    <div class="panel-header">
+      <h3>💬 Чат</h3>
+      <span class="badge ok">v9.2</span>
+    </div>
+    <div class="panel-body">
+      <div class="prompt-box">
+        <strong>Пользователь:</strong><br>
+        Построй 5-этажный офис из монолитного железобетона, 24×36м, в 7-балльной сейсмической зоне, свайный фундамент
+      </div>
+      <div class="prompt-box">
+        <strong>Architect AI:</strong><br>
+        Генерирую 3D-модель офисного здания...<br><br>
+        📋 <strong>Параметры:</strong><br>
+        • Тип: Офис, 5 этажей<br>
+        • Размер: 24×36м, высота 3.2м/этаж<br>
+        • Материал: Монолитный ЖБ (B30)<br>
+        • Конструктив: Каркасная система<br>
+        • Фундамент: Свайный (∅400, L=8м)<br>
+        • Сейсмика: 7 баллов, грунт III<br><br>
+        ✅ Проверено по 14 нормативам<br>
+        ⚠️ 16 предупреждений требуют внимания
+      </div>
+      <button class="btn primary" onclick="runDemo()" style="width:100%">▶ Запустить демо</button>
+      <button class="btn" onclick="document.getElementById('compliance-panel').style.display='none';document.getElementById('score-value').textContent='—';" style="width:100%">↺ Сбросить</button>
+    </div>
+  </div>
+
+  <!-- Правая панель: Compliance -->
+  <div class="panel">
+    <div class="panel-header">
+      <h3>📋 Проверка нормативов</h3>
+      <span id="demo-badge" class="badge ok" style="display:none">14 проверок</span>
+    </div>
+    <div class="panel-body" id="compliance-panel" style="display:none">
+
+      <!-- Оценка -->
+      <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:var(--radius);padding:16px;text-align:center">
+        <div style="width:80px;height:80px;margin:0 auto 10px;position:relative">
+          <svg viewBox="0 0 36 36" width="80" height="80" style="transform:rotate(-90deg)">
+            <circle fill="none" stroke="var(--bg4)" stroke-width="6" cx="18" cy="18" r="15.5"/>
+            <circle id="score-arc" fill="none" stroke="var(--ok)" stroke-width="6" stroke-linecap="round" cx="18" cy="18" r="15.5" stroke-dasharray="97.4" stroke-dashoffset="97.4" style="transition:stroke-dashoffset 0.8s ease"/>
+          </svg>
+          <div id="score-value" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:var(--txt)">—</div>
+        </div>
+        <div style="font-size:11px;color:var(--txt3)">Оценка соответствия</div>
+        <div id="status-badge" style="display:none;margin-top:8px;padding:8px 12px;border-radius:var(--radius-sm);font-size:12px;font-weight:600"></div>
+      </div>
+
+      <!-- Нормативы -->
+      <div id="norms-card" style="display:none;background:var(--surface);border:1px solid var(--bdr);border-radius:var(--radius-sm);overflow:hidden">
+        <div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:pointer">
+          <h4 style="font-size:11px;font-weight:600;color:var(--txt);display:flex;align-items:center;gap:6px">📖 Применённые нормативы</h4>
+          <span id="norms-count" style="padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;background:rgba(34,197,94,0.15);color:var(--ok)">0</span>
+        </div>
+        <div style="display:none;padding:0 12px 12px;border-top:1px solid var(--bdr)" id="norms-body"></div>
+      </div>
+
+      <!-- Конструктивные решения -->
+      <div id="struct-section" style="display:none;background:var(--surface);border:1px solid var(--bdr);border-radius:var(--radius-sm);padding:12px">
+        <h4 style="font-size:10px;font-weight:700;letter-spacing:0.7px;text-transform:uppercase;color:var(--txt3);margin-bottom:8px;padding-bottom:7px;border-bottom:1px solid var(--bdr)">🔧 Конструктивные решения</h4>
+        <div id="struct-details"></div>
+      </div>
+
+      <!-- Категории проверок -->
+      <div id="cats-container"></div>
+
+      <!-- План мероприятий -->
+      <div id="action-plan" style="display:none;background:linear-gradient(135deg,rgba(139,92,246,0.05),rgba(99,102,241,0.05));border:1px solid rgba(139,92,246,0.2);border-radius:var(--radius-sm);padding:12px">
+        <h4 style="font-size:10px;font-weight:700;color:var(--acc2);margin-bottom:8px">📝 План мероприятий</h4>
+        <div id="action-list"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = {
+  overall_score: 0.52,
+  overall_passed: false,
+  structural: { passed: true, score: 85 },
+  fire_safety: { passed: true, score: 80 },
+  accessibility: { passed: true, score: 70 },
+  energy_efficiency: { passed: true, score: 75, energy_class: "B" },
+  foundation: { passed: true, score: 85 },
+  seismic: { passed: true, score: 90 },
+  mep: { passed: true, score: 85 },
+  applicable_norms: [
+    { code: "СП 20.13330.2016", full_name: "Нагрузки и воздействия" },
+    { code: "СП 14.13330.2018", full_name: "Строительство в сейсмических районах" },
+    { code: "СП 63.13330.2018", full_name: "Бетонные и ЖБ конструкции" },
+    { code: "СП 22.13330.2016", full_name: "Основания зданий" },
+    { code: "СП 24.13330.2011", full_name: "Свайные фундаменты" },
+    { code: "СП 2.13130.2020", full_name: "Противопожарная защита" },
+    { code: "СП 1.13130.2020", full_name: "Эвакуационные пути" },
+    { code: "СП 59.13330.2016", full_name: "Доступность МГН" },
+    { code: "СП 50.13330.2012", full_name: "Теплозащита" },
+    { code: "СП 7.13130.2013", full_name: "Вентиляция и кондиционирование" },
+    { code: "СП 30.13330.2020", full_name: "Водопровод и канализация" },
+    { code: "СП 76.13330.2016", full_name: "Электрооборудование" },
+    { code: "СП 17.13330.2017", full_name: "Кровли" },
+    { code: "ФЗ № 384-ФЗ", full_name: "О безопасности зданий" },
+  ],
+  issues: [],
+  warnings: [
+    { code: "SP_1_13130_5.2", severity: "warning", message: "Лестничный марш ≥1.2м", fix: "Проверить ширину лестницы", standard: "СП 1.13130.2020", category: "fire" },
+    { code: "SP_2_13130_5.1", severity: "warning", message: "Площадь 4320м² > лимита пожарного отсека 2500м²", fix: "Разделить на пожарные отсеки", standard: "СП 2.13130.2020", category: "fire" },
+    { code: "NATURAL_LIGHT", severity: "warning", message: "'Офис 1 этаж' (200м²) — остекление ≥25.0м²", fix: "Добавить окна", standard: "СП 54.13330.2016", category: "layout" },
+    { code: "ACCESS_ELEVATOR", severity: "warning", message: "'office' с 5 этажами — нужен лифт", fix: "Добавить пассажирский лифт", standard: "СП 59.13330.2016", category: "accessibility" },
+    { code: "ACCESS_RAMP", severity: "warning", message: "Требуется пандус на входе (уклон ≤ 1:12)", fix: "Спроектировать пандус", standard: "СП 59.13330.2016", category: "accessibility" },
+    { code: "ACCESS_DOOR", severity: "warning", message: "Ширина дверных проёмов ≥ 0.9м", fix: "Проверить все двери", standard: "СП 59.13330.2016", category: "accessibility" },
+    { code: "ACCESS_BATHROOM", severity: "warning", message: "Доступный санузел (2.2×2.2м мин.)", fix: "Выделить доступный санузел", standard: "СП 59.13330.2016", category: "accessibility" },
+    { code: "SP_63_COVER", severity: "warning", message: "Защитный слой бетона ≥25мм (XC1)", fix: "Обеспечить защитный слой", standard: "СП 63.13330.2018", category: "structural" },
+    { code: "SP_63_REBAR_MIN", severity: "warning", message: "Минимальное армирование: 0.1% (изгиб)", fix: "Проверить процент армирования", standard: "СП 63.13330.2018", category: "structural" },
+    { code: "ENERGY_WINDOW", severity: "info", message: "Площадь стен ≈1920м² — окна ≤40% (768м²)", fix: "Проверить остекление", standard: "СП 50.13330.2012", category: "energy" },
+    { code: "SP_7_VENT", severity: "warning", message: "Требуется приточно-вытяжная вентиляция", fix: "Спроектировать систему вентиляции", standard: "СП 7.13130.2013", category: "mep" },
+    { code: "SP_30_HOT_WATER", severity: "warning", message: "Горячее водоснабжение: 60-75°C", fix: "Обеспечить ГВС", standard: "СП 30.13330.2020", category: "mep" },
+    { code: "SP_76_LOAD", severity: "warning", message: "Электрическая нагрузка: 50-80 Вт/м²", fix: "Рассчитать электрическую нагрузку", standard: "СП 76.13330.2016", category: "mep" },
+    { code: "SP_17_FLAT", severity: "warning", message: "Плоская кровля — усиленная гидроизоляция", fix: "ПВХ/ТПО мембрана + внутренний водосток", standard: "СП 17.13330.2017", category: "roof" },
+    { code: "SP_2_13130_FIRE", severity: "warning", message: "Автоматическая установка пожаротушения", fix: "Проектировать спринклерную систему", standard: "СП 2.13130.2020", category: "fire" },
+    { code: "ACCESS_TACTILE", severity: "warning", message: "Тактильная навигация и визуальные оповещатели", fix: "Добавить тактильные таблички", standard: "СП 59.13330.2016", category: "accessibility" },
+  ],
+  action_plan: [
+    "[Пожар] Разделить на пожарные отсеки (площадь 4320м² > 2500м²)",
+    "[Пожар] Проектировать спринклерную систему пожаротушения",
+    "[Доступность] Добавить пассажирский лифт для 5-этажного офиса",
+    "[Доступность] Спроектировать пандус на входе (уклон ≤ 1:12)",
+    "[Доступность] Выделить доступный санузел 2.2×2.2м",
+    "[Конструкции] Обеспечить защитный слой бетона ≥25мм",
+    "[Инженерия] Спроектировать приточно-вытяжную вентиляцию",
+    "[Инженерия] Обеспечить горячее водоснабжение 60-75°C",
+    "[Кровля] Применить ПВХ/ТПО мембрану для плоской кровли",
+  ],
+};
+
+function runDemo() {
+  const panel = document.getElementById('compliance-panel');
+  panel.style.display = 'flex';
+  document.getElementById('demo-badge').style.display = 'inline';
+
+  // Score animation
+  const score = Math.round(DATA.overall_score * 100);
+  const arc = document.getElementById('score-arc');
+  const offset = 97.4 - (97.4 * score / 100);
+  setTimeout(() => { arc.style.strokeDashoffset = offset; }, 100);
+  document.getElementById('score-value').textContent = score + '%';
+  arc.setAttribute('stroke', score >= 80 ? 'var(--ok)' : score >= 60 ? 'var(--warn)' : 'var(--err)');
+
+  // Status
+  const sb = document.getElementById('status-badge');
+  sb.style.display = 'block';
+  sb.style.background = 'rgba(239,68,68,0.1)';
+  sb.style.border = '1px solid rgba(239,68,68,0.3)';
+  sb.style.color = 'var(--err)';
+  sb.textContent = '⚠️ Есть нарушения — 16 предупреждений';
+
+  // Norms
+  document.getElementById('norms-card').style.display = 'block';
+  document.getElementById('norms-count').textContent = DATA.applicable_norms.length;
+  document.getElementById('norms-body').innerHTML = DATA.applicable_norms.map(n =>
+    `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg3);border-radius:6px;font-size:11px;margin-bottom:4px">
+      <span style="font-weight:600;color:var(--acc2);white-space:nowrap">${n.code}</span>
+      <span style="color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.full_name}</span>
+    </div>`
+  ).join('');
+
+  // Structural
+  document.getElementById('struct-section').style.display = 'block';
+  document.getElementById('struct-details').innerHTML = `
+    <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span style="color:var(--txt3)">Конструктивная система</span><span style="color:var(--txt);font-weight:500">Каркасная</span></div>
+    <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span style="color:var(--txt3)">Класс бетона</span><span style="color:var(--txt);font-weight:500">B30 (f_b=22 МПа)</span></div>
+    <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span style="color:var(--txt3)">Арматура</span><span style="color:var(--txt);font-weight:500">A500 (f_y=435 МПа)</span></div>
+    <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span style="color:var(--txt3)">Фундамент</span><span style="color:var(--txt);font-weight:500">Свайный ∅400 L=8м</span></div>
+    <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span style="color:var(--txt3)">Несущая способность сваи</span><span style="color:var(--txt);font-weight:500">314.2 кН</span></div>
+    <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span style="color:var(--txt3)">Сейсмическая сила</span><span style="color:var(--txt);font-weight:500">2043 кН (7 баллов)</span></div>
+    <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span style="color:var(--txt3)">Огнестойкость</span><span style="color:var(--ok);font-weight:500">REI 120 ✓</span></div>
+    <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span style="color:var(--txt3)">Нагрузка ППУ</span><span style="color:var(--txt);font-weight:500">291.3 кН</span></div>
+  `;
+
+  // Categories
+  const cats = {
+    fire: { icon: '🔥', name: 'Пожарная безопасность' },
+    layout: { icon: '📐', name: 'Планировка' },
+    structural: { icon: '🏗', name: 'Конструкции' },
+    energy: { icon: '⚡', name: 'Энергоэффективность' },
+    accessibility: { icon: '♿', name: 'Доступность' },
+    mep: { icon: '🔧', name: 'Инженерные системы' },
+    roof: { icon: '🏠', name: 'Кровля' },
+  };
+
+  const container = document.getElementById('cats-container');
+  container.innerHTML = '';
+
+  Object.entries(cats).forEach(([key, cat]) => {
+    const checks = DATA.warnings.filter(w => w.category === key);
+    if (checks.length === 0) return;
+
+    const hasErr = checks.some(c => c.severity === 'error');
+    const badgeClass = hasErr ? 'err' : 'ok';
+    const badgeText = hasErr ? '✗' : '⚠';
+
+    const card = document.createElement('div');
+    card.style.cssText = 'background:var(--surface);border:1px solid var(--bdr);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:6px';
+    card.innerHTML = `
+      <div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:pointer">
+        <h4 style="font-size:11px;font-weight:600;color:var(--txt);display:flex;align-items:center;gap:6px">${cat.icon} ${cat.name} <span style="font-weight:400;color:var(--txt3)">(${checks.length})</span></h4>
+        <span style="padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;background:rgba(${hasErr?'239,68,68':'245,158,11'},0.15);color:${hasErr?'var(--err)':'var(--warn)'}">${badgeText}</span>
+      </div>
+      <div style="display:none;padding:0 12px 12px;border-top:1px solid var(--bdr)">
+        ${checks.map(c => {
+          const iconClass = c.severity === 'error' ? 'var(--err)' : c.severity === 'warning' ? 'var(--warn)' : 'var(--ok)';
+          const icon = c.severity === 'error' ? '✗' : c.severity === 'warning' ? '!' : '✓';
+          return `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid rgba(46,46,53,0.5);font-size:11px">
+            <span style="width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0;background:${iconClass}22;color:${iconClass}">${icon}</span>
+            <div>
+              <span style="color:var(--txt2)">${c.message}</span>
+              ${c.standard ? `<span style="font-size:9px;color:var(--txt3);background:var(--bg4);padding:1px 5px;border-radius:3px;margin-left:4px">${c.standard}</span>` : ''}
+              ${c.fix ? `<span style="display:block;font-size:10px;color:var(--acc2);margin-top:2px;padding-left:24px">→ ${c.fix}</span>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+    container.appendChild(card);
+  });
+
+  // Action plan
+  document.getElementById('action-plan').style.display = 'block';
+  document.getElementById('action-list').innerHTML = DATA.action_plan.map(a => {
+    const isOk = a.startsWith('✅');
+    return `<div style="display:flex;align-items:flex-start;gap:6px;padding:4px 0;font-size:11px;color:var(--txt2);line-height:1.4">
+      <span style="flex-shrink:0;margin-top:1px">${isOk ? '✓' : '→'}</span>
+      <span>${a}</span>
+    </div>`;
+  }).join('');
+}
+</script>
+</body>
+</html>

@@ -39,6 +39,10 @@ _LAZY_IMPORTS = {
     "MEPBIMAgent": "shared.agents.mep_bim_agent",
     # Orchestrator
     "Orchestrator": "shared.agents.orchestrator",
+    # New (v9.2) — Structural analysis agents
+    "StructuralAnalysisAgent": "shared.agents.structural_analysis_agent",
+    "FoundationAgent": "shared.agents.foundation_agent",
+    "SeismicAgent": "shared.agents.seismic_agent",
 }
 
 
@@ -83,6 +87,9 @@ __all__ = [
     "ComplianceAgent",
     "ELAgent",
     "MEPBIMAgent",
+    "StructuralAnalysisAgent",
+    "FoundationAgent",
+    "SeismicAgent",
     "Orchestrator",
 ]
 
@@ -115,6 +122,9 @@ class _AgentRegistry:
         "compliance",
         "el",
         "mep_bim",
+        "structural_analysis",
+        "foundation",
+        "seismic",
     ]
 
     _class_map = {
@@ -142,6 +152,9 @@ class _AgentRegistry:
         "compliance": "ComplianceAgent",
         "el": "ELAgent",
         "mep_bim": "MEPBIMAgent",
+        "structural_analysis": "StructuralAnalysisAgent",
+        "foundation": "FoundationAgent",
+        "seismic": "SeismicAgent",
     }
 
     def __getitem__(self, name: str):
