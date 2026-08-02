@@ -1,0 +1,12 @@
+{
+  "title": "AI_Arhitector 16K Blender Cycles T4 GPU",
+  "id": "kevwmatthews/architect-16k-render",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "code_file": "architect_16k_render.py"
+}
