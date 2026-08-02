@@ -75,9 +75,13 @@ jobs:
           npx playwright install chromium --with-deps
 
       - name: Run E2E browser tests
-        continue-on-error: true
         run: |
-          node tests/test_e2e_browser.js "file://$(pwd)/index.html" || true
+          # Start local HTTP server (file:// can't load CDN scripts)
+          python3 -m http.server 8080 &
+          SERVER_PID=$!
+          sleep 2
+          node tests/test_e2e_browser.js http://localhost:8080/index.html || true
+          kill $SERVER_PID 2>/dev/null || true
         env:
           CI: true
 
