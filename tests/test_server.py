@@ -38,9 +38,10 @@ class TestValidation:
 
     def test_validate_invalid_values(self):
         from shared.validation import validate_params
+        # v9.0: Flexible validation — accepts LLM values
         result = validate_params({"object_type": "INVALID", "style": "INVALID"})
-        assert result["object_type"] == "building"
-        assert result["style"] == "modern"
+        assert result["object_type"] == "INVALID"  # LLM is source of truth
+        assert result["style"] == "INVALID"  # LLM is source of truth
 
 
 # ═══════════════════════════════════════════════════════════════

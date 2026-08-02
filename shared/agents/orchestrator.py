@@ -294,11 +294,11 @@ class Orchestrator:
                 },
             }
 
-            # Pass structural and MEP data to geometry agent
-            if "structural" in mid_results:
-                geom_params["structural_calc"] = mid_results["structural"]
-            if "mep" in mid_results:
-                geom_params["mep_calc"] = mid_results["mep"]
+            # Pass structural and MEP data to geometry agent (if available from mid-pipeline)
+            # Note: mid_results is populated later, so we pass empty dict here
+            # The geometry agent will generate structural/MEP if data is provided
+            geom_params.setdefault("structural_calc", {})
+            geom_params.setdefault("mep_calc", {})
             texture_params = {
                 "material": params.get("material", "plaster"),
                 "resolution": 2048,
@@ -540,6 +540,7 @@ class Orchestrator:
             job["result"] = {
                 "gen_type": gen_type,
                 "params": params,
+                "building_params": building_params,
                 "render": render_data,
                 "exports": export_data,
                 "quality": quality_data,
@@ -547,6 +548,16 @@ class Orchestrator:
                 "agent_results": agent_results,
                 "drawings": drawings,
             }
+            # Collect steps for API response
+            job["steps"] = [
+                {"name": "parse", "status": "done"},
+                {"name": "route", "status": "done"},
+                {"name": "geometry", "status": "done" if geometry_script else "failed"},
+                {"name": "texture", "status": "done" if texture_script else "skipped"},
+                {"name": "render", "status": "done" if render_data else "failed"},
+                {"name": "quality", "status": "done" if quality_data else "skipped"},
+                {"name": "export", "status": "done" if export_data else "skipped"},
+            ]
             job["duration_ms"] = (time.time() - start) * 1000
             return job
 
@@ -581,9 +592,12 @@ class Orchestrator:
         job = self.jobs.get(job_id)
         if not job:
             return {"error": "Job not found"}
+        steps = job.get("steps", [])
+        done_count = len([s for s in steps if s.get("status") == "done"])
         return {
             "job_id": job_id,
             "status": job["status"],
-            "steps": [{"name": s.get("name", ""), "status": s.get("status", "")} for s in job.get("steps", [])],
+            "progress": int(done_count / max(len(steps), 1) * 100),
+            "steps": [{"name": s.get("name", ""), "status": s.get("status", "")} for s in steps],
             "fallback_agents": job.get("fallback_agents", []),
         }

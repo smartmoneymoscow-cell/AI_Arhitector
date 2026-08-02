@@ -437,47 +437,6 @@ for bx, by in [(-0.1, -0.1), (-0.1, 0.1), (0.1, -0.1), (0.1, 0.1)]:
 """
 
 
-# Registry
-FURNITURE_GENERATORS = {
-    "sofa": _gen_sofa,
-    "диван": _gen_sofa,
-    "table": _gen_table,
-    "стол": _gen_table,
-    "bed": _gen_bed,
-    "кровать": _gen_bed,
-    "кровать_двуспальная": _gen_bed,
-    "chair": _gen_chair,
-    "стул": _gen_chair,
-    "wardrobe": _gen_wardrobe,
-    "шкаф": _gen_wardrobe,
-    "шкаф_купе": _gen_wardrobe,
-    "bookshelf": _gen_bookshelf,
-    "стеллаж": _gen_bookshelf,
-    "книжный_стеллаж": _gen_bookshelf,
-    "desk": _gen_desk,
-    "стол_рабочий": _gen_desk,
-    "рабочий_стол": _gen_desk,
-    "bathtub": _gen_bathtub,
-    "ванна": _gen_bathtub,
-    "toilet": _gen_toilet,
-    "унитаз": _gen_toilet,
-    "sink": _gen_sink,
-    "умывальник": _gen_sink,
-    "refrigerator": _gen_refrigerator,
-    "холодильник": _gen_refrigerator,
-    "stove": _gen_stove,
-    "плита": _gen_stove,
-    "chandelier": _gen_chandelier,
-    "люстра": _gen_chandelier,
-    "tv_stand": _gen_tv_stand,
-    "тв_тумба": _gen_tv_stand,
-    "coffee_table": _gen_coffee_table,
-    "журнальный_столик": _gen_coffee_table,
-    "nightstand": _gen_nightstand,
-    "прикроватная_тумба": _gen_nightstand,
-}
-
-
 def _gen_chandelier(x, y, style):
     """Люстра."""
     return f"""
@@ -562,3 +521,44 @@ bpy.ops.mesh.primitive_cone_add(radius1=0.08, radius2=0.03, depth=0.12, location
 shade = bpy.context.active_object; shade.name = "TableLamp_Shade"
 shade.data.materials.append(mat_fabric)
 """
+
+
+# Registry (AFTER all function definitions)
+FURNITURE_GENERATORS = {
+    "sofa": _gen_sofa,
+    "диван": _gen_sofa,
+    "table": _gen_table,
+    "стол": _gen_table,
+    "bed": _gen_bed,
+    "кровать": _gen_bed,
+    "кровать_двуспальная": _gen_bed,
+    "chair": _gen_chair,
+    "стул": _gen_chair,
+    "wardrobe": _gen_wardrobe,
+    "шкаф": _gen_wardrobe,
+    "шкаф_купе": _gen_wardrobe,
+    "bookshelf": _gen_bookshelf,
+    "стеллаж": _gen_bookshelf,
+    "книжный_стеллаж": _gen_bookshelf,
+    "desk": _gen_desk,
+    "стол_рабочий": _gen_desk,
+    "рабочий_стол": _gen_desk,
+    "bathtub": _gen_bathtub,
+    "ванна": _gen_bathtub,
+    "toilet": _gen_toilet,
+    "унитаз": _gen_toilet,
+    "sink": _gen_sink,
+    "умывальник": _gen_sink,
+    "refrigerator": _gen_refrigerator,
+    "холодильник": _gen_refrigerator,
+    "stove": _gen_stove,
+    "плита": _gen_stove,
+    "chandelier": _gen_chandelier,
+    "люстра": _gen_chandelier,
+    "tv_stand": _gen_tv_stand,
+    "тв_тумба": _gen_tv_stand,
+    "coffee_table": _gen_coffee_table,
+    "журнальный_столик": _gen_coffee_table,
+    "nightstand": _gen_nightstand,
+    "прикроватная_тумба": _gen_nightstand,
+}

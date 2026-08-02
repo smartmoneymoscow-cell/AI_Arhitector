@@ -91,21 +91,37 @@ class QualityAgent(BaseAgent):
                     "required": True,
                     "error": f"Render file not found: {render_path}",
                 }
-                issues.append(f"Render file missing: {render_path}")
+                issues.append(f"Render file not found: {render_path}")
 
             # Overall verdict
             required_checks = [c for c in checks.values() if c.get("required", True)]
             all_required_passed = all(c.get("passed", False) for c in required_checks)
 
+            # If critical checks failed, return FAILED status
+            if not all_required_passed:
+                return TaskResult(
+                    status=TaskStatus.FAILED,
+                    error="; ".join(issues) if issues else "Quality check failed",
+                    data={
+                        "passed": False,
+                        "checks": checks,
+                        "issues": issues,
+                        "render_path": render_path,
+                        "quality_level": quality,
+                        "severity": "critical",
+                    },
+                    duration_ms=(time.time() - start) * 1000,
+                )
+
             return TaskResult(
                 status=TaskStatus.DONE,
                 data={
-                    "passed": all_required_passed and len(issues) == 0,
+                    "passed": len(issues) == 0,
                     "checks": checks,
                     "issues": issues,
                     "render_path": render_path,
                     "quality_level": quality,
-                    "severity": "critical" if not all_required_passed else ("warning" if issues else "ok"),
+                    "severity": "warning" if issues else "ok",
                 },
                 duration_ms=(time.time() - start) * 1000,
             )
