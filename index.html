@@ -2134,8 +2134,12 @@ async function _sendInner(){
       // dead end: fall back to text-based parsing of whatever they typed
       // plus the filename, and still generate a model.
       console.error('Vision analysis failed:',e);
-      addMsg('a','❌ Анализ фото не удался: '+e.message+'. Попробуйте описать здание текстом или загрузить другое фото.');
-      showNotif('Анализ фото не удался','warn');
+      // FALLBACK: generate from filename + any text
+      const fallbackText = ftext || fname || 'здание по фото';
+      const parsed = parseLocal(fallbackText);
+      const bld = applyParams(fallbackText, parsed);
+      addThink(['⚠️ Анализ фото не удался — генерирую по описанию…','📦 '+bld.W+'×'+bld.L+'м | '+bld.floors+' эт.']);
+      setTimeout(()=>startGen(bld),300);
     }
     return;
   }
@@ -2155,9 +2159,9 @@ async function _sendInner(){
     addThink(['✅ Стиль: '+ip.style+' | Мебель: '+ip.furniture.join(', '),'🖥 Генерирую интерьер…']);
     const ok = await renderInteriorViaServer(text, ip.style, ip.furniture);
     if(ok) return;
-    addMsg('a', '❌ Сервер рендеринга недоступен. Генерация интерьера требует сервер (Blender). Попробуйте позже.');
-    showNotif('Сервер недоступен','warn');
-    return;
+    const bld = {isInterior:true, room_type:(/детск/.test(text)?'children':/спальн/.test(text)?'bedroom':/кухн/.test(text)?'kitchen':/ванн/.test(text)?'bathroom':/гостин/.test(text)?'living':'living'), style:ip.style, furniture:ip.furniture, label:ip.style+' interior', floors:1, W:5, L:4, fH:2.8, mat:'plaster'};
+    addThink(["🖥 Сервер недоступен — генерирую интерьер локально…"]);
+    setTimeout(()=>startGen(bld),300);
   }
 
   // ── LANDSCAPE PATH ───────────────────────────────────
@@ -2165,9 +2169,9 @@ async function _sendInner(){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🌳 Планирую ландшафт…']);
     const lOk = await generateWithFallback(text, {object_type: 'landscape'});
     if(lOk) return;
-    addMsg('a', '❌ Сервер рендеринга недоступен. Ландшафтный дизайн требует серверную генерацию. Попробуйте позже.');
-    showNotif('Сервер недоступен','warn');
-    return;
+    const bld = {type:"landscape", label:"Ландшафт", floors:1, W:15, L:15, fH:0, mat:"grass"};
+    addThink(["🖥 Сервер недоступен — генерирую ландшафт локально…"]);
+    setTimeout(()=>startGen(bld),300);
   }
 
   // ── CONSTRUCTION PATH ────────────────────────────────
@@ -2175,9 +2179,9 @@ async function _sendInner(){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🏗 Анализирую конструкцию…']);
     const cOk = await generateWithFallback(text, {object_type: 'building'});
     if(cOk) return;
-    addMsg('a', '❌ Сервер рендеринга недоступен. Генерация конструкций требует сервер. Попробуйте позже.');
-    showNotif('Сервер недоступен','warn');
-    return;
+    const bld = applyParams(text, {type:"building", object_type:"building"});
+    addThink(["🖥 Сервер недоступен — генерирую конструкцию локально…"]);
+    setTimeout(()=>startGen(bld),300);
   }
 
   // ── BUILDING PATH ────────────────────────────────────
@@ -2241,8 +2245,10 @@ async function _sendInner(){
     const serverOk = await generateViaBlenderServer(text);
     if(serverOk) return;
     
-    addMsg('a', '❌ Сервер рендеринга недоступен, LLM-парсинг не удался. Не могу сгенерировать модель. Попробуйте позже.');
-    showNotif('Сервер недоступен','warn');
+    // Step 4: LOCAL FALLBACK — always generate even without server
+    const bld=applyParams(text,parsed);
+    addThink(['🖥 Сервер недоступен — генерирую локально…','📦 '+bld.W+'×'+bld.L+'м | '+bld.floors+' эт. | '+bld.mat]);
+    setTimeout(()=>startGen(bld),300);
     return;
   }
   // General chat — needs backend

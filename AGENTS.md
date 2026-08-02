@@ -305,3 +305,30 @@ This is a starting point. Add your own conventions, style, and rules as you figu
 - 交付文件（报告、代码、图片、数据等）→ 写工作区根目录或其子目录，不要放进 `.openclaw/`。
 - 临时/中间文件 → 写 `.openclaw/tmp/`，不要写 `/tmp`。
 - 委派子任务时同样遵守。
+## 🔴 ОБЯЗАТЕЛЬНЫЙ ТЕСТ ПОСЛЕ КАЖДОГО РЕЛИЗА
+
+**ТЕСТ КНОПКИ ОТПРАВКИ ПРОМТА — КРИТИЧЕСКИ ВАЖНЫЙ, НИКОГДА НЕ ПРОПУСКАТЬ!**
+
+После КАЖДОГО коммита/релиза ОБЯЗАТЕЛЬНО выполнить:
+```bash
+cd ~/.openclaw/workspace && node tests/test_chat.js
+```
+
+Ожидаемый результат: **64/64 passed, 0 failed**
+
+Если тест не пройден — НЕ ПУШИТЬ в GitHub, пока не исправлено!
+
+Этот тест проверяет:
+1. ✅ Text Input → 3D Generation (кнопка отправки работает)
+2. ✅ Interior Input → Interior Generation
+3. ✅ Photo Upload → 3D Generation
+4. ✅ No Backend → Still Generates (local fallback)
+5. ✅ Empty Input → No Action
+6. ✅ go() Quick Prompt → Generation
+7. ✅ Local Parser — Parameter Extraction
+8. ✅ callAI() — Backend Required
+9. ✅ Generating Flag — Blocks Double Send
+10. ✅ No API Key in localStorage
+11. ✅ Interior GSTEPS — Dynamic Switching
+
+**ЭТОТ ТЕСТ НИКОГДА НЕ ДОЛЖЕН БЫТЬ ПРОПУЩЕН!**
