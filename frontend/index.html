@@ -2324,9 +2324,52 @@ async function _sendInner(){
       const style = parsed.style || 'modern';
       const furnitureMap = {children:['bed','desk','wardrobe','bookshelf'],bedroom:['bed','nightstand','wardrobe','dresser'],living:['sofa','tv','coffee_table','bookshelf'],kitchen:['fridge','stove','table','chairs'],bathroom:['bathtub','sink','toilet','mirror'],study:['desk','chair','bookshelf','lamp'],dining:['table','chairs','sideboard','chandelier']};
       const furniture = furnitureMap[roomType] || furnitureMap.living;
-      appendLiveStep(thinkId, '🏠', 'Интерьер: '+roomType+' | Стиль: '+style);
+      const roomNames = {children:'Детская',bedroom:'Спальня',living:'Гостиная',kitchen:'Кухня',bathroom:'Ванная',study:'Кабинет',dining:'Столовая'};
+      appendLiveStep(thinkId, '🏠', 'Тип помещения: '+(roomNames[roomType]||roomType));
+      appendLiveStep(thinkId, '🎨', 'Стиль: '+style);
+      appendLiveStep(thinkId, '🪑', 'Мебель: '+furniture.join(', '));
+      
+      // ═══ PREMIUM: Interior reasoning ═══
+      addReasoning([
+        {icon:'📖', text:'Прочитал: "'+text.slice(0,80)+'"', confidence:0.95},
+        {icon:'🏠', text:'Помещение: '+(roomNames[roomType]||roomType), confidence:0.9},
+        {icon:'🎨', text:'Стиль интерьера: '+style, confidence:0.85},
+        {icon:'🪑', text:'Мебель: '+furniture.length+' предметов', confidence:0.8},
+        {icon:'📐', text:'Планировка и расстановка мебели', confidence:0.75},
+      ], 0.85);
+      
+      // ═══ PREMIUM: Interior decomposition ═══
+      addDecomposition([
+        {name:'Анализ стиля', description:style, service:'Style'},
+        {name:'Планировка', description:'Расстановка стен и проёмов', service:'Geometry'},
+        {name:'Мебель', description:furniture.join(', '), service:'Furniture'},
+        {name:'Материалы', description:'Пол, стены, потолок', service:'Texture'},
+        {name:'Освещение', description:'Естественное + искусственное', service:'Lighting'},
+        {name:'Рендер', description:'4K EEVEE интерьер', service:'Blender'},
+      ]);
+      
       appendLiveStep(thinkId, '🖥', 'Генерирую 3D интерьер...');
       await generateWithFallback(text, {object_type: 'interior', style: style, furniture: furniture});
+      
+      // ═══ PREMIUM: Interior style comparison ═══
+      setTimeout(()=>{
+        const styleOptions = {
+          modern:{emoji:'🏢',name:'Современный',desc:'Чистые линии, минимализм',pros:['Универсальный','Легко ухаживать'],cons:['Может быть холодным'],price:'Средний бюджет'},
+          loft:{emoji:'🏭',name:'Лофт',desc:'Кирпич, металл, открытые коммуникации',pros:['Стильно','Просторно'],cons:['Шумно','Холодно зимой'],price:'Выше среднего'},
+          scandinavian:{emoji:'🌲',name:'Скандинавский',desc:'Светлое дерево, белые стены',pros:['Уютно','Светло'],cons:['Мало цвета'],price:'Средний'},
+          minimalist:{emoji:'⬜',name:'Минимализм',desc:'Максимум пространства',pros:['Легко убирать','Спокойно'],cons:['Пустовато для некоторых'],price:'Низкий'},
+          classic:{emoji:'🏛',name:'Классический',desc:'Дерево, лепнина, ткани',pros:['Престижно','Тепло'],cons:['Дорого','Сложный уход'],price:'Высокий'},
+        };
+        const current = styleOptions[style] || styleOptions.modern;
+        const others = Object.entries(styleOptions)
+          .filter(([k]) => k !== style)
+          .slice(0, 2)
+          .map(([k, v]) => ({...v, recommended: false}));
+        addComparisonCards([
+          {...current, recommended: true},
+          ...others,
+        ]);
+      }, 600);
       return;
     }
 
