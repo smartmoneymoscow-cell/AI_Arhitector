@@ -284,11 +284,14 @@ async def generate(req: GenerateRequest):
     """Генерация: промт → LLM парсинг → Blender → GLB/PNG."""
     params = await _parse_via_llm_service(req.prompt)
     gen_type = _detect_gen_type(params)
+    quality = getattr(req, 'quality', '16k') or '16k'
 
     if gen_type == "interior":
-        return await _generate_interior(params)
+        return await _generate_interior(params, quality=quality)
+    elif gen_type == "landscape":
+        return await _generate_building(params, quality=quality)
     else:
-        return await _generate_building(params)
+        return await _generate_building(params, quality=quality)
 
 
 @app.post("/api/v1/generate/building")
@@ -382,7 +385,7 @@ async def render_16k(req: dict):
 # ═══════════════════════════════════════════════════════════════
 
 
-async def _generate_building(params: dict):
+async def _generate_building(params: dict, quality: str = "16k"):
     building_params = {
         "width": params.get("width_m", 10),
         "length": params.get("length_m", 12),
@@ -395,12 +398,71 @@ async def _generate_building(params: dict):
     }
 
     script = generate_bpy_script(building_params)
-    
-    # Add 4K render before export
     job_id = uuid.uuid4().hex[:8]
-    output_png = os.path.join(settings.OUTPUT_DIR, f"{job_id}_render.png")
     output_file = os.path.join(settings.OUTPUT_DIR, f"{job_id}.glb")
-    
+
+    # Always export GLB
+    export_cmd = f"\nimport bpy\nbpy.ops.export_scene.gltf(filepath=r'{output_file}', export_format='GLB')"
+
+    if quality == "16k":
+        # 16K tiled render (Cycles) — default
+        output_png = os.path.join(settings.OUTPUT_DIR, f"{job_id}_16k.png")
+        try:
+            run_blender(script + export_cmd, output_file, timeout=300)
+        except TimeoutError as e:
+            raise HTTPException(504, detail=str(e))
+        except RuntimeError as e:
+            raise HTTPException(500, detail={"error": str(e)})
+
+        # 16K tiled render
+        try:
+            from shared.tiled_render import render_16k_tiled
+            render_16k_tiled(
+                scene_script=script,
+                output_path=output_png,
+                total_x=15360,
+                total_y=8640,
+                tiles_x=4,
+                tiles_y=3,
+                samples=512,
+                blender_path=settings.BLENDER_PATH,
+                output_dir=settings.OUTPUT_DIR,
+                timeout_per_tile=300,
+            )
+            logger.info("16K render done: %s", output_png)
+        except Exception as e:
+            logger.warning("16K tiled render failed: %s, falling back to EEVEE 4K", e)
+            _render_eevee_4k(script, job_id, output_png)
+    else:
+        # Fast EEVEE 4K preview
+        output_png = os.path.join(settings.OUTPUT_DIR, f"{job_id}_render.png")
+        try:
+            run_blender(script + export_cmd, output_file, timeout=300)
+        except TimeoutError as e:
+            raise HTTPException(504, detail=str(e))
+        except RuntimeError as e:
+            raise HTTPException(500, detail={"error": str(e)})
+        _render_eevee_4k(script, job_id, output_png)
+
+    # Quality check
+    if os.path.exists(output_png):
+        try:
+            from PIL import Image
+            img = Image.open(output_png)
+            w, h = img.size
+            logger.info("Render quality: %dx%d", w, h)
+            if w < 3840 or h < 2160:
+                logger.warning("Render below 4K: %dx%d", w, h)
+        except Exception as e:
+            logger.warning("Quality check failed: %s", e)
+
+    if os.path.exists(output_file):
+        return FileResponse(output_file, media_type="model/gltf-binary", filename=f"archai_{job_id}.glb")
+    raise HTTPException(500, detail="Export failed")
+
+
+def _render_eevee_4k(script: str, job_id: str, output_png: str):
+    """Fast EEVEE 4K render as fallback."""
     render_cmd = f"""
 import bpy
 bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
@@ -415,34 +477,13 @@ bpy.context.scene.render.image_settings.file_format = 'PNG'
 bpy.context.scene.render.filepath = r'{output_png}'
 bpy.ops.render.render(write_still=True)
 """
-    export_cmd = f"\nimport bpy\nbpy.ops.export_scene.gltf(filepath=r'{output_file}', export_format='GLB')"
-
     try:
-        run_blender(script + render_cmd + export_cmd, output_file, timeout=300)
-    except TimeoutError as e:
-        raise HTTPException(504, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(500, detail={"error": str(e)})
-
-    # Quality check
-    if os.path.exists(output_png):
-        try:
-            from PIL import Image
-            img = Image.open(output_png)
-            w, h = img.size
-            if w < 1920 or h < 1080:
-                logger.warning("Render quality too low: %dx%d", w, h)
-            else:
-                logger.info("Render quality OK: %dx%d", w, h)
-        except Exception as e:
-            logger.warning("Quality check failed: %s", e)
-
-    if os.path.exists(output_file):
-        return FileResponse(output_file, media_type="model/gltf-binary", filename=f"archai_{job_id}.glb")
-    raise HTTPException(500, detail="Export failed")
+        run_blender(script + render_cmd, output_png, timeout=120)
+    except Exception as e:
+        logger.warning("EEVEE 4K fallback failed: %s", e)
 
 
-async def _generate_interior(params: dict):
+async def _generate_interior(params: dict, quality: str = "16k"):
     room_type = params.get("room_type", "living")
     furniture = params.get("furniture") or DEFAULT_FURNITURE.get(room_type, ["sofa", "table", "chandelier"])
 
@@ -458,21 +499,54 @@ async def _generate_interior(params: dict):
     job_id = uuid.uuid4().hex[:8]
     output_file = os.path.join(settings.OUTPUT_DIR, f"{job_id}_int.png")
 
-    render_cmd = (
-        "\nimport bpy"
-        f"\nbpy.context.scene.render.filepath = r'{output_file}'"
-        "\nbpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'"
-        "\nbpy.context.scene.render.resolution_x = 3840"
-        "\nbpy.context.scene.render.resolution_y = 2160"
-        "\nbpy.ops.render.render(write_still=True)"
-    )
-
-    try:
-        run_blender(script + render_cmd, output_file, timeout=settings.RENDER_INTERIOR_TIMEOUT)
-    except TimeoutError as e:
-        raise HTTPException(504, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(500, detail=str(e))
+    if quality == "16k":
+        # 16K tiled render for interior
+        try:
+            from shared.tiled_render import render_16k_tiled
+            render_16k_tiled(
+                scene_script=script,
+                output_path=output_file,
+                total_x=15360,
+                total_y=8640,
+                tiles_x=4,
+                tiles_y=3,
+                samples=512,
+                blender_path=settings.BLENDER_PATH,
+                output_dir=settings.OUTPUT_DIR,
+                timeout_per_tile=300,
+            )
+            logger.info("Interior 16K render done: %s", output_file)
+        except Exception as e:
+            logger.warning("Interior 16K failed: %s, falling back to EEVEE 4K", e)
+            render_cmd = (
+                "\nimport bpy"
+                f"\nbpy.context.scene.render.filepath = r'{output_file}'"
+                "\nbpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'"
+                "\nbpy.context.scene.render.resolution_x = 3840"
+                "\nbpy.context.scene.render.resolution_y = 2160"
+                "\nbpy.ops.render.render(write_still=True)"
+            )
+            try:
+                run_blender(script + render_cmd, output_file, timeout=settings.RENDER_INTERIOR_TIMEOUT)
+            except TimeoutError as e:
+                raise HTTPException(504, detail=str(e))
+            except RuntimeError as e:
+                raise HTTPException(500, detail=str(e))
+    else:
+        render_cmd = (
+            "\nimport bpy"
+            f"\nbpy.context.scene.render.filepath = r'{output_file}'"
+            "\nbpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'"
+            "\nbpy.context.scene.render.resolution_x = 3840"
+            "\nbpy.context.scene.render.resolution_y = 2160"
+            "\nbpy.ops.render.render(write_still=True)"
+        )
+        try:
+            run_blender(script + render_cmd, output_file, timeout=settings.RENDER_INTERIOR_TIMEOUT)
+        except TimeoutError as e:
+            raise HTTPException(504, detail=str(e))
+        except RuntimeError as e:
+            raise HTTPException(500, detail=str(e))
 
     if os.path.exists(output_file):
         return FileResponse(output_file, media_type="image/png", filename=f"archai_interior_{job_id}.png")
