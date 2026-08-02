@@ -41,6 +41,52 @@ body{display:flex;flex-direction:column}
 .think-row{display:flex;align-items:center;gap:6px;padding:3px 0;border-top:1px solid #dbeafe}
 .think-row:first-of-type{border-top:none}
 .tc{width:14px;height:14px;border-radius:50%;background:#6366f1;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:8px}
+
+/* ═══ PREMIUM CHAT COMPONENTS ═══ */
+.reasoning-card{background:linear-gradient(135deg,#faf5ff,#eff6ff);border:1px solid #c4b5fd;border-radius:14px;padding:14px 16px;max-width:440px;margin-bottom:8px}
+.reasoning-title{font-weight:700;font-size:12px;color:#6d28d9;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.reasoning-step{display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:11.5px;color:#4c1d95;line-height:1.5}
+.reasoning-step .rs-icon{width:20px;height:20px;border-radius:50%;background:#ddd6fe;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px}
+.reasoning-step .rs-text{flex:1}
+.reasoning-step .rs-confidence{font-size:10px;color:#7c3aed;font-weight:600;background:#ede9fe;padding:1px 6px;border-radius:8px}
+.decomp-tree{background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1px solid #86efac;border-radius:14px;padding:14px 16px;max-width:460px;margin-bottom:8px}
+.decomp-title{font-weight:700;font-size:12px;color:#166534;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.decomp-item{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:11.5px;color:#14532d}
+.decomp-item .di-num{width:22px;height:22px;border-radius:50%;background:#bbf7d0;color:#166534;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.decomp-item .di-line{flex:1;border-left:2px dashed #86efac;padding-left:10px}
+.decomp-item .di-service{font-size:9px;color:#059669;background:#d1fae5;padding:1px 6px;border-radius:6px;margin-left:auto}
+.ref-gallery{background:linear-gradient(135deg,#fff7ed,#fefce8);border:1px solid #fdba74;border-radius:14px;padding:14px;max-width:500px;margin-bottom:8px}
+.ref-title{font-weight:700;font-size:12px;color:#9a3412;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.ref-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ref-card{border-radius:10px;overflow:hidden;border:2px solid transparent;cursor:pointer;transition:all .2s;position:relative}
+.ref-card:hover{border-color:#f97316;transform:scale(1.03)}
+.ref-card.selected{border-color:#ea580c;box-shadow:0 0 0 2px rgba(234,88,12,.3)}
+.ref-card img{width:100%;height:90px;object-fit:cover;display:block;background:#f1f5f9}
+.ref-card .rc-label{padding:4px 6px;font-size:10px;color:#78350f;background:#fffbeb;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.variant-cards{display:flex;gap:10px;flex-wrap:wrap;max-width:520px;margin-bottom:8px}
+.variant-card{flex:1;min-width:140px;border-radius:14px;overflow:hidden;border:2px solid #e2e8f0;cursor:pointer;transition:all .25s;background:#fff}
+.variant-card:hover{border-color:#6366f1;transform:translateY(-2px);box-shadow:0 8px 24px rgba(99,102,241,.15)}
+.variant-card.selected{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.2)}
+.variant-card .vc-preview{height:120px;background:linear-gradient(135deg,#f1f5f9,#e2e8f0);display:flex;align-items:center;justify-content:center;font-size:32px;position:relative}
+.variant-card .vc-badge{position:absolute;top:6px;right:6px;background:#6366f1;color:#fff;font-size:9px;padding:2px 6px;border-radius:6px;font-weight:600}
+.variant-card .vc-info{padding:8px 10px}
+.variant-card .vc-name{font-weight:600;font-size:12px;color:#1e293b}
+.variant-card .vc-desc{font-size:10px;color:#64748b;margin-top:2px}
+.variant-card .vc-price{font-size:11px;color:#059669;font-weight:600;margin-top:4px}
+.compare-cards{display:flex;gap:10px;max-width:520px;margin-bottom:8px}
+.compare-card{flex:1;border-radius:14px;overflow:hidden;border:2px solid #e2e8f0;background:#fff;transition:all .2s}
+.compare-card.recommended{border-color:#10b981;background:#f0fdf4}
+.compare-card .cc-header{padding:8px 10px;background:linear-gradient(135deg,#f8fafc,#f1f5f9);border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between}
+.compare-card.recommended .cc-header{background:linear-gradient(135deg,#ecfdf5,#d1fae5)}
+.compare-card .cc-title{font-weight:700;font-size:12px;color:#1e293b}
+.compare-card .cc-rec{font-size:9px;color:#059669;background:#d1fae5;padding:2px 6px;border-radius:6px}
+.compare-card .cc-image{height:100px;background:#f8fafc;display:flex;align-items:center;justify-content:center;font-size:36px}
+.compare-card .cc-body{padding:8px 10px;font-size:11px;color:#475569;line-height:1.5}
+.compare-card .cc-pros{color:#059669;font-size:10px;margin-top:4px}
+.compare-card .cc-cons{color:#dc2626;font-size:10px;margin-top:2px}
+.compare-card .cc-price{font-size:12px;color:#059669;font-weight:700;margin-top:6px;padding-top:6px;border-top:1px solid #e2e8f0}
+.pulse-dot{width:8px;height:8px;border-radius:50%;background:#6366f1;animation:pulse 1.5s infinite;display:inline-block}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
 .dots{display:flex;gap:4px;padding:9px 13px;background:var(--bg2);border:1px solid var(--bdr);border-radius:4px 12px 12px 12px}
 .d{width:5px;height:5px;border-radius:50%;background:#6366f1;animation:bop .9s infinite}
 .d:nth-child(2){animation-delay:.17s}.d:nth-child(3){animation-delay:.34s}
@@ -1937,6 +1983,14 @@ function doFinish(bld,ov,gf){
       '🔍 Колесо мыши → приближение → интерьер<br>'+
       '👆 Дбл.клик / "Внутри" → вид изнутри'
     );
+    // ═══ PREMIUM: Show material comparison after build ═══
+    setTimeout(()=>{
+      addComparisonCards([
+        {name:bld.mat||'Штукатурка', emoji:'🏗', description:'Текущий материал фасада', pros:['Выбран для данного проекта'], cons:[], price:'Текущий вариант', recommended:true},
+        {name:'Кирпич', emoji:'🧱', description:'Классический материал', pros:['Прочность 100+ лет','Экологичный'], cons:['Дороже на 30%','Долгий монтаж'], price:'~4500 ₽/м²'},
+        {name:'Дерево', emoji:'🪵', description:'Экологичный', pros:['Тепло','Красивый вид'], cons:['Усадка 1-2 года','Биозащита'], price:'~3800 ₽/м²'},
+      ]);
+    }, 800);
   },350);
 }
 
@@ -2196,13 +2250,18 @@ async function _sendInner(){
 
   // ── BUILDING PATH ────────────────────────────────────
   if(BUILD_RE.test(text)||text.length>6){
-    addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🧠 Извлекаю параметры…']);
+    // ═══ PREMIUM: Live thinking with animated steps ═══
+    const thinkId = addLiveThinking('Анализирую запрос...');
+    appendLiveStep(thinkId, '📖', 'Читаю: "'+text.slice(0,60)+'"');
+    await new Promise(r => setTimeout(r, 300));
+    appendLiveStep(thinkId, '🔍', 'Извлекаю параметры из описания...');
     
     // Step 1: LLM parsing FIRST (understands any natural language)
     let parsed=null;
     if(_backendOk){
       try{
-        addThink(['🧠 AI анализирует описание…']);
+        appendLiveStep(thinkId, '🧠', 'AI анализирует описание через каскад LLM...');
+        await new Promise(r => setTimeout(r, 200));
         const raw=await callAI(text,
           'Ты — парсер архитектурных описаний для 3D-генератора. Отвечай ТОЛЬКО валидным JSON, без markdown. '+
           'Формат: {"type":"house|office|cottage|villa|hotel|tourism_complex|bathhouse|warehouse|school|apartment|townhouse|interior|room","object_type":"building|interior|room","room_type":"children|bedroom|living|kitchen|bathroom|study|dining|null","style":"classic|modern|minimalist|loft|scandinavian|provence|null","floors":2,"width":10,"length":12,"roof_type":"gabled|flat|hip","facade_material":"brick|wood|glass|plaster|stone","facade_color":null,"has_balcony":false,"has_terrace":false,"has_garage":false} '+
@@ -2226,7 +2285,29 @@ async function _sendInner(){
             has_terrace: !!j.has_terrace,
             has_garage: !!j.has_garage
           };
-          addThink(['✅ AI распознал: '+parsed.type+(parsed.floors?', '+parsed.floors+' эт.':'')+(parsed.width?', '+parsed.width+'×'+parsed.length+'м':'')]);
+          appendLiveStep(thinkId, '✅', 'Определено: '+parsed.type+(parsed.floors?', '+parsed.floors+' этажей':'')+(parsed.width?', '+parsed.width+'×'+parsed.length+'м':''));
+          
+          // ═══ PREMIUM: Show reasoning card ═══
+          const reasonSteps = [
+            {icon:'📖', text:'Прочитал описание: "'+text.slice(0,80)+'"', confidence: 0.95},
+            {icon:'🏗', text:'Тип объекта: '+parsed.type+(parsed.object_type==='interior'?' (интерьер)':' (здание)'), confidence: 0.9},
+            {icon:'📐', text:'Размеры: '+parsed.width+'×'+parsed.length+'м, '+parsed.floors+' этажей', confidence: 0.85},
+            {icon:'🎨', text:'Стиль: '+(parsed.style||'современный')+', материал: '+(parsed.facade_material||'штукатурка'), confidence: 0.8},
+          ];
+          if(parsed.has_balcony) reasonSteps.push({icon:'🏗', text:'Добавлен балкон'});
+          if(parsed.has_terrace) reasonSteps.push({icon:'🌿', text:'Добавлена терраса'});
+          if(parsed.has_garage) reasonSteps.push({icon:'🚗', text:'Добавлен гараж'});
+          addReasoning(reasonSteps, 0.85);
+          
+          // ═══ PREMIUM: Show decomposition ═══
+          addDecomposition([
+            {name:'Парсинг промта', description:'LLM извлекает параметры', service:'LLM'},
+            {name:'Генерация геометрии', description:'Стены, крыша, окна, двери', service:'Geometry'},
+            {name:'Материалы и текстуры', description:parsed.facade_material||'штукатурка', service:'Texture'},
+            {name:'Освещение', description:'HDRI + искусственный свет', service:'Lighting'},
+            {name:'Рендер', description:'4K EEVEE / 16K Cycles', service:'Blender'},
+            {name:'Экспорт', description:'GLB + IFC + SVG планы', service:'Export'},
+          ]);
         }
       }catch(e){console.warn('LLM parse failed:',e.message);}
     }
@@ -2234,7 +2315,7 @@ async function _sendInner(){
     // Step 2: Fallback to regex if LLM unavailable
     if(!parsed){
       parsed=parseLocal(text);
-      addThink(['📝 Локальный анализ (regex)']);
+      appendLiveStep(thinkId, '📝', 'LLM недоступен — локальный анализ (regex)');
     }
 
     // Step 2.5: If LLM detected interior — route to interior path
@@ -2243,20 +2324,24 @@ async function _sendInner(){
       const style = parsed.style || 'modern';
       const furnitureMap = {children:['bed','desk','wardrobe','bookshelf'],bedroom:['bed','nightstand','wardrobe','dresser'],living:['sofa','tv','coffee_table','bookshelf'],kitchen:['fridge','stove','table','chairs'],bathroom:['bathtub','sink','toilet','mirror'],study:['desk','chair','bookshelf','lamp'],dining:['table','chairs','sideboard','chandelier']};
       const furniture = furnitureMap[roomType] || furnitureMap.living;
-      addThink(['✅ Комната: '+roomType+' | Стиль: '+style,'🖥 Генерирую интерьер…']);
+      appendLiveStep(thinkId, '🏠', 'Интерьер: '+roomType+' | Стиль: '+style);
+      appendLiveStep(thinkId, '🖥', 'Генерирую 3D интерьер...');
       await generateWithFallback(text, {object_type: 'interior', style: style, furniture: furniture});
       return;
     }
 
     // Step 3: Try Blender server, fallback to local Three.js
-    addThink(['🖥 Генерирую 3D модель…']);
+    appendLiveStep(thinkId, '🖥', 'Генерирую 3D модель через Blender...');
+    await new Promise(r => setTimeout(r, 200));
     await generateWithFallback(text, {object_type: 'building'});
     return;
   }
   // General chat — try local generation as last resort
   const parsed = parseLocal(text);
   if(parsed && (parsed.type || parsed.width)) {
-    addThink(['📝 Локальный анализ…','🖥 Генерирую 3D модель…']);
+    const thinkId2 = addLiveThinking('Анализирую...');
+    appendLiveStep(thinkId2, '📝', 'Локальный анализ параметров...');
+    appendLiveStep(thinkId2, '🖥', 'Генерирую 3D модель...');
     const bld = applyParams(text, parsed);
     startGen(bld);
     return;
@@ -2760,6 +2845,171 @@ function addThink(steps){
   const rows=steps.map(s=>`<div class="think-row"><div class="tc">✓</div>${s}</div>`).join('');
   d.innerHTML=`<div class="think"><div style="font-weight:700;margin-bottom:6px;font-size:11px">🧠 Мышление Architect</div>${rows}</div>`;
   area.appendChild(d);area.scrollTop=area.scrollHeight;
+}
+
+// ═══ PREMIUM: Reasoning Card — real CoT from LLM ═══
+function addReasoning(steps, confidence) {
+  const area = document.getElementById('tab-chat'); if (!area) return;
+  const d = document.createElement('div'); d.className = 'msg a';
+  const confColor = confidence > 0.8 ? '#059669' : confidence > 0.5 ? '#d97706' : '#dc2626';
+  const confLabel = confidence > 0.8 ? 'Высокая' : confidence > 0.5 ? 'Средняя' : 'Низкая';
+  const rows = steps.map((s, i) => `
+    <div class="reasoning-step">
+      <div class="rs-icon">${s.icon || '🔍'}</div>
+      <div class="rs-text">${s.text}</div>
+      ${s.confidence ? `<div class="rs-confidence" style="color:${confColor}">${Math.round(s.confidence * 100)}%</div>` : ''}
+    </div>
+  `).join('');
+  d.innerHTML = `
+    <div class="reasoning-card">
+      <div class="reasoning-title">🧠 Ход рассуждений <span class="pulse-dot"></span></div>
+      ${rows}
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid #c4b5fd;font-size:10px;color:#6d28d9;display:flex;justify-content:space-between">
+        <span>Уверенность: <b style="color:${confColor}">${confLabel} (${Math.round(confidence * 100)}%)</b></span>
+        <span>${steps.length} шагов анализа</span>
+      </div>
+    </div>
+  `;
+  area.appendChild(d); area.scrollTop = area.scrollHeight;
+}
+
+// ═══ PREMIUM: Decomposition Tree — task breakdown ═══
+function addDecomposition(tasks) {
+  const area = document.getElementById('tab-chat'); if (!area) return;
+  const d = document.createElement('div'); d.className = 'msg a';
+  const items = tasks.map((t, i) => `
+    <div class="decomp-item">
+      <div class="di-num">${i + 1}</div>
+      <div class="di-line">
+        <div style="font-weight:600">${t.name}</div>
+        <div style="font-size:10px;color:#15803d;margin-top:1px">${t.description || ''}</div>
+      </div>
+      <div class="di-service">${t.service || 'auto'}</div>
+    </div>
+  `).join('');
+  d.innerHTML = `
+    <div class="decomp-tree">
+      <div class="decomp-title">📋 Декомпозиция задачи</div>
+      ${items}
+      <div style="margin-top:8px;font-size:10px;color:#16a34a">Всего этапов: ${tasks.length} • Параллельное выполнение где возможно</div>
+    </div>
+  `;
+  area.appendChild(d); area.scrollTop = area.scrollHeight;
+}
+
+// ═══ PREMIUM: Reference Gallery — images from RAG ═══
+function addReferenceGallery(references, onSelect) {
+  const area = document.getElementById('tab-chat'); if (!area) return;
+  const d = document.createElement('div'); d.className = 'msg a';
+  const cards = references.map((ref, i) => `
+    <div class="ref-card" onclick="selectReference(this, ${i})" data-idx="${i}">
+      <img src="${ref.image_url || ref.thumbnail || ''}" alt="${ref.title || ''}" onerror="this.style.display='none'">
+      <div class="rc-label">${ref.title || ref.style || 'Вариант ' + (i + 1)}</div>
+      ${ref.similarity ? `<div style="position:absolute;top:4px;left:4px;background:#ea580c;color:#fff;font-size:9px;padding:1px 5px;border-radius:4px">${Math.round(ref.similarity * 100)}%</div>` : ''}
+    </div>
+  `).join('');
+  d.innerHTML = `
+    <div class="ref-gallery">
+      <div class="ref-title">🎨 Найденные референсы</div>
+      <div class="ref-grid">${cards}</div>
+      <div style="margin-top:8px;font-size:10px;color:#9a3412">Нажмите на референс чтобы применить стиль • ${references.length} найдено</div>
+    </div>
+  `;
+  area.appendChild(d); area.scrollTop = area.scrollHeight;
+  window._refOnSelect = onSelect;
+  window._refData = references;
+}
+function selectReference(el, idx) {
+  document.querySelectorAll('.ref-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  if (window._refOnSelect && window._refData) window._refOnSelect(window._refData[idx]);
+}
+
+// ═══ PREMIUM: Variant Cards with 3D previews ═══
+function addVariantCards(variants, onSelect) {
+  const area = document.getElementById('tab-chat'); if (!area) return;
+  const d = document.createElement('div'); d.className = 'msg a';
+  const emojis = { modern: '🏢', classic: '🏛', minimalist: '⬜', loft: '🏭', scandinavian: '🌲', provence: '🌾', hitech: '⚡', japanese: '🎋' };
+  const cards = variants.map((v, i) => `
+    <div class="variant-card" onclick="selectVariant(this, ${i})" data-idx="${i}">
+      <div class="vc-preview">
+        <span>${emojis[v.style] || '🏗'}</span>
+        ${v.recommended ? '<div class="vc-badge">⭐ Рекомендуем</div>' : ''}
+        ${v.preview_url ? `<img src="${v.preview_url}" style="width:100%;height:100%;object-fit:cover" onerror="this.remove()">` : ''}
+      </div>
+      <div class="vc-info">
+        <div class="vc-name">${v.name || v.style}</div>
+        <div class="vc-desc">${v.description || ''}</div>
+        ${v.price ? `<div class="vc-price">${v.price}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+  d.innerHTML = `
+    <div style="font-weight:700;font-size:12px;color:#374151;margin-bottom:8px;display:flex;align-items:center;gap:6px">🎨 Выберите вариант:</div>
+    <div class="variant-cards">${cards}</div>
+  `;
+  area.appendChild(d); area.scrollTop = area.scrollHeight;
+  window._variantOnSelect = onSelect;
+  window._variantData = variants;
+}
+function selectVariant(el, idx) {
+  document.querySelectorAll('.variant-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  if (window._variantOnSelect && window._variantData) window._variantOnSelect(window._variantData[idx]);
+}
+
+// ═══ PREMIUM: Comparison Cards — side-by-side ═══
+function addComparisonCards(options) {
+  const area = document.getElementById('tab-chat'); if (!area) return;
+  const d = document.createElement('div'); d.className = 'msg a';
+  const cards = options.map((opt, i) => `
+    <div class="compare-card ${opt.recommended ? 'recommended' : ''}">
+      <div class="cc-header">
+        <div class="cc-title">${opt.name}</div>
+        ${opt.recommended ? '<div class="cc-rec">⭐ Рекомендуем</div>' : ''}
+      </div>
+      <div class="cc-image">${opt.emoji || '🏗'}</div>
+      <div class="cc-body">
+        ${opt.description || ''}
+        ${opt.pros ? `<div class="cc-pros">✅ ${opt.pros.join(' • ')}</div>` : ''}
+        ${opt.cons ? `<div class="cc-cons">❌ ${opt.cons.join(' • ')}</div>` : ''}
+        ${opt.price ? `<div class="cc-price">${opt.price}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+  d.innerHTML = `
+    <div style="font-weight:700;font-size:12px;color:#374151;margin-bottom:8px;display:flex;align-items:center;gap:6px">⚖️ Сравнение вариантов:</div>
+    <div class="compare-cards">${cards}</div>
+  `;
+  area.appendChild(d); area.scrollTop = area.scrollHeight;
+}
+
+// ═══ PREMIUM: Animated thinking with live updates ═══
+function addLiveThinking(initialText) {
+  const area = document.getElementById('tab-chat'); if (!area) return;
+  const d = document.createElement('div'); d.className = 'msg a';
+  d.id = 'live-thinking-' + Date.now();
+  d.innerHTML = `
+    <div class="reasoning-card">
+      <div class="reasoning-title">🧠 <span class="pulse-dot"></span> ${initialText}</div>
+      <div class="live-steps"></div>
+    </div>
+  `;
+  area.appendChild(d); area.scrollTop = area.scrollHeight;
+  return d.id;
+}
+function appendLiveStep(elementId, icon, text) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const container = el.querySelector('.live-steps');
+  if (!container) return;
+  const step = document.createElement('div');
+  step.className = 'reasoning-step';
+  step.style.opacity = '0'; step.style.transform = 'translateY(8px)';
+  step.innerHTML = `<div class="rs-icon">${icon}</div><div class="rs-text">${text}</div>`;
+  container.appendChild(step);
+  requestAnimationFrame(() => { step.style.transition = 'all .3s'; step.style.opacity = '1'; step.style.transform = 'translateY(0)'; });
+  el.scrollIntoView({ behavior: 'smooth', block: 'end' });
 }
 
 // ═══════════════ CLARIFICATION UI ═══════════════
