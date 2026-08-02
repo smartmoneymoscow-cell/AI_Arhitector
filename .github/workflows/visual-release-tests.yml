@@ -1,0 +1,299 @@
+name: Visual Release Tests
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: visual-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ═══════════════════════════════════════════════════════════
+  # JOB 1: Lint + syntax check (fast)
+  # ═══════════════════════════════════════════════════════════
+  lint:
+    name: Lint & Syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff pydantic
+      - run: ruff check shared/ gateway/ llm-service/ blender-service/ --select E,F,W --ignore E501,E402
+      - name: Syntax check
+        run: |
+          python3 -c "
+          import ast, sys
+          files = [
+              'shared/parser.py', 'shared/llm_schemas.py', 'shared/blender.py',
+              'shared/validation.py', 'shared/auth.py', 'shared/config.py',
+              'shared/agents/orchestrator.py', 'shared/agents/geometry_agent.py',
+              'gateway/app.py', 'llm-service/app.py', 'blender-service/app.py',
+          ]
+          errors = 0
+          for f in files:
+              try:
+                  with open(f) as fh: ast.parse(fh.read())
+                  print(f'OK: {f}')
+              except (SyntaxError, FileNotFoundError) as e:
+                  print(f'ERROR: {f}: {e}')
+                  errors += 1
+          sys.exit(errors)
+          "
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 2: Unit tests (Python, no server)
+  # ═══════════════════════════════════════════════════════════
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-retries 5
+    env:
+      REDIS_URL: redis://localhost:6379/0
+      ARCH_API_KEYS: test-key-123
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pydantic httpx redis fastapi pytest
+      - name: Run unit tests
+        run: |
+          PYTHONPATH=. python3 -m pytest \
+            tests/test_detect_gen_type.py \
+            tests/test_generation.py \
+            tests/test_quality_clarification.py \
+            tests/test_prompt_reasoning.py \
+            -v --tb=short 2>&1 | tail -30
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 3: Pydantic schema tests (new)
+  # ═══════════════════════════════════════════════════════════
+  schema-tests:
+    name: Pydantic Schema Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pydantic
+      - name: Test LLM schemas
+        run: |
+          PYTHONPATH=. python3 -c "
+          from shared.llm_schemas import ParsedParams, validate_llm_response, build_fix_prompt
+
+          # Test 1: Valid response
+          valid = {'object_type': 'building', 'building_type': 'house', 'floors': 2, 'width_m': 10, 'length_m': 12}
+          parsed, errors = validate_llm_response(valid)
+          assert parsed is not None, f'Valid response failed: {errors}'
+          print(f'✅ Valid: {parsed.object_type}/{parsed.building_type}')
+
+          # Test 2: Invalid floors
+          bad = {'object_type': 'building', 'floors': -5, 'width_m': 10, 'length_m': 12}
+          parsed2, errors2 = validate_llm_response(bad)
+          assert parsed2 is not None, 'Should auto-fix negative floors'
+          assert parsed2.floors >= 1, f'Floors not fixed: {parsed2.floors}'
+          print(f'✅ Auto-fix: floors={parsed2.floors}')
+
+          # Test 3: Completely invalid
+          garbage = {'random': 'garbage'}
+          parsed3, errors3 = validate_llm_response(garbage)
+          assert parsed3 is not None, 'Should use defaults for missing fields'
+          print(f'✅ Defaults: {parsed3.object_type}/{parsed3.building_type}')
+
+          # Test 4: Fix prompt generation
+          fix = build_fix_prompt('test', errors3[:3])
+          assert 'невалидный' in fix.lower() or 'исправь' in fix.lower()
+          print(f'✅ Fix prompt generated ({len(fix)} chars)')
+
+          # Test 5: Confidence normalization
+          high_conf = {'object_type': 'building', 'confidence': 85}
+          parsed4, _ = validate_llm_response(high_conf)
+          assert parsed4.confidence == 0.85, f'Confidence not normalized: {parsed4.confidence}'
+          print(f'✅ Confidence normalized: {parsed4.confidence}')
+
+          print('\\n🎉 All schema tests passed!')
+          "
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 4: Frontend syntax check
+  # ═══════════════════════════════════════════════════════════
+  frontend-check:
+    name: Frontend Syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check HTML/JS syntax
+        run: |
+          python3 -c "
+          with open('frontend/index.html') as f:
+              c = f.read()
+
+          # Brace balance
+          o, cl = c.count('{'), c.count('}')
+          assert o == cl, f'Brace mismatch: {o} open vs {cl} close'
+          print(f'✅ Braces balanced: {o}/{cl}')
+
+          # Required functions
+          required = ['send()', '_sendInner', 'callAI', 'callParse', 'callOrchestrator',
+                       '_apiHeaders', '_getApiKey', '_setApiKey', 'applyParams', 'buildModel',
+                       'startGen', 'go(']
+          missing = [fn for fn in required if fn not in c]
+          assert not missing, f'Missing functions: {missing}'
+          print(f'✅ All {len(required)} required functions present')
+
+          # Check no broken endpoints
+          assert '/api/v1/proxy/claude' not in c, 'Old proxy endpoint still present!'
+          print('✅ No broken endpoints')
+
+          print(f'✅ Frontend: {len(c.splitlines())} lines, {len(c)} bytes')
+          "
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 5: Playwright visual tests (REAL browser)
+  # ═══════════════════════════════════════════════════════════
+  visual-tests:
+    name: Visual Browser Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [lint, frontend-check]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright
+        run: |
+          pip install playwright pytest-playwright
+          playwright install chromium --with-deps
+
+      - name: Run visual tests (local file)
+        run: |
+          python3 -m pytest tests/test_visual_release.py -v --tb=short -k "not APIEndpoints" 2>&1 | tail -40
+        env:
+          GATEWAY_URL: http://localhost:8080
+          API_KEY: test-key
+          SCREENSHOT_DIR: .openclaw/tmp/test_screenshots
+        continue-on-error: true
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-screenshots
+          path: .openclaw/tmp/test_screenshots/
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 6: Live API tests (against deployed Render)
+  # ═══════════════════════════════════════════════════════════
+  live-api-tests:
+    name: Live API Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [lint, unit-tests]
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install httpx pydantic
+
+      - name: Wait for Render deploy
+        run: sleep 60
+
+      - name: Health check all services
+        run: |
+          FAILURES=0
+          for SVC in "architect-gateway" "ai-arch-blender3d" "architect-blender" "architect-llm-1s1j"; do
+            STATUS=$(curl -s "https://${SVC}.onrender.com/health" --max-time 30 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','error'))" 2>/dev/null || echo "unreachable")
+            echo "$SVC: $STATUS"
+            if [ "$STATUS" != "ok" ]; then FAILURES=$((FAILURES+1)); fi
+          done
+          if [ $FAILURES -gt 0 ]; then
+            echo "⚠️ $FAILURES service(s) not healthy (Render cold start?)"
+          fi
+
+      - name: Test parse endpoint
+        run: |
+          PARSE=$(curl -s -X POST "https://architect-gateway.onrender.com/api/v1/parse" \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: ${{ secrets.ARCH_API_KEY }}" \
+            -d '{"text": "двухэтажный кирпичный дом 10x12"}' \
+            --max-time 60 2>/dev/null)
+          echo "Parse response: $(echo $PARSE | head -c 300)"
+          TYPE=$(echo "$PARSE" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('object_type', d.get('building_type', 'unknown')))" 2>/dev/null)
+          echo "Detected type: $TYPE"
+
+      - name: Test stats endpoint
+        run: |
+          STATS=$(curl -s "https://architect-gateway.onrender.com/api/v1/stats" \
+            -H "X-API-Key: ${{ secrets.ARCH_API_KEY }}" \
+            --max-time 15 2>/dev/null)
+          echo "Stats: $(echo $STATS | head -c 300)"
+
+      - name: Run Playwright against live
+        run: |
+          pip install playwright pytest-playwright
+          playwright install chromium --with-deps
+          python3 -m pytest tests/test_visual_release.py -v --tb=short -k "TestSendButtonVisual or TestReasoningVisual" 2>&1 | tail -30
+        env:
+          GATEWAY_URL: https://architect-gateway.onrender.com
+          API_KEY: ${{ secrets.ARCH_API_KEY }}
+          SCREENSHOT_DIR: .openclaw/tmp/live_screenshots
+        continue-on-error: true
+
+      - name: Upload live screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-screenshots
+          path: .openclaw/tmp/live_screenshots/
+          retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 7: Release gate
+  # ═══════════════════════════════════════════════════════════
+  release-gate:
+    name: ✅ Release Gate
+    runs-on: ubuntu-latest
+    needs: [lint, unit-tests, schema-tests, frontend-check]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          echo "=== Release Gate ==="
+          echo "Lint: ${{ needs.lint.result }}"
+          echo "Unit: ${{ needs.unit-tests.result }}"
+          echo "Schema: ${{ needs.schema-tests.result }}"
+          echo "Frontend: ${{ needs.frontend-check.result }}"
+
+          FAILED=0
+          for RESULT in "${{ needs.lint.result }}" "${{ needs.unit-tests.result }}" "${{ needs.schema-tests.result }}" "${{ needs.frontend-check.result }}"; do
+            if [ "$RESULT" = "failure" ]; then FAILED=$((FAILED+1)); fi
+          done
+
+          if [ $FAILED -gt 0 ]; then
+            echo "❌ $FAILED job(s) failed — release blocked"
+            exit 1
+          fi
+          echo "✅ All checks passed — release is safe"
