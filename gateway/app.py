@@ -321,9 +321,10 @@ async def orchestrator_execute(
             ),
         )
     except Exception as e:
+        logger.error("Orchestrator error: %s: %s", type(e).__name__, str(e)[:500], exc_info=True)
         if "AllModelsFailed" in type(e).__name__:
             raise HTTPException(503, detail={"error": "all_models_failed", "message": str(e)})
-        raise
+        raise HTTPException(500, detail={"error": "orchestrator_failed", "message": str(e)[:500]})
 
     result_job_id = result["job_id"]
     _store_job(result_job_id, result)
