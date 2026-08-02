@@ -63,17 +63,27 @@ SYSTEM_PROMPT = """Ты — парсер архитектурных описан
 ПРАВИЛА:
 1. building_type — НЕ ограничивайся списком. Если "сарай" → "barn". Если "навес" → "carport".
    Если "беседка" → "gazebo". Если "теплица" → "greenhouse". Если "курятник" → "chicken_coop".
+   Если "отель" или "гостиница" → "hotel". Если "хостел" → "hostel".
 
-2. material — НЕ ограничивайся. "из брёвен" → "log". "из соломы" → "straw".
+2. object_type — определи по контексту:
+   - "здание", "дом", "офис", "отель", "коттедж" → "building"
+   - "ванная", "кухня", "спальня", "гостиная", "интерьер", "дизайн комнаты" → "interior"
+   - Если пользователь просит "ванную с джакузи" → object_type="interior", room_type="bathroom"
+   - Если "дизайн детской" → object_type="interior", room_type="children"
+   - Если "кухня в стиле хайтек" → object_type="interior", room_type="kitchen"
 
-3. style — НЕ ограничивайся. "в японском стиле" → "japanese". "средневековый" → "medieval".
+3. material — НЕ ограничивайся. "из брёвен" → "log". "из соломы" → "straw".
 
-4. Размеры — если не указаны, подбери РЕАЛИСТИЧНЫЕ:
+4. style — НЕ ограничивайся. "в японском стиле" → "japanese". "средневековый" → "medieval".
+
+5. Размеры — если не указаны, подбери РЕАЛИСТИЧНЫЕ:
    Сарай: 3×4×2.5м. Беседка: 3×3×2.5м. Гараж: 6×3×3м. Дом: 10×12×3м.
+   Отель: 24×36×3.2м (4 этажа). Квартира: 6×8×2.8м.
+   Ванная: 2.5×3×2.8м. Кухня: 4×5×2.8м. Спальня: 4×5×2.8м.
 
-5. Русские слова: сарай=barn, навес=carport, беседка=gazebo, гараж=garage,
+6. Русские слова: сарай=barn, навес=carport, беседка=gazebo, гараж=garage,
    теплица=greenhouse, баня=bathhouse, курятник=chicken_coop, забор=fence,
-   ворота=gate, сруб=log_cabin, изба=izba.
+   ворота=gate, сруб=log_cabin, изба=izba, отель=hotel, гостиница=hotel.
 """
 
 
@@ -235,7 +245,7 @@ def _get_redis():
         import redis
 
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/1")
-        _redis = redis.from_url(redis_url, decode_responses=True, socket_timeout=2)
+        _redis = redis.from_url(redis_url, decode_responses=True, socket_timeout=3, socket_connect_timeout=5, retry_on_timeout=True)
         _redis.ping()
         return _redis
     except Exception:

@@ -81,7 +81,14 @@ async def _parse_via_llm_service(prompt: str) -> dict:
 
 def _detect_gen_type(params: dict) -> str:
     obj_type = params.get("object_type", "building")
-    return "interior" if obj_type in ("interior", "room") else "building"
+    room_type = params.get("room_type", "")
+    # Explicit interior/room type
+    if obj_type in ("interior", "room"):
+        return "interior"
+    # If room_type is set, it's an interior request
+    if room_type:
+        return "interior"
+    return "building"
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -43,6 +43,17 @@ app.add_middleware(
 )
 
 
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error("Unhandled error: %s: %s", type(exc).__name__, str(exc)[:500], exc_info=True)
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={"error": "internal", "message": str(exc)[:500]},
+    )
+
+
 # ═══════════════════════════════════════════════════════════════
 # RETRY with circuit breaker
 # ═══════════════════════════════════════════════════════════════
@@ -120,12 +131,13 @@ def _get_redis():
     try:
         import redis
 
-        _redis = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_timeout=3)
+        _redis = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_timeout=5, socket_connect_timeout=5, retry_on_timeout=True)
         _redis.ping()
         logger.info("Redis connected for jobs storage")
         return _redis
     except Exception as e:
         logger.warning("Redis unavailable for jobs: %s", e)
+        _redis = None  # ensure retry on next call
         return None
 
 
@@ -167,7 +179,7 @@ async def health():
             continue
         try:
             async with httpx.AsyncClient() as client:
-                r = await client.get(f"{url}/health", timeout=5.0)
+                r = await client.get(f"{url}/health", timeout=15.0)
                 services[name] = "ok" if r.status_code == 200 else "error"
         except Exception:
             services[name] = "unreachable"

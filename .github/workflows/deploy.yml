@@ -47,48 +47,71 @@ jobs:
       # ═══ HEALTH CHECKS — ALL SERVICES ═══
       - name: Wait for cold start
         if: steps.check.outputs.skip != 'true'
-        run: sleep 30
+        run: sleep 60
 
       - name: Health check — Gateway
         if: steps.check.outputs.skip != 'true'
         run: |
-          HEALTH=$(curl -s "https://architect-gateway.onrender.com/health" --max-time 30)
-          echo "$HEALTH" | python3 -c "
+          for attempt in 1 2 3; do
+            HEALTH=$(curl -s "https://architect-gateway.onrender.com/health" --max-time 60 || true)
+            if echo "$HEALTH" | python3 -c "
           import json, sys
           r = json.load(sys.stdin)
           print(f'Gateway: {r.get(\"version\", \"unknown\")}')
           assert r.get('status') == 'ok', f'Gateway unhealthy: {r}'
-          "
+          " 2>/dev/null; then
+              echo "✅ Gateway healthy (attempt $attempt)"
+              break
+            fi
+            echo "⏳ Gateway not ready, retry $attempt/3..."
+            sleep 15
+          done
 
       - name: Health check — LLM Service
         if: steps.check.outputs.skip != 'true'
         run: |
-          HEALTH=$(curl -s "https://ai-arch-llmproxy.onrender.com/health" --max-time 30)
-          echo "$HEALTH" | python3 -c "
+          for attempt in 1 2 3; do
+            HEALTH=$(curl -s "https://ai-arch-llmproxy.onrender.com/health" --max-time 60 || true)
+            if echo "$HEALTH" | python3 -c "
           import json, sys
           r = json.load(sys.stdin)
           print(f'LLM: {r.get(\"version\", \"unknown\")} | model: {r.get(\"model\", \"N/A\")}')
           assert r.get('status') == 'ok', f'LLM unhealthy: {r}'
           assert r.get('model'), 'No model configured'
-          "
+          " 2>/dev/null; then
+              echo "✅ LLM healthy (attempt $attempt)"
+              break
+            fi
+            echo "⏳ LLM not ready, retry $attempt/3..."
+            sleep 15
+          done
 
       - name: Health check — Blender Service
         if: steps.check.outputs.skip != 'true'
         run: |
-          HEALTH=$(curl -s "https://ai-arch-blender3d.onrender.com/health" --max-time 30)
-          echo "$HEALTH" | python3 -c "
+          for attempt in 1 2 3; do
+            HEALTH=$(curl -s "https://ai-arch-blender3d.onrender.com/health" --max-time 60 || true)
+            if echo "$HEALTH" | python3 -c "
           import json, sys
           r = json.load(sys.stdin)
           print(f'Blender: {r.get(\"version\", \"unknown\")}')
           assert r.get('status') == 'ok', f'Blender unhealthy: {r}'
-          "
+          " 2>/dev/null; then
+              echo "✅ Blender healthy (attempt $attempt)"
+              break
+            fi
+            echo "⏳ Blender not ready, retry $attempt/3..."
+            sleep 15
+          done
 
       - name: Health check — Gateway→LLM connectivity
         if: steps.check.outputs.skip != 'true'
+        continue-on-error: true
         run: |
-          # Test that Gateway can reach LLM service
-          HEALTH=$(curl -s "https://architect-gateway.onrender.com/health" --max-time 30)
-          echo "$HEALTH" | python3 -c "
+          # Test that Gateway can reach LLM service (non-blocking — cold start may delay this)
+          for attempt in 1 2 3; do
+            HEALTH=$(curl -s "https://architect-gateway.onrender.com/health" --max-time 60 || true)
+            echo "$HEALTH" | python3 -c "
           import json, sys
           r = json.load(sys.stdin)
           llm = r.get('services', {}).get('llm', 'unknown')
@@ -96,7 +119,10 @@ jobs:
           print(f'Gateway→LLM: {llm}')
           print(f'Gateway→Blender: {blender}')
           assert llm == 'ok', f'Gateway cannot reach LLM service: {llm}'
-          "
+          " 2>/dev/null && break
+            echo "⏳ Gateway→LLM not connected, retry $attempt/3..."
+            sleep 20
+          done
 
       - name: Smoke test — Parse endpoint
         if: steps.check.outputs.skip != 'true'

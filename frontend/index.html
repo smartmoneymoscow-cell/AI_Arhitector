@@ -411,13 +411,20 @@ const TPLS={
   cottage:{label:'Загородный коттедж',floors:2,W:12,L:15,fH:2.9,roof:'gabled',mat:'wood',fc:'#b8864e',rc:'#3e2005',tc:'#fdf5e6',dc:'#2d1505',balcony:true,
     rooms:[{n:'Гостиная',a:36,fl:1,tag:'l',x:-2,z:1,w:7,d:5},{n:'Кухня',a:20,fl:1,tag:'k',x:4,z:1,w:5,d:4},{n:'Мастер-спальня',a:24,fl:2,tag:'s',x:-2,z:1,w:5.5,d:4.4},{n:'Детская',a:15,fl:2,tag:'s',x:3.5,z:1,w:4,d:3.75},{n:'Ванная',a:8,fl:1,tag:'b',x:4,z:-4,w:3,d:2.7}]},
   modern:{label:'Таунхаус',floors:3,W:8,L:16,fH:3.0,roof:'flat',mat:'plaster',fc:'#f0f0ee',rc:'#1a1a1a',tc:'#111',dc:'#050505',balcony:true,
-    rooms:[{n:'Гостиная+кухня',a:45,fl:1,tag:'l',x:0,z:2,w:7,d:6},{n:'Мастер-спальня',a:28,fl:2,tag:'s',x:0,z:2,w:6,d:4.7},{n:'Детская',a:18,fl:3,tag:'s',x:-1,z:2,w:4.5,d:4},{n:'Ванная',a:10,fl:2,tag:'b',x:0,z:-4,w:3.3,d:3}]}
+    rooms:[{n:'Гостиная+кухня',a:45,fl:1,tag:'l',x:0,z:2,w:7,d:6},{n:'Мастер-спальня',a:28,fl:2,tag:'s',x:0,z:2,w:6,d:4.7},{n:'Детская',a:18,fl:3,tag:'s',x:-1,z:2,w:4.5,d:4},{n:'Ванная',a:10,fl:2,tag:'b',x:0,z:-4,w:3.3,d:3}]},
+  hotel:{label:'Гостиница',floors:4,W:24,L:36,fH:3.2,roof:'flat',mat:'glass',fc:'#7ec8e3',rc:'#455a64',tc:'#eceff1',dc:'#263238',balcony:true,
+    rooms:[{n:'Лобби',a:80,fl:1,tag:'l',x:0,z:4,w:12,d:8},{n:'Ресепшен',a:20,fl:1,tag:'h',x:-6,z:-10,w:4,d:3},{n:'Ресторан',a:60,fl:1,tag:'k',x:6,z:-6,w:8,d:6},{n:'Номер 101',a:25,fl:2,tag:'s',x:-6,z:4,w:5,d:5},{n:'Номер 102',a:25,fl:2,tag:'s',x:0,z:4,w:5,d:5},{n:'Номер 103',a:25,fl:2,tag:'s',x:6,z:4,w:5,d:5},{n:'Номер 201',a:30,fl:3,tag:'s',x:-6,z:4,w:6,d:5},{n:'Номер 202',a:30,fl:3,tag:'s',x:0,z:4,w:6,d:5},{n:'Конференц-зал',a:50,fl:1,tag:'l',x:6,z:8,w:8,d:6}]},
+  room:{label:'Помещение',floors:1,W:6,L:8,fH:2.8,roof:'flat',mat:'plaster',fc:'#f0ece4',rc:'#555',tc:'#fafaf8',dc:'#ddd',balcony:false,
+    rooms:[{n:'Комната',a:48,fl:1,tag:'l',x:0,z:0,w:5.5,d:7}]}
 };
 
 function applyParams(text,p){
   const tplKey=p.type||'house';
   const tpl=TPLS[tplKey]||TPLS.house;
-  const b=JSON.parse(JSON.stringify(tpl));
+  // Interior room fallback: if type is 'room'/'interior' but no matching template,
+  // use the room template instead of falling back to house exterior
+  const effectiveTpl = (tplKey==='room'||tplKey==='interior') ? (TPLS.room||TPLS.house) : tpl;
+  const b=JSON.parse(JSON.stringify(effectiveTpl));
   if(p.floors) b.floors=Math.max(1,Math.min(50,parseInt(p.floors)||b.floors));
   if(p.width)  b.W=parseFloat(p.width)||b.W;
   if(p.length) b.L=parseFloat(p.length)||b.L;
