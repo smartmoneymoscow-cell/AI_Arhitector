@@ -17,14 +17,12 @@ jobs:
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/ruff-action@v3
+      - uses: actions/setup-python@v5
         with:
-          version: "0.9.0"
-          args: "check proto/ gateway/ shared/ llm-service/"
-      - uses: astral-sh/ruff-action@v3
-        with:
-          version: "0.9.0"
-          args: "format --check proto/ gateway/ shared/ llm-service/"
+          python-version: "3.11"
+      - run: pip install ruff==0.9.0
+      - run: ruff check proto/ gateway/ shared/ llm-service/
+      - run: ruff format --check proto/ gateway/ shared/ llm-service/
 
   # ═══ 2. Type check — C8: mypy (1 min) ═══
   typecheck:
