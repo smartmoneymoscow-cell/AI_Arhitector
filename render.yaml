@@ -14,15 +14,14 @@ services:
     healthCheckPath: /health
     envVars:
       - key: LLM_SERVICE_URL
-        value: https://ai-arch-llmproxy.onrender.com
+        value: https://architect-llm-1s1j.onrender.com
       - key: BLENDER_SERVICE_URL
         value: https://ai-arch-blender3d.onrender.com
-      # Blender #2 — uncomment when deployed on Account 4
-      # - key: BLENDER_SERVICE_URL_2
-      #   value: https://ai-arch-blender-2.onrender.com
-      # Blender #3 — uncomment when deployed on Account 5
+      - key: BLENDER_SERVICE_URL_2
+        value: https://architect-blender.onrender.com
+      # Blender #3 — uncomment when deployed on Account 3
       # - key: BLENDER_SERVICE_URL_3
-      #   value: https://ai-arch-blender-3.onrender.com
+      #   value: https://______.onrender.com
       - key: REDIS_URL
         value: redis://red-xxx:6379
       - key: FRONTEND_DIR
