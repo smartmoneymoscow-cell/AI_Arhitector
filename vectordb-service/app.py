@@ -10,8 +10,7 @@ Wraps Qdrant HTTP API for:
 Dependencies: httpx (qdrant runs as separate Docker container)
 """
 import os
-import uuid
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware

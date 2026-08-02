@@ -137,5 +137,53 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
     depends_on: [nginx]
 
+  # ═══════════════════════════════════════════════════════════════
+  # AEDIFEX — 3D Architectural Editor (Phase 1)
+  # Does NOT replace existing services — adds editor UI + bridge
+  # ═══════════════════════════════════════════════════════════════
+
+  aedifex-bridge:
+    build:
+      context: ./aedifex-bridge
+      dockerfile: Dockerfile
+    expose: ["8085"]
+    environment:
+      - GATEWAY_URL=http://gateway:8080
+      - LLM_SERVICE_URL=http://llm-service:8081
+      - IFC_SERVICE_URL=http://ifc-service:8083
+      - CAD_SERVICE_URL=http://cad-service:8087
+      - BLENDER_SERVICE_URL=http://blender-service:8082
+      - BRIDGE_PORT=8085
+    depends_on:
+      gateway: {condition: service_healthy}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; r=httpx.get('http://localhost:8085/health'); assert r.status_code==200"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  aedifex-editor:
+    build:
+      context: ./aedifex-editor
+      dockerfile: Dockerfile
+    ports: ["3002:3002"]
+    environment:
+      - NEXT_PUBLIC_API_URL=http://aedifex-bridge:8085
+      - AI_API_KEY=${OPENROUTER_API_KEY:-}
+      - AI_BASE_URL=${OPENROUTER_BASE:-https://openrouter.ai/api/v1}
+    depends_on:
+      aedifex-bridge: {condition: service_healthy}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
 volumes:
   redis-data:

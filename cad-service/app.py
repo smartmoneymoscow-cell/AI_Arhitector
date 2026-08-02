@@ -615,8 +615,145 @@ async def export_shape(req: ExportRequest):
         raise HTTPException(400, f"Unknown format: {req.format}")
 
 
+
+# ═══════════════════════════════════════════════════════════════
+# DXF IMPORT (ezdxf)
+# ═══════════════════════════════════════════════════════════════
+
+try:
+    import ezdxf
+    EZDXF_AVAILABLE = True
+    print("[cad-service] ezdxf loaded successfully")
+except ImportError:
+    EZDXF_AVAILABLE = False
+    print("[cad-service] ezdxf not available. Install with: pip install ezdxf")
+
+import logging
+import tempfile
+logger = logging.getLogger("cad-service")
+
+
+@app.post("/api/v1/cad/import-dxf")
+async def import_dxf(
+    file_data: bytes,
+    convert_to_walls: bool = True,
+    wall_height: float = 3.0,
+    wall_thickness: float = 0.3,
+):
+    """Import DXF file → building entities as JSON."""
+    if not EZDXF_AVAILABLE:
+        raise HTTPException(500, "ezdxf not installed")
+    try:
+        with tempfile.NamedTemporaryFile(suffix='.dxf', delete=False) as tmp:
+            tmp.write(file_data)
+            tmp_path = tmp.name
+        doc = ezdxf.readfile(tmp_path)
+        msp = doc.modelspace()
+        entities = []
+        for entity in msp:
+            etype = entity.dxftype()
+            if etype == 'LINE':
+                s = entity.dxf.start
+                e = entity.dxf.end
+                entities.append({"type": "LINE", "layer": entity.dxf.layer, "start": [s.x, s.y], "end": [e.x, e.y]})
+            elif etype == 'LWPOLYLINE':
+                pts = [(p[0], p[1]) for p in entity.get_points()]
+                for i in range(len(pts) - 1):
+                    entities.append({"type": "LINE", "layer": entity.dxf.layer, "start": list(pts[i]), "end": list(pts[i+1])})
+                if entity.closed and len(pts) > 2:
+                    entities.append({"type": "LINE", "layer": entity.dxf.layer, "start": list(pts[-1]), "end": list(pts[0])})
+            elif etype == 'CIRCLE':
+                entities.append({"type": "CIRCLE", "layer": entity.dxf.layer, "center": [entity.dxf.center.x, entity.dxf.center.y], "radius": entity.dxf.radius})
+        os.unlink(tmp_path)
+        return {"status": "ok", "entities": entities, "count": len(entities)}
+    except Exception as e:
+        raise HTTPException(400, f"DXF parse error: {str(e)}")
+
+
+class WindowDef(BaseModel):
+    width: float = 1.2
+    height: float = 1.5
+    sill_height: float = 0.9
+    position: float = 3.0
+
+
+class DoorDef(BaseModel):
+    width: float = 0.9
+    height: float = 2.1
+    position: float = 5.0
+
+
+class ParametricWallRequest(BaseModel):
+    length: float = 10.0
+    height: float = 3.0
+    thickness: float = 0.3
+    windows: list[WindowDef] = []
+    doors: list[DoorDef] = []
+
+
+@app.post("/api/v1/cad/parametric-wall")
+async def generate_parametric_wall(req: ParametricWallRequest):
+    """Generate parametric wall with window/door openings via OpenCascade."""
+    if not OCCT_AVAILABLE:
+        raise HTTPException(500, "OpenCascade not installed")
+    try:
+        wall = make_box(req.length, req.thickness, req.height)
+        for win in req.windows:
+            if 0 < win.position < req.length:
+                wb = make_box(win.width, req.thickness + 0.1, win.height)
+                wb = translate(wb, win.position - win.width/2, -0.05, win.sill_height)
+                wall = boolean_cut(wall, wb)
+        for door in req.doors:
+            if 0 < door.position < req.length:
+                db = make_box(door.width, req.thickness + 0.1, door.height)
+                db = translate(db, door.position - door.width/2, -0.05, 0)
+                wall = boolean_cut(wall, db)
+        analysis = analyze_shape(wall)
+        mesh = shape_to_mesh(wall, 0.02)
+        job_id = uuid.uuid4().hex[:8]
+        step_path = os.path.join(OUTPUT_DIR, f"wall_{job_id}.step")
+        export_step(wall, step_path)
+        return {"status": "ok", "analysis": analysis, "mesh": mesh, "step_file": step_path}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+class DXFExportRequest(BaseModel):
+    walls: list[dict] = []
+    layer_name: str = "WALLS"
+
+
+@app.post("/api/v1/cad/export-dxf")
+async def export_dxf(req: DXFExportRequest):
+    """Export walls to DXF format."""
+    if not EZDXF_AVAILABLE:
+        raise HTTPException(500, "ezdxf not installed")
+    try:
+        doc = ezdxf.new(dxfversion="R2010")
+        msp = doc.modelspace()
+        doc.layers.add(req.layer_name, color=7)
+        for wall in req.walls:
+            start = wall.get("start", [0, 0])
+            end = wall.get("end", [0, 0])
+            msp.add_line((start[0], start[1]), (end[0], end[1]), dxfattribs={"layer": req.layer_name})
+            t = wall.get("thickness", 0.3)
+            dx, dy = end[0]-start[0], end[1]-start[1]
+            l = (dx**2+dy**2)**0.5
+            if l > 0:
+                nx, ny = -dy/l*t/2, dx/l*t/2
+                msp.add_line((start[0]+nx, start[1]+ny), (end[0]+nx, end[1]+ny), dxfattribs={"layer": req.layer_name})
+                msp.add_line((start[0]-nx, start[1]-ny), (end[0]-nx, end[1]-ny), dxfattribs={"layer": req.layer_name})
+        job_id = uuid.uuid4().hex[:8]
+        filepath = os.path.join(OUTPUT_DIR, f"export_{job_id}.dxf")
+        doc.saveas(filepath)
+        return FileResponse(filepath, media_type="application/dxf", filename=f"architect_{job_id}.dxf")
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
     print(f"CAD Service starting on port {PORT}")
     print(f"OpenCascade available: {OCCT_AVAILABLE}")
+    print(f"ezdxf available: {EZDXF_AVAILABLE}")
     uvicorn.run(app, host="0.0.0.0", port=PORT)
