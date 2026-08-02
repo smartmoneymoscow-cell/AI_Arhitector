@@ -2356,17 +2356,6 @@ async function _sendInner(){
     }
     
     await generateWithFallback(text, genParams);
-    
-    // ═══ PREMIUM: All dynamic components from LLM (same for ANY type) ═══
-    if(j.comparison && j.comparison.length > 1) {
-      setTimeout(() => addComparisonCards(j.comparison), 600);
-    }
-    if(j.references && j.references.length > 0) {
-      setTimeout(() => searchAndShowReferences(j.references), 400);
-    }
-    if(j.clarification && j.clarification.length > 0) {
-      setTimeout(() => addClarification(j.clarification, j, 0.5), 1200);
-    }
     return;
   }
   // General chat — try local generation as last resort
