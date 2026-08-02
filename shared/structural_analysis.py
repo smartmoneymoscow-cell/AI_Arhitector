@@ -1214,17 +1214,17 @@ class MemberChecker:
         concrete = CONCRETE_CLASSES.get(concrete_class, CONCRETE_CLASSES["B25"])
         rebar = REBAR_CLASSES.get(rebar_class, REBAR_CLASSES["A500"])
 
-        f_ct = concrete["f_bt"]
-        E_s = rebar["E_s"]
+        f_ct: float = float(concrete["f_bt"])  # type: ignore[arg-type]
+        E_s: float = float(rebar["E_s"])  # type: ignore[arg-type]
 
-        b = b_m * 1000  # мм
-        h = h_m * 1000
-        d = d_m * 1000
+        b: float = b_m * 1000  # мм
+        h: float = h_m * 1000
+        d: float = d_m * 1000
 
         # Момент трещинообразования
-        W = b * h**2 / 6
-        M_cr = f_ct * W  # Н·мм
-        M = M_kNm * 1e6
+        W: float = b * h**2 / 6
+        M_cr: float = f_ct * W  # Н·мм
+        M: float = M_kNm * 1e6
 
         if M_cr >= M:
             w_calc = 0.0
@@ -1239,7 +1239,7 @@ class MemberChecker:
             # ε_sm - ε_cm
             rho_eff = A_s_mm2 / (b * h)
             eps_sm = psi_s * M / (E_s * A_s_mm2 * (d - 0.5 * h))
-            eps_cm = 0.6 * f_ct / (concrete["E_b"] * 1000)
+            eps_cm = 0.6 * f_ct / (float(concrete["E_b"]) * 1000)  # type: ignore[arg-type]
 
             delta_eps = max(0, eps_sm - eps_cm)
 
