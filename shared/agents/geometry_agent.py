@@ -103,9 +103,7 @@ class GeometryAgent(BaseAgent):
         L = building_params.get("L", 12)
         fH = building_params.get("fH", 3.0)
 
-        script += self._generate_structural_elements(
-            structural_system, material, floors, W, L, fH, params
-        )
+        script += self._generate_structural_elements(structural_system, material, floors, W, L, fH, params)
 
         # Добавляем фундамент по нормативам
         foundation_type = params.get("foundation_type", task.params.get("foundation_type", "strip"))
@@ -143,9 +141,9 @@ class GeometryAgent(BaseAgent):
             duration_ms=(time.time() - start) * 1000,
         )
 
-    def _generate_structural_elements(self, system: str, material: str,
-                                       floors: int, W: float, L: float, fH: float,
-                                       params: dict) -> str:
+    def _generate_structural_elements(
+        self, system: str, material: str, floors: int, W: float, L: float, fH: float, params: dict
+    ) -> str:
         """Генерация конструктивных элементов по СП 63/16/15/64."""
         lines = ["\n# ═══ STRUCTURAL ELEMENTS (per SP 63/16/15/64) ═══"]
         lines.append("import bpy")
@@ -158,8 +156,8 @@ class GeometryAgent(BaseAgent):
         if material in ("concrete", "reinforced_concrete", "бетон"):
             # ЖБ каркас — колонны и ригели по СП 63
             col_size = 0.4 if floors <= 5 else 0.6  # размер колонны
-            beam_h = 0.5 if floors <= 5 else 0.7    # высота ригеля
-            beam_w = 0.3 if floors <= 5 else 0.4    # ширина ригеля
+            beam_h = 0.5 if floors <= 5 else 0.7  # высота ригеля
+            beam_w = 0.3 if floors <= 5 else 0.4  # ширина ригеля
 
             lines.append(f"\n# ЖБ каркас: {concrete_class}, колонны {col_size}м, ригели {beam_h}м")
             lines.append(f"col_w = {col_size}")
@@ -272,8 +270,7 @@ if not mat_wood:
 
         return "\n".join(lines)
 
-    def _generate_foundation(self, ftype: str, W: float, L: float,
-                              floors: int, params: dict) -> str:
+    def _generate_foundation(self, ftype: str, W: float, L: float, floors: int, params: dict) -> str:
         """Генерация фундамента по СП 22/24."""
         lines = ["\n# ═══ FOUNDATION (per SP 22.13330 / SP 24.13330) ═══"]
 
@@ -282,7 +279,7 @@ if not mat_wood:
             depth = params.get("foundation_depth_m", 1.2)
             width = 0.6 if floors <= 3 else 0.8
             lines.append(f"\n# Ленточный фундамент (СП 22): глубина {depth}м, ширина {width}м")
-            lines.append("""
+            lines.append(f"""
 fnd_depth = {depth}
 fnd_w = {width}
 mat_fnd = bpy.data.materials.get('foundation')
@@ -300,7 +297,7 @@ fnd = bpy.context.active_object
 fnd.name = 'Foundation'
 fnd.scale = (W+fnd_w*2, L+fnd_w*2, fnd_depth)
 fnd.data.materials.append(mat_fnd)
-""".format(depth=depth, width=width)]
+""")
 
         elif ftype == "slab":
             # Плитный фундамент
@@ -322,7 +319,8 @@ fnd.data.materials.append(mat_fnd)
             pile_d = params.get("pile_diameter_m", 0.3)
             min_spacing = 3.5 * pile_d
             lines.append(f"\n# Свайное поле (СП 24): ∅{pile_d}м, шаг {min_spacing:.2f}м")
-            lines.append("""
+            lines.append(
+                """
 pile_d = {pile_d}
 pile_spacing = {spacing}
 n_piles_x = max(2, int(W / pile_spacing) + 1)
@@ -346,7 +344,8 @@ cap = bpy.context.active_object
 cap.name = 'PileCap'
 cap.scale = (W+0.6, L+0.6, 0.3)
 cap.data.materials.append(mat_pile)
-""".format(pile_d=pile_d, spacing=min_spacing))
+""".format(pile_d=pile_d, spacing=min_spacing)
+            )
 
         return "\n".join(lines)
 

@@ -11,7 +11,6 @@ shared/agents/compliance_agent.py — Расширенный агент пров
 
 import logging
 import time
-from typing import Dict, Any
 
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
@@ -72,7 +71,9 @@ class ComplianceAgent(BaseAgent):
             "mep": mep,
             "applicable_norms": norms,
             "summary": self._generate_summary(structural, fire, accessibility, energy, foundation, seismic, mep),
-            "action_plan": self._generate_action_plan(structural, fire, accessibility, energy, foundation, seismic, mep),
+            "action_plan": self._generate_action_plan(
+                structural, fire, accessibility, energy, foundation, seismic, mep
+            ),
         }
 
     def _check_interior_compliance(self, params: dict) -> dict:
@@ -87,7 +88,7 @@ class ComplianceAgent(BaseAgent):
     def _check_structural_compliance(self, params: dict) -> dict:
         """
         Проверка конструктивной системы.
-        
+
         Использует: СП 63.13330, СП 16.13330, СП 15.13330, СП 64.13330
         """
         checks = []
@@ -152,7 +153,7 @@ class ComplianceAgent(BaseAgent):
     def _check_fire_safety(self, params: dict) -> dict:
         """
         Проверка пожарной безопасности.
-        
+
         Использует: СП 1.13130.2020, СП 2.13130.2020, ГОСТ 30247.0
         """
         checks = []
@@ -170,8 +171,12 @@ class ComplianceAgent(BaseAgent):
 
         # Требуемый класс огнестойкости
         required_table = {
-            "house": "R45", "office": "R60", "hotel": "R60",
-            "commercial": "R60", "school": "R60", "hospital": "R90",
+            "house": "R45",
+            "office": "R60",
+            "hotel": "R60",
+            "commercial": "R60",
+            "school": "R60",
+            "hospital": "R90",
         }
         required = required_table.get(building_type, "R45")
         rei_map = {"R15": 15, "R30": 30, "R45": 45, "R60": 60, "R90": 90, "R120": 120}
@@ -288,7 +293,13 @@ class ComplianceAgent(BaseAgent):
 
         checks.append(f"📋 Класс энергоэффективности: {energy_class}")
 
-        return {"passed": score >= 60, "score": max(0, score), "energy_class": energy_class, "sv_ratio": round(sv_ratio, 3), "checks": checks}
+        return {
+            "passed": score >= 60,
+            "score": max(0, score),
+            "energy_class": energy_class,
+            "sv_ratio": round(sv_ratio, 3),
+            "checks": checks,
+        }
 
     def _check_foundation_compliance(self, params: dict) -> dict:
         """
@@ -339,7 +350,9 @@ class ComplianceAgent(BaseAgent):
             return {"passed": True, "score": 100, "checks": checks}
 
         checks.append(f"📋 Сейсмическая зона: {seismic_zone} баллов")
-        checks.append(f"📋 Коэффициент сейсмичности K1: {0.25 if seismic_zone <= 6 else 0.5 if seismic_zone == 7 else 0.75 if seismic_zone == 8 else 1.0}")
+        checks.append(
+            f"📋 Коэффициент сейсмичности K1: {0.25 if seismic_zone <= 6 else 0.5 if seismic_zone == 7 else 0.75 if seismic_zone == 8 else 1.0}"
+        )
 
         soil = params.get("soil_type", "III")
         if soil in ("IV", "V"):
@@ -397,6 +410,7 @@ class ComplianceAgent(BaseAgent):
         """Определить применимые нормативы."""
         try:
             from shared.norms_reference import get_applicable_norms
+
             return get_applicable_norms(
                 params.get("building_type", "house"),
                 params.get("floors", 2),
@@ -434,8 +448,15 @@ class ComplianceAgent(BaseAgent):
     def _generate_action_plan(self, structural, fire, access, energy, foundation, seismic, mep) -> list:
         """План мероприятий по устранению замечаний."""
         actions = []
-        for name, data in [("Конструкции", structural), ("Пожар", fire), ("Доступность", access),
-                           ("Энерго", energy), ("Основания", foundation), ("Сейсмика", seismic), ("Инженерия", mep)]:
+        for name, data in [
+            ("Конструкции", structural),
+            ("Пожар", fire),
+            ("Доступность", access),
+            ("Энерго", energy),
+            ("Основания", foundation),
+            ("Сейсмика", seismic),
+            ("Инженерия", mep),
+        ]:
             if not data["passed"]:
                 actions.append(f"[{name}] Проверить и устранить замечания (см. детали)")
             for check in data.get("checks", []):

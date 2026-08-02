@@ -25,7 +25,18 @@ logger = logging.getLogger("archai.orchestrator")
 # ═══ Pipeline profiles ═══
 PIPELINE_PROFILES = {
     "quick": ["parser", "geometry", "texture", "render", "quality", "compliance", "export"],
-    "standard": ["parser", "style", "geometry", "texture", "lighting", "structural", "compliance", "render", "quality", "export"],
+    "standard": [
+        "parser",
+        "style",
+        "geometry",
+        "texture",
+        "lighting",
+        "structural",
+        "compliance",
+        "render",
+        "quality",
+        "export",
+    ],
     "cad": ["parser", "style", "cad", "geometry", "texture", "lighting", "render", "quality", "compliance", "export"],
     "interactive": ["dialog", "parser", "style", "geometry", "texture", "lighting", "render", "quality", "export"],
     "full": [
@@ -655,10 +666,12 @@ class Orchestrator:
         # Определяем применимые нормативы
         try:
             from shared.norms_reference import get_applicable_norms
+
             norms = get_applicable_norms(
                 params.get("building_type", params.get("type", "house")),
                 params.get("floors", building_params.get("floors", 2)),
-                params.get("height_m", building_params.get("fH", 3.0)) * params.get("floors", building_params.get("floors", 2)),
+                params.get("height_m", building_params.get("fH", 3.0))
+                * params.get("floors", building_params.get("floors", 2)),
                 params.get("material", building_params.get("mat", "brick")),
             )
             base["applicable_norms"] = norms
@@ -689,8 +702,10 @@ class Orchestrator:
             base["live_load_kN_m2"] = params.get("live_load_kN_m2", 2.0)
             base["snow_load_kN_m2"] = params.get("snow_load_kN_m2", 1.8)
             base["wind_load_kN_m2"] = params.get("wind_load_kN_m2", 0.4)
-            base["total_mass_kg"] = params.get("total_mass_kg",
-                building_params.get("W", 10) * building_params.get("L", 12) * building_params.get("floors", 2) * 15000)
+            base["total_mass_kg"] = params.get(
+                "total_mass_kg",
+                building_params.get("W", 10) * building_params.get("L", 12) * building_params.get("floors", 2) * 15000,
+            )
             base["period_s"] = params.get("period_s", 0.5)
 
         # Для foundation agent

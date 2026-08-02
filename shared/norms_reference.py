@@ -7,14 +7,13 @@ shared/norms_reference.py — Полная база нормативных до�
 Зависимости: нет (чистый Python)
 """
 
-from typing import List, Dict, Optional, Any
-import re
+from typing import Any
 
 # ============================================================
 # БАЗА ДАННЫХ СВОДОВ ПРАВИЛ (СП)
 # ============================================================
 
-SP_DATABASE: List[Dict[str, Any]] = [
+SP_DATABASE: list[dict[str, Any]] = [
     {
         "code": "СП 20.13330.2016",
         "full_name": "Нагрузки и воздействия",
@@ -302,7 +301,7 @@ SP_DATABASE: List[Dict[str, Any]] = [
 # БАЗА ДАННЫХ ГОСТ
 # ============================================================
 
-GOST_DATABASE: List[Dict[str, Any]] = [
+GOST_DATABASE: list[dict[str, Any]] = [
     {
         "code": "ГОСТ 21.501-2018",
         "full_name": "Правила выполнения архитектурно-строительных чертежей",
@@ -412,7 +411,7 @@ GOST_DATABASE: List[Dict[str, Any]] = [
 # БАЗА ДАННЫХ ФЕДЕРАЛЬНЫХ ЗАКОНОВ
 # ============================================================
 
-FZ_DATABASE: List[Dict[str, Any]] = [
+FZ_DATABASE: list[dict[str, Any]] = [
     {
         "code": "ФЗ № 384-ФЗ",
         "full_name": "О безопасности зданий и сооружений",
@@ -486,35 +485,65 @@ CATEGORIES = {
 # ТИПЫ ЗДАНИЙ И ПРИМЕНИМОСТЬ НОРМ
 # ============================================================
 
-BUILDING_TYPE_NORMS: Dict[str, List[str]] = {
+BUILDING_TYPE_NORMS: dict[str, list[str]] = {
     "residential": [
-        "СП 54.13330.2016", "СП 20.13330.2016", "СП 50.13330.2012",
-        "СП 1.13130.2020", "СП 2.13130.2020", "СП 59.13330.2016",
-        "СП 7.13130.2013", "СП 30.13330.2020", "СП 76.13330.2016",
+        "СП 54.13330.2016",
+        "СП 20.13330.2016",
+        "СП 50.13330.2012",
+        "СП 1.13130.2020",
+        "СП 2.13130.2020",
+        "СП 59.13330.2016",
+        "СП 7.13130.2013",
+        "СП 30.13330.2020",
+        "СП 76.13330.2016",
     ],
     "office": [
-        "СП 20.13330.2016", "СП 50.13330.2012", "СП 1.13130.2020",
-        "СП 2.13130.2020", "СП 59.13330.2016", "СП 7.13130.2013",
-        "СП 30.13330.2020", "СП 76.13330.2016",
+        "СП 20.13330.2016",
+        "СП 50.13330.2012",
+        "СП 1.13130.2020",
+        "СП 2.13130.2020",
+        "СП 59.13330.2016",
+        "СП 7.13130.2013",
+        "СП 30.13330.2020",
+        "СП 76.13330.2016",
     ],
     "commercial": [
-        "СП 20.13330.2016", "СП 50.13330.2012", "СП 1.13130.2020",
-        "СП 2.13130.2020", "СП 59.13330.2016", "СП 7.13130.2013",
-        "СП 30.13330.2020", "СП 76.13330.2016",
+        "СП 20.13330.2016",
+        "СП 50.13330.2012",
+        "СП 1.13130.2020",
+        "СП 2.13130.2020",
+        "СП 59.13330.2016",
+        "СП 7.13130.2013",
+        "СП 30.13330.2020",
+        "СП 76.13330.2016",
     ],
     "industrial": [
-        "СП 20.13330.2016", "СП 1.13130.2020", "СП 2.13130.2020",
-        "СП 7.13130.2013", "СП 76.13330.2016", "СП 17.13330.2017",
+        "СП 20.13330.2016",
+        "СП 1.13130.2020",
+        "СП 2.13130.2020",
+        "СП 7.13130.2013",
+        "СП 76.13330.2016",
+        "СП 17.13330.2017",
     ],
     "educational": [
-        "СП 20.13330.2016", "СП 50.13330.2012", "СП 1.13130.2020",
-        "СП 2.13130.2020", "СП 59.13330.2016", "СП 7.13130.2013",
-        "СП 30.13330.2020", "СП 76.13330.2016",
+        "СП 20.13330.2016",
+        "СП 50.13330.2012",
+        "СП 1.13130.2020",
+        "СП 2.13130.2020",
+        "СП 59.13330.2016",
+        "СП 7.13130.2013",
+        "СП 30.13330.2020",
+        "СП 76.13330.2016",
     ],
     "medical": [
-        "СП 20.13330.2016", "СП 50.13330.2012", "СП 1.13130.2020",
-        "СП 2.13130.2020", "СП 59.13330.2016", "СП 7.13130.2013",
-        "СП 30.13330.2020", "СП 76.13330.2016",
+        "СП 20.13330.2016",
+        "СП 50.13330.2012",
+        "СП 1.13130.2020",
+        "СП 2.13130.2020",
+        "СП 59.13330.2016",
+        "СП 7.13130.2013",
+        "СП 30.13330.2020",
+        "СП 76.13330.2016",
     ],
 }
 
@@ -528,9 +557,9 @@ def get_applicable_norms(
     floors: int = 5,
     height: float = 15.0,
     material: str = "reinforced_concrete",
-    seismic_zone: Optional[str] = None,
-    soil_type: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+    seismic_zone: str | None = None,
+    soil_type: str | None = None,
+) -> list[dict[str, Any]]:
     """
     Определяет перечень применимых нормативных документов по параметрам здания.
 
@@ -588,7 +617,7 @@ def get_applicable_norms(
     return result
 
 
-def get_norm_details(norm_code: str) -> Optional[Dict[str, Any]]:
+def get_norm_details(norm_code: str) -> dict[str, Any] | None:
     """
     Возвращает полную информацию о нормативном документе по его коду.
 
@@ -604,7 +633,7 @@ def get_norm_details(norm_code: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def search_norms(keyword: str) -> List[Dict[str, Any]]:
+def search_norms(keyword: str) -> list[dict[str, Any]]:
     """
     Поиск нормативных документов по ключевому слову.
 
@@ -634,7 +663,7 @@ def search_norms(keyword: str) -> List[Dict[str, Any]]:
     return results
 
 
-def get_load_combination_factors(limit_state: str = "ultimate") -> Dict[str, Any]:
+def get_load_combination_factors(limit_state: str = "ultimate") -> dict[str, Any]:
     """
     Возвращает коэффициенты сочетаний нагрузок по СП 20.13330.2016.
 
@@ -647,20 +676,20 @@ def get_load_combination_factors(limit_state: str = "ultimate") -> Dict[str, Any
     if limit_state == "ultimate":
         return {
             "description": "Коэффициенты сочетаний для ППУ (первое предельное состояние)",
-            "gamma_f_dead": 1.1,        # γ_f для постоянных нагрузок
-            "gamma_f_dead_unfav": 0.9,   # γ_f для постоянных (неблагоприятное)
-            "gamma_f_live": 1.3,         # γ_f для длительных временных
-            "gamma_f_short": 1.3,        # γ_f для кратковременных
-            "psi_0_live": 0.9,           # ψ_0 для длительных
-            "psi_0_wind": 0.6,           # ψ_0 для ветровых
-            "psi_0_snow": 0.7,           # ψ_0 для снеговых
-            "psi_0_seismic": 1.0,        # ψ_0 для сейсмических
-            "psi_1_live": 0.9,           # ψ_1 для длительных
-            "psi_1_wind": 0.2,           # ψ_1 для ветровых
-            "psi_1_snow": 0.5,           # ψ_1 для снеговых
-            "gamma_m_concrete": 1.3,     # γ_m для бетона
-            "gamma_m_steel": 1.025,      # γ_m для стали
-            "gamma_m_rebar": 1.1,        # γ_m для арматуры
+            "gamma_f_dead": 1.1,  # γ_f для постоянных нагрузок
+            "gamma_f_dead_unfav": 0.9,  # γ_f для постоянных (неблагоприятное)
+            "gamma_f_live": 1.3,  # γ_f для длительных временных
+            "gamma_f_short": 1.3,  # γ_f для кратковременных
+            "psi_0_live": 0.9,  # ψ_0 для длительных
+            "psi_0_wind": 0.6,  # ψ_0 для ветровых
+            "psi_0_snow": 0.7,  # ψ_0 для снеговых
+            "psi_0_seismic": 1.0,  # ψ_0 для сейсмических
+            "psi_1_live": 0.9,  # ψ_1 для длительных
+            "psi_1_wind": 0.2,  # ψ_1 для ветровых
+            "psi_1_snow": 0.5,  # ψ_1 для снеговых
+            "gamma_m_concrete": 1.3,  # γ_m для бетона
+            "gamma_m_steel": 1.025,  # γ_m для стали
+            "gamma_m_rebar": 1.1,  # γ_m для арматуры
         }
     else:  # serviceability
         return {
@@ -668,13 +697,13 @@ def get_load_combination_factors(limit_state: str = "ultimate") -> Dict[str, Any
             "gamma_f_dead": 1.0,
             "gamma_f_live": 1.0,
             "gamma_f_short": 1.0,
-            "psi_2_live": 0.3,           # ψ_2 для длительных
-            "psi_2_wind": 0.0,           # ψ_2 для ветровых
-            "psi_2_snow": 0.0,           # ψ_2 для снеговых
+            "psi_2_live": 0.3,  # ψ_2 для длительных
+            "psi_2_wind": 0.0,  # ψ_2 для ветровых
+            "psi_2_snow": 0.0,  # ψ_2 для снеговых
         }
 
 
-def get_deflection_limits(member_type: str) -> Dict[str, Any]:
+def get_deflection_limits(member_type: str) -> dict[str, Any]:
     """
     Возвращает допустимые прогибы по СП 16.13330.2017.
 
@@ -724,7 +753,7 @@ def get_deflection_limits(member_type: str) -> Dict[str, Any]:
     return limits.get(member_type, limits["beam_floor"])
 
 
-def get_fire_resistance_requirements(building_type: str, floors: int) -> Dict[str, Any]:
+def get_fire_resistance_requirements(building_type: str, floors: int) -> dict[str, Any]:
     """
     Возвращает требования к пределам огнестойкости по ФЗ №123 и СП 2.13130.
 
@@ -778,7 +807,7 @@ def get_fire_resistance_requirements(building_type: str, floors: int) -> Dict[st
     }
 
 
-def get_thermal_requirements(climate_zone: str = "II") -> Dict[str, Any]:
+def get_thermal_requirements(climate_zone: str = "II") -> dict[str, Any]:
     """
     Возвращает требования по теплозащите по СП 50.13330.2012.
 
@@ -803,7 +832,7 @@ def get_thermal_requirements(climate_zone: str = "II") -> Dict[str, Any]:
     return req
 
 
-def get_evacuation_requirements(building_type: str, floors: int, height: float) -> Dict[str, Any]:
+def get_evacuation_requirements(building_type: str, floors: int, height: float) -> dict[str, Any]:
     """
     Возвращает требования к эвакуации по СП 1.13130.2020.
 
@@ -845,7 +874,7 @@ def get_evacuation_requirements(building_type: str, floors: int, height: float) 
     }
 
 
-def get_accessibility_requirements() -> Dict[str, Any]:
+def get_accessibility_requirements() -> dict[str, Any]:
     """
     Возвращает требования доступности по СП 59.13330.2016.
 
@@ -868,7 +897,7 @@ def get_accessibility_requirements() -> Dict[str, Any]:
     }
 
 
-def get_mep_requirements(building_type: str) -> Dict[str, Any]:
+def get_mep_requirements(building_type: str) -> dict[str, Any]:
     """
     Возвращает требования к инженерным системам по типу здания.
 

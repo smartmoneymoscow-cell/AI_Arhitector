@@ -33,10 +33,7 @@ class StructuralAnalysisAgent(BaseAgent):
     def _run_analysis(self, params: dict) -> dict:
         """Запуск полного структурного анализа."""
         try:
-            from shared.structural_analysis import (
-                StructuralEngine, MemberChecker, LoadCombiner,
-                SectionDatabase, DynamicsAnalyzer, StabilityAnalyzer
-            )
+            from shared.structural_analysis import StructuralEngine  # noqa: F401
         except ImportError:
             return {"error": "structural_analysis module not available", "status": "skipped"}
 
@@ -56,7 +53,7 @@ class StructuralAnalysisAgent(BaseAgent):
             Wx = params.get("beam_Wx_m3", 0.0005)
             fy = params.get("steel_f_y_MPa", 345)
             results["checks"]["beam_bending"] = engine.checker.steel_beam_bending(Wx, fy)
-            results["checks"]["deflection"] = engine.checker.deflection_check(L, L/300)
+            results["checks"]["deflection"] = engine.checker.deflection_check(L, L / 300)
 
         # 3. Сейсмика
         seismic_zone = params.get("seismic_zone", 0)
@@ -65,9 +62,7 @@ class StructuralAnalysisAgent(BaseAgent):
             results["checks"]["response_spectrum"] = engine.dynamics.response_spectrum(
                 T, soil_type=params.get("soil_type", "II"), seismic_zone=int(seismic_zone)
             )
-            results["checks"]["seismic_force"] = engine.dynamics.seismic_force(
-                params.get("total_mass_kg", 50000)
-            )
+            results["checks"]["seismic_force"] = engine.dynamics.seismic_force(params.get("total_mass_kg", 50000))
 
         # 4. Устойчивость
         if params.get("column_L_eff_m"):

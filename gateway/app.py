@@ -601,6 +601,7 @@ async def clarify_answer_endpoint(
 # COMPLIANCE — проверка нормативов (без генерации)
 # ═══════════════════════════════════════════════════════════════
 
+
 @app.post("/api/v1/compliance/check")
 async def compliance_check(
     req: dict,
@@ -610,9 +611,7 @@ async def compliance_check(
     """Проверка соответствия нормативам без генерации."""
     from shared.compliance import ComplianceChecker
     from shared.norms_reference import get_applicable_norms
-    from shared.structural_analysis import (
-        StructuralEngine, LoadCombiner, DynamicsAnalyzer, FoundationAnalyzer
-    )
+    from shared.structural_analysis import StructuralEngine
 
     params = req.get("params", {})
     prompt = req.get("prompt", "")

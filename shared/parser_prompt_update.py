@@ -9,7 +9,7 @@ shared/parser_prompt_update.py — Обновление SYSTEM_PROMPT в shared/
 # РАСШИРЕННЫЙ JSON-ФОРМАТ ДЛЯ SYSTEM_PROMPT
 # ═══════════════════════════════════════════════════════════════
 
-EXTENDED_JSON_SCHEMA = '''
+EXTENDED_JSON_SCHEMA = """
 ═══ РАСШИРЕННЫЙ ФОРМАТ JSON (v2.0) ═══
 {
   "object_type": "building|interior|landscape|structure",
@@ -42,9 +42,9 @@ EXTENDED_JSON_SCHEMA = '''
   "sewage": "central|septic|none",
   "exposure_class": "XC1|XC2|XC3|XC4|XD1|XD2|XS1|XS2|XS3"
 }
-'''
+"""
 
-EXTENDED_RULES = '''
+EXTENDED_RULES = """
 ═══ ДОПОЛНИТЕЛЬНЫЕ ПРАВИЛА ДЛЯ КОНСТРУКТИВНЫХ ПАРАМЕТРОВ ═══
 
 1. structural_system — конструктивная система:
@@ -98,13 +98,13 @@ EXTENDED_RULES = '''
 - Для дома 1-2 этажа: structural_system="frame", foundation_type="strip", soil_type="III"
 - Для дома 3-5 этажей: structural_system="frame", foundation_type="slab", soil_type="III"
 - Для офиса >5 этажей: structural_system="shear_wall", foundation_type="pile", soil_type="II"
-'''
+"""
 
 
 def get_system_prompt_addition() -> str:
     """
     Возвращает расширение для SYSTEM_PROMPT.
-    
+
     Встраивается в parser.py после строки:
     "features": ["ЛЮБЫЕ особенности"],
     """
