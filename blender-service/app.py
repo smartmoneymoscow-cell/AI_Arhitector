@@ -295,7 +295,7 @@ async def generate(req: GenerateRequest):
     if gen_type == "interior":
         return await _generate_interior(params, quality=quality)
     elif gen_type == "landscape":
-        return await _generate_building(params, quality=quality)
+        return await _generate_landscape(params, quality=quality)
     else:
         return await _generate_building(params, quality=quality)
 
@@ -557,6 +557,52 @@ async def _generate_interior(params: dict, quality: str = "16k"):
     if os.path.exists(output_file):
         return FileResponse(output_file, media_type="image/png", filename=f"archai_interior_{job_id}.png")
     raise HTTPException(500, detail="Render failed")
+
+
+async def _generate_landscape(params: dict, quality: str = "16k"):
+    """Generate landscape design (NO building)."""
+    from shared.agents.landscape_agent import LandscapeAgent
+    from shared.agents.base import Task
+
+    agent = LandscapeAgent()
+    task = Task(
+        name="landscape",
+        agent="landscape",
+        params={
+            "lot_width_m": params.get("width_m", 30),
+            "lot_length_m": params.get("length_m", 40),
+            "style": params.get("style", "natural"),
+            "has_pool": "pool" in params.get("features", []),
+            "has_garden": "garden" in params.get("features", []),
+            "landscape_style": params.get("style", "natural"),
+        },
+    )
+    result = agent.process(task)
+    bpy_script = result.data.get("bpy_script", "") if result.data else ""
+
+    if not bpy_script:
+        raise HTTPException(500, "Landscape script generation failed")
+
+    job_id = uuid.uuid4().hex[:8]
+    output_file = os.path.join(settings.OUTPUT_DIR, f"{job_id}_landscape.png")
+
+    render_cmd = (
+        "\nimport bpy"
+        f"\nbpy.context.scene.render.filepath = r'{output_file}'"
+        "\nbpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'"
+        "\nbpy.context.scene.render.resolution_x = 3840"
+        "\nbpy.context.scene.render.resolution_y = 2160"
+        "\nbpy.ops.render.render(write_still=True)"
+    )
+
+    try:
+        run_blender(bpy_script + render_cmd, output_file, timeout=120)
+    except (TimeoutError, RuntimeError) as e:
+        raise HTTPException(500, detail=f"Landscape render failed: {e}")
+
+    if os.path.exists(output_file):
+        return FileResponse(output_file, media_type="image/png", filename=f"landscape_{job_id}.png")
+    raise HTTPException(500, "Landscape render failed")
 
 
 if __name__ == "__main__":

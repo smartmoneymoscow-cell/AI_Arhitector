@@ -196,22 +196,41 @@ class Orchestrator:
             streamer.emit("parse", "done", progress=10, message=f"Parsed: {gen_type}, confidence={confidence:.0%}")
 
             # ═══ Step 1.5: Clarification ═══
-            if confidence < 0.5 and not skip_clarification:
-                clar = self.clarification.analyze(prompt, params, confidence)
-                if clar.needs_clarification:
-                    job["status"] = "clarification_needed"
-                    job["clarification"] = {
-                        "questions": [
-                            {"field": q.field, "text": q.text, "options": q.options, "priority": q.priority}
-                            for q in clar.questions
-                        ],
-                        "partial_params": params,
-                        "confidence": confidence,
-                    }
-                    streamer.emit(
-                        "clarification", "waiting", progress=10, message="Need clarification", data=job["clarification"]
-                    )
-                    return job
+            # ALWAYS check clarification, not just on low confidence
+            clar = self.clarification.analyze(prompt, params, confidence)
+            if clar.needs_clarification and not skip_clarification:
+                job["status"] = "clarification_needed"
+                job["clarification"] = {
+                    "questions": [
+                        {
+                            "field": q.field,
+                            "text": q.text,
+                            "options": q.options,
+                            "visual_options": [
+                                {
+                                    "id": vo.id,
+                                    "title": vo.title,
+                                    "description": vo.description,
+                                    "pros": vo.pros,
+                                    "cons": vo.cons,
+                                    "image_url": vo.image_url,
+                                    "recommended": vo.recommended,
+                                    "price_range": vo.price_range,
+                                }
+                                for vo in q.visual_options
+                            ],
+                            "priority": q.priority,
+                            "is_fork": q.is_fork,
+                        }
+                        for q in clar.questions
+                    ],
+                    "partial_params": params,
+                    "confidence": confidence,
+                }
+                streamer.emit(
+                    "clarification", "waiting", progress=10, message="Need clarification", data=job["clarification"]
+                )
+                return job
 
             # ═══ Step 2: Route ═══
             streamer.emit("route", "running", progress=12, message="Planning generation...")
@@ -271,8 +290,15 @@ class Orchestrator:
                     "height": params.get("height_m", 3),
                     "style": params.get("style", "modern"),
                     "furniture": params.get("furniture", []),
+                    "room_type": params.get("room_type", "living"),
                 },
             }
+
+            # Pass structural and MEP data to geometry agent
+            if "structural" in mid_results:
+                geom_params["structural_calc"] = mid_results["structural"]
+            if "mep" in mid_results:
+                geom_params["mep_calc"] = mid_results["mep"]
             texture_params = {
                 "material": params.get("material", "plaster"),
                 "resolution": 2048,
@@ -375,19 +401,74 @@ class Orchestrator:
                     job["fallback_agents"].append("render")
             streamer.emit("render", "done", progress=85, message="Render complete")
 
-            # ═══ Quality check (non-critical) ═══
+            # ═══ Quality check (MANDATORY for 16K) ═══
+            render_path = render_data.get("image_path", "") if render_data else ""
             quality_result = self._run_agent(
                 "quality",
                 {
                     "name": "quality",
                     "agent": "quality",
-                    "params": {"render_data": render_data, "quality": quality},
+                    "params": {
+                        "render_path": render_path,
+                        "quality": quality,
+                        "prompt": prompt,
+                        "gen_type": gen_type,
+                        "render_data": render_data,
+                    },
                 },
-                timeout=30,
+                timeout=60,
             )
             quality_data = quality_result.data if quality_result.status == TaskStatus.DONE else {}
             if quality_result.fallback:
                 job["fallback_agents"].append("quality")
+
+            # Quality gate: if 16K requested but not achieved — retry once
+            if quality == "16k" and quality_data:
+                res_check = quality_data.get("checks", {}).get("resolution", {})
+                if res_check and not res_check.get("passed", True):
+                    logger.warning(
+                        "Quality gate: 16K requested but got %s. Retrying with higher settings.",
+                        res_check.get("actual", "unknown")
+                    )
+                    streamer.emit(
+                        "quality", "warning", progress=87,
+                        message=f"Quality below 16K ({res_check.get('actual', '?')}), retrying..."
+                    )
+                    # Retry render with forced 16K settings
+                    render_result_retry = self._run_agent(
+                        "render",
+                        {
+                            "name": "render",
+                            "agent": "render",
+                            "params": {
+                                "geometry_script": geometry_script,
+                                "texture_script": texture_script,
+                                "quality": "16k_force",
+                                "output_dir": self.output_dir,
+                                "job_id": job_id,
+                            },
+                        },
+                        timeout=600,
+                    )
+                    if render_result_retry.status == TaskStatus.DONE and render_result_retry.data:
+                        render_data = render_result_retry.data
+                        # Re-check quality
+                        render_path = render_data.get("image_path", "") if render_data else ""
+                        quality_recheck = self._run_agent(
+                            "quality",
+                            {
+                                "name": "quality",
+                                "agent": "quality",
+                                "params": {
+                                    "render_path": render_path,
+                                    "quality": quality,
+                                    "prompt": prompt,
+                                },
+                            },
+                            timeout=60,
+                        )
+                        if quality_recheck.status == TaskStatus.DONE and quality_recheck.data:
+                            quality_data = quality_recheck.data
 
             # ═══ Export (non-critical) ═══
             export_result = self._run_agent(
@@ -408,9 +489,29 @@ class Orchestrator:
             if export_result.fallback:
                 job["fallback_agents"].append("export")
 
-            # ═══ Post-pipeline: Compliance, Financial, Presentation ═══
+            # ═══ Post-pipeline: Compliance, Financial, Presentation, Drawings ═══
             post_agents = [a for a in agent_sequence if a in ("compliance", "financial", "presentation")]
             post_results = {}
+
+            # Generate SVG drawings
+            drawings = {}
+            try:
+                from shared.agents.drawings_svg import (
+                    generate_floor_plan_svg,
+                    generate_section_svg,
+                    generate_elevation_svg,
+                    generate_mep_diagram_svg,
+                )
+
+                drawings["floor_plan"] = generate_floor_plan_svg(params, building_params.get("rooms", []))
+                drawings["section"] = generate_section_svg(params)
+                drawings["elevation_front"] = generate_elevation_svg(params, "front")
+                drawings["elevation_side"] = generate_elevation_svg(params, "left")
+                if "mep" in mid_results:
+                    drawings["mep_diagram"] = generate_mep_diagram_svg(params, mid_results.get("mep", {}))
+                logger.info("SVG drawings generated: %s", list(drawings.keys()))
+            except Exception as e:
+                logger.warning("SVG drawings generation failed: %s", e)
             for agent_name in post_agents:
                 agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
                 result = self._run_agent(
@@ -444,6 +545,7 @@ class Orchestrator:
                 "quality": quality_data,
                 "confidence": confidence,
                 "agent_results": agent_results,
+                "drawings": drawings,
             }
             job["duration_ms"] = (time.time() - start) * 1000
             return job

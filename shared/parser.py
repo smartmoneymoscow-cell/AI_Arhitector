@@ -30,68 +30,77 @@ logger = logging.getLogger("archai.parser")
 # SYSTEM PROMPT — FLEXIBLE, no hardcoded values
 # ═══════════════════════════════════════════════════════════════
 
-SYSTEM_PROMPT_VERSION = "v8.2"  # ← bump to invalidate all caches
+SYSTEM_PROMPT_VERSION = "v9.0"  # ← bump to invalidate all caches
 
 SYSTEM_PROMPT = """Ты — парсер архитектурных описаний для 3D-генератора.
 Отвечай ТОЛЬКО валидным JSON. Никаких рассуждений, пояснений, markdown.
 
 Твоя задача — понять контекст пользователя и передать параметры для 3D-генерации.
-НЕ ограничивайся списком — если пользователь просит что-то необычное (сарай, навес,
-беседка, гараж, теплица, курятник, баня, бассейн, забор, ворота) — ты ОБЯЗАН это понять
-и сгенерировать подходящие параметры.
+НЕ ограничивайся списком — если пользователь просит что-то необычное — ты ОБЯЗАН это понять.
 
-Формат JSON (строго):
+═══ КРИТИЧЕСКИ ВАЖНОЕ ПРАВИЛО ОПРЕДЕЛЕНИЯ ТИПА ═══
+
+object_type определяет ЧТО генерировать:
+- "interior" = внутреннее помещение (комната, квартира)
+- "building" = здание/сооружение снаружи
+- "landscape" = ландшафтный дизайн участка
+
+ПРАВИЛА ОПРЕДЕЛЕНИЯ object_type:
+
+1. ИНТЕРЬЕР (object_type="interior") — когда пользователь хочет ДИЗАЙН ВНУТРИ:
+   Ключевые слова: "ванная", "кухня", "спальня", "гостиная", "детская", "интерьер",
+   "дизайн комнаты", "дизайн кухни", "оформление", "мебель", "обстановка",
+   "ванная с джакузи", "кухня в стиле хайтек", "дизайн детской", "сауна внутри"
+   → object_type="interior", room_type=тип комнаты
+
+2. ЗДАНИЕ (object_type="building") — когда пользователь хочет ПОСТРОИТЬ ЗДАНИЕ:
+   Ключевые слова: "построить дом", "здание", "офис", "коттедж", "отель",
+   "построй", "сделай дом", "таунхаус", "здание", "сооружение"
+   → object_type="building"
+
+3. ЛАНДШАФТ (object_type="landscape") — когда пользователь хочет ЛАНДШАФТ:
+   Ключевые слова: "ландшафт", "сад", "двор", "участок", "ландшафтный дизайн",
+   "клумба", "газон", "дорожки", "пруд на участке", "бассейн во дворе"
+   → object_type="landscape"
+   НЕ ГЕНЕРИРУЙ ЗДАНИЕ если просят ландшафт!
+
+4. Если запрос неоднозначен — поставь confidence низким (< 0.5)
+
+═══ ФОРМАТ JSON (строго) ═══
 {
-  "object_type": "building|interior|room|structure|landscape|element",
-  "building_type": "ЛЮБОЕ строковое значение — ты определяешь по контексту",
-  "building_description": "подробное описание что именно строим",
+  "object_type": "building|interior|landscape|structure",
+  "building_type": "ЛЮБОЕ строковое значение",
+  "building_description": "подробное описание что именно делаем",
   "room_type": "тип комнаты если интерьер, иначе null",
-  "floors": число этажей (1-20, для одноэтажных строений = 1),
-  "width_m": ширина в метрах (реалистичная для данного объекта),
+  "floors": число (1-50),
+  "width_m": ширина в метрах (реалистичная),
   "length_m": длина в метрах,
-  "height_m": высота в метрах (реалистичная),
-  "style": "стиль — ЛЮБОЕ значение: modern, classic, loft, rustic, medieval, japanese, и т.д.",
-  "material": "основной материал — ЛЮБОЕ значение: brick, wood, stone, metal, glass, concrete, plastic, fabric, и т.д.",
-  "roof_type": "тип крыши — ЛЮБОЕ значение: gabled, flat, hip, mansard, shed, dome, asymmetric, green, и т.д.",
-  "features": ["ЛЮБЫЕ особенности: balcony, terrace, garage, pool, garden, chimney, skylight, и т.д."],
-  "furniture": ["ЛЮБАЯ мебель/оборудование для интерьера"],
-  "special_requirements": ["ЛЮБЫЕ особые требования из промта"],
-  "confidence": 0.0-1.0 (насколько ты уверен в интерпретации),
-  "reasoning": "кратко почему ты решил именно так"
+  "height_m": высота в метрах,
+  "style": "ЛЮБОЕ значение стиля",
+  "material": "ЛЮБОЕ значение материала",
+  "roof_type": "ЛЮБОЕ значение типа крыши",
+  "features": ["ЛЮБЫЕ особенности"],
+  "furniture": ["ЛЮБАЯ мебель для интерьера"],
+  "special_requirements": ["ЛЮБЫЕ особые требования"],
+  "confidence": 0.0-1.0,
+  "reasoning": "кратко почему решил именно так"
 }
 
-ПРАВИЛА:
-1. building_type — НЕ ограничивайся списком. Если "сарай" → "barn". Если "навес" → "carport".
-   Если "беседка" → "gazebo". Если "теплица" → "greenhouse". Если "курятник" → "chicken_coop".
-   Если "отель" или "гостиница" → "hotel". Если "хостел" → "hostel".
+═══ ПРАВИЛА ═══
+1. building_type — НЕ ограничивайся. Сарай→barn, навес→carport, беседка→gazebo,
+   теплица→greenhouse, баня→bathhouse, курятник→chicken_coop, отель→hotel.
 
-2. object_type — определи по контексту:
-   - "здание", "дом", "офис", "отель", "коттедж" → "building"
-   - "ванная", "кухня", "спальня", "гостиная", "интерьер", "дизайн комнаты" → "interior"
-   - Если пользователь просит "ванную с джакузи" → object_type="interior", room_type="bathroom"
-   - Если "дизайн детской" → object_type="interior", room_type="children"
-   - Если "кухня в стиле хайтек" → object_type="interior", room_type="kitchen"
+2. material — НЕ ограничивайся. Из брёвен→log, из соломы→straw, из кирпича→brick.
 
-ВАЖНО - РАЗЛИЧАЙ ИНТЕРЬЕР И ЭКСТЬЕР:
-- Если пользователь просит "дизайн кухни", "ванную", "спальню", "детскую", "гостиную", "интерьер" → object_type="interior"
-- Если просит "построить дом", "здание", "офис", "коттедж" → object_type="building"
-- Если просит "ландшафт", "сад", "двор", "участок" → object_type="landscape"
-- НИКОГДА не путай интерьер с экстерьером!
+3. style — НЕ ограничивайся. Японский→japanese, средневековый→medieval, лофт→loft.
 
-3. material — НЕ ограничивайся. "из брёвен" → "log". "из соломы" → "straw".
-
-4. style — НЕ ограничивайся. "в японском стиле" → "japanese". "средневековый" → "medieval".
-
-5. Размеры — если не указаны, подбери РЕАЛИСТИЧНЫЕ:
+4. Размеры по умолчанию (если не указаны):
    Сарай: 3×4×2.5м. Беседка: 3×3×2.5м. Гараж: 6×3×3м. Дом: 10×12×3м.
-   Отель: 24×36×3.2м (4 этажа). Квартира: 6×8×2.8м.
-   Ванная: 2.5×3×2.8м. Кухня: 4×5×2.8м. Спальня: 4×5×2.8м.
+   Отель: 24×36×3.2м. Ванная: 2.5×3×2.8м. Кухня: 4×5×2.8м.
 
-6. Если "ландшафт", "сад", "двор", "участок" → object_type="landscape", building_type="landscape"
+5. Для интерьера — перечисли мебель в поле furniture.
 
-7. Русские слова: сарай=barn, навес=carport, беседка=gazebo, гараж=garage,
-   теплица=greenhouse, баня=bathhouse, курятник=chicken_coop, забор=fence,
-   ворота=gate, сруб=log_cabin, изба=izba, отель=hotel, гостиница=hotel.
+6. Если запрос неясен — confidence < 0.5, в reasoning объясни что неясно.
 """
 
 
@@ -386,22 +395,25 @@ async def _call_ollama(prompt: str) -> dict | None:
 
 
 def _validate_result(result: dict) -> bool:
-    """Minimal validation — only check essential fields."""
+    """FLEXIBLE validation — trust LLM, check only structure."""
+    if not isinstance(result, dict):
+        return False
     if not result.get("object_type"):
         return False
     w = result.get("width_m", 0)
     l = result.get("length_m", 0)
+    # Only reject clearly invalid dimensions
     if w <= 0 or l <= 0 or w > 500 or l > 500:
         return False
     floors = result.get("floors", 0)
     if floors <= 0 or floors > 50:
         return False
-    # Interior requests MUST have room_type
+    # Interior requests — set default room_type if missing
     if result.get("object_type") in ("interior", "room") and not result.get("room_type"):
-        result["room_type"] = "living"  # default
+        result["room_type"] = "living"
     # Ensure building_type is not empty
     if not result.get("building_type"):
-        result["building_type"] = "house"  # default
+        result["building_type"] = "house"
     return True
 
 

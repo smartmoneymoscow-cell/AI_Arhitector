@@ -199,6 +199,8 @@ def route_generation(prompt: str, llm_params: dict | None = None) -> GenerationP
     # Step4: Determine steps based on type
     if gen_type == "interior":
         steps = _plan_interior_steps(params)
+    elif gen_type == "landscape":
+        steps = _plan_landscape_steps(params)
     else:
         steps = _plan_building_steps(params, building_params)
 
@@ -215,15 +217,47 @@ def route_generation(prompt: str, llm_params: dict | None = None) -> GenerationP
 
 
 def _detect_type(prompt: str, params: dict) -> str:
-    """Определяет тип генерации из промта и параметров."""
-    obj_type = params.get("object_type", "building")
+    """Определяет тип генерации из промта и параметров.
+    
+    Приоритет:
+    1. Explicit LLM object_type (if not default 'building')
+    2. Ключевые слова в промте
+    3. LLM object_type = 'building' (with interior double-check)
+    4. Дефолт: building
+    """
+    t = prompt.lower()
+    obj_type = (params.get("object_type") or "").strip().lower()
+    
+    # Explicit LLM types (not building)
     if obj_type in ("interior", "room"):
         return "interior"
-
-    t = prompt.lower()
+    if obj_type == "landscape":
+        return "landscape"
+    
+    # Keyword-based detection (before defaulting to building)
+    # Landscape keywords
+    landscape_kw = ["ландшафт", "ландшафтн", "сад", "двор", "участок", "дорожк", "клумб", "газон", "пруд", "бассейн во двор"]
+    if any(kw in t for kw in landscape_kw):
+        building_in_landscape = ["постро", "создай дом", "построй здание"]
+        if not any(kw in t for kw in building_in_landscape):
+            return "landscape"
+    
+    # Interior keywords
+    interior_strong = ["ванн", "кухн", "спальн", "детск", "гостин", "интерьер", "дизайн комнат"]
+    if any(kw in t for kw in interior_strong):
+        building_strong = ["постро", "создай дом", "возвед", "строительств"]
+        if not any(kw in t for kw in building_strong):
+            return "interior"
+    
+    # LLM object_type = 'building' or default
+    if obj_type == "building" or not obj_type:
+        return "building"
+    
+    # Fallback: interior keywords from list
     for kw in INTERIOR_KEYWORDS:
         if kw in t:
             return "interior"
+    
     return "building"
 
 
@@ -311,4 +345,21 @@ def _plan_interior_steps(params: dict) -> list:
         GenerationStep(name="parse", service="local", params={"prompt": params}),
         GenerationStep(name="render_interior", service="blender", params=interior_params),
         GenerationStep(name="upscale", service="local", params={"scale": 4}),
+    ]
+
+
+def _plan_landscape_steps(params: dict) -> list:
+    """Планирует шаги генерации ландшафтного дизайна."""
+    landscape_params = {
+        "lot_width_m": params.get("width_m", 30),
+        "lot_length_m": params.get("length_m", 40),
+        "style": params.get("style", "natural"),
+        "features": params.get("features", []),
+        "special_requirements": params.get("special_requirements", []),
+    }
+
+    return [
+        GenerationStep(name="parse", service="local", params={"prompt": params}),
+        GenerationStep(name="landscape_design", service="blender", params=landscape_params),
+        GenerationStep(name="render_landscape", service="blender", params={"quality": "16k"}),
     ]

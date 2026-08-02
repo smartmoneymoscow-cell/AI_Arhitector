@@ -102,6 +102,7 @@ body{display:flex;flex-direction:column}
 .ibox{padding:10px 10px 10px 14px;border-radius:14px}
 .sbtn{width:40px;height:40px}
 .qp{white-space:nowrap;font-size:11px;padding:6px 12px}
+#proj-sidebar{display:none!important}
 }
 @media(min-width:769px) and (max-width:1024px){
 .sb{width:380px}
@@ -113,6 +114,7 @@ body{display:flex;flex-direction:column}
 <div id="sb-overlay" onclick="toggleSB()" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.4);z-index:39"></div>
 <div class="top">
   <button id="mob-btn" onclick="toggleSB()" style="display:none;width:32px;height:32px;border-radius:8px;border:none;background:transparent;cursor:pointer;font-size:18px;margin-right:8px">☰</button>
+  <button onclick="toggleProjSidebar()" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--bdr);background:var(--bg2);cursor:pointer;font-size:14px;margin-right:8px" title="Проекты">📂</button>
   <div style="display:flex;align-items:center;gap:10px">
     <div class="logo" style="font-size:15px;font-weight:600">
       <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;vertical-align:middle">A</span>
@@ -125,6 +127,19 @@ body{display:flex;flex-direction:column}
   </div>
 </div>
 <div class="main">
+  <!-- PROJECTS SIDEBAR -->
+  <div id="proj-sidebar" style="width:0;overflow:hidden;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--bdr);transition:width .2s;display:flex;flex-direction:column">
+    <div style="padding:10px 12px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:12px;font-weight:700;color:var(--txt)">📂 Проекты</span>
+      <button onclick="toggleProjSidebar()" style="border:none;background:transparent;cursor:pointer;font-size:14px;color:var(--txt2)">✕</button>
+    </div>
+    <div id="proj-list" style="flex:1;overflow-y:auto;padding:8px">
+      <div style="text-align:center;padding:20px 0;color:var(--txt2);font-size:11px">Нет проектов</div>
+    </div>
+    <div style="padding:8px 12px;border-top:1px solid var(--bdr)">
+      <button onclick="createNewProject()" style="width:100%;padding:8px;border-radius:8px;border:1px dashed var(--bdr);background:transparent;cursor:pointer;font-size:12px;color:var(--txt2)">+ Новый проект</button>
+    </div>
+  </div>
   <!-- SIDEBAR -->
   <div class="sb" id="sb">
     <!-- CHAT TAB -->
@@ -193,6 +208,7 @@ body{display:flex;flex-direction:column}
         <button class="btn" onclick="resetCam()">⊙ Центр</button>
         <button class="btn" id="ann-btn" onclick="togAnn()">📐 Размеры</button>
         <button class="btn" id="wire-btn" onclick="togWire()">⬡ Каркас</button>
+        <button class="btn" id="sel-btn" onclick="toggleSelect()">✂ Выделить</button>
       </div>
     </div>
     <div class="cwrap" id="cwrap">
@@ -1927,9 +1943,9 @@ function doFinish(bld,ov,gf){
 }
 
 // ═══════════════════ SEND ════════════════════════════════════
-const BUILD_RE=/дом|здани|офис|коттедж|вилл|склад|таунхаус|этаж|комнат|кирпич|фасад|кровля|строи|проект|гараж|терраса|мансарда|балкон|дерев|стекл|плоская|скатная|загородн|жилой|база|гостиниц|отель|хостел|санаторий|пансионат|туристическ|курорт|мастер.план|инвестиц|комплекс|баня|саун|бани/i;
-const INTERIOR_RE=/интерьер|спальн|гостин|кухн|ванн|мебел|диван|кроват|стул|шкаф|прихож|коридор|детск|кабинет|столов|гардероб|холл|салон|лoft|лофт/i;
-const LANDSCAPE_RE=/ландшафт|сад|газон|дорожк|забор|беседк|бассейн|пруд|деревья|клумб|цветник|патио|двор|участок|огород/i;
+const INTERIOR_RE=/интерьер|спальн|гостин|кухн|ванн|мебел|диван|кроват|стул|шкаф|прихож|коридор|детск|кабинет|столов|гардероб|холл|салон|лoft|лофт|дизайн.*комнат|оформлени|обстановк|ванная|джакуз|саун.*внутр|детская|детской|младенческ|нян|ванн.*джакуз|кухн.*хайтек|кухн.*стиль/i;
+const LANDSCAPE_RE=/ландшафт|ландшафтн|газон|дорожк|клумб|цветник|патио|двор|участок|огород|пруд.*участк|бассейн.*двор|сад.*дизайн|озеленен|территория.*участк/i;
+const BUILD_RE=/постро|здани|офис|коттедж|вилл|склад|таунхаус|этаж|кирпич|фасад|кровля|строи|проект|гараж|терраса|мансарда|балкон|дерев|стекл|плоская|скатная|загородн|жилой|база|гостиниц|отель|хостел|санаторий|пансионат|туристическ|курорт|мастер.план|инвестиц|комплекс|баня|саун|бани|дом|сделай дом|построй дом/i;
 const CONSTRUCT_RE=/конструкц|ферм|балк|перекрыт|колонн|армопояс|сваи|фундамент|несущ|стен.*несущ|каркас|модул|панел/i;
 
 
@@ -2762,6 +2778,381 @@ function addThink(steps){
   const rows=steps.map(s=>`<div class="think-row"><div class="tc">✓</div>${s}</div>`).join('');
   d.innerHTML=`<div class="think"><div style="font-weight:700;margin-bottom:6px;font-size:11px">🧠 Мышление Architect</div>${rows}</div>`;
   area.appendChild(d);area.scrollTop=area.scrollHeight;
+}
+
+// ═══════════════ CLARIFICATION UI ═══════════════
+function addClarification(questions, partialParams, confidence) {
+  const area = document.getElementById('tab-chat'); if (!area) return;
+  const d = document.createElement('div'); d.className = 'msg a';
+
+  let html = `<div class="mmeta"><div class="av">A</div>Architect <span style="font-size:9px;opacity:.6">Уточнение</span></div>`;
+  html += `<div class="bub" style="max-width:380px">`;
+  html += `<div style="font-weight:600;margin-bottom:8px">🤔 Уточните параметры:</div>`;
+
+  questions.forEach((q, qi) => {
+    html += `<div style="margin-bottom:10px">`;
+    html += `<div style="font-size:12px;font-weight:500;margin-bottom:5px">${q.text}</div>`;
+
+    // Visual options (with images)
+    if (q.visual_options && q.visual_options.length > 0) {
+      html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">`;
+      q.visual_options.forEach(vo => {
+        const rec = vo.recommended ? 'border-color:#6366f1;background:#f5f3ff;' : '';
+        html += `<button onclick="answerClarification('${q.field}','${vo.title}')" style="padding:6px 10px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;font-size:11px;text-align:left;min-width:80px;${rec}">`;
+        html += `<div style="font-weight:600;font-size:11px">${vo.id}. ${vo.title}</div>`;
+        html += `<div style="font-size:10px;color:#64748b">${vo.description}</div>`;
+        if (vo.price_range) html += `<div style="font-size:10px;color:#059669;margin-top:2px">${vo.price_range}</div>`;
+        if (vo.recommended) html += `<div style="font-size:9px;color:#6366f1;margin-top:2px">⭐ Рекомендуем</div>`;
+        html += `</button>`;
+      });
+      html += `</div>`;
+    }
+    // Text options
+    else if (q.options && q.options.length > 0) {
+      html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">`;
+      q.options.forEach(opt => {
+        html += `<button onclick="answerClarification('${q.field}','${opt}')" style="padding:5px 12px;border-radius:16px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;font-size:12px;transition:all .15s">${opt}</button>`;
+      });
+      html += `</div>`;
+    }
+    html += `</div>`;
+  });
+
+  html += `<div style="font-size:10px;color:#94a3b8;margin-top:4px">Уверенность: ${Math.round(confidence * 100)}% • Выберите вариант или напишите свой</div>`;
+  html += `</div>`;
+
+  d.innerHTML = html;
+  area.appendChild(d);
+  area.scrollTop = area.scrollHeight;
+
+  // Store partial params for later use
+  window._clarPartialParams = partialParams;
+}
+
+function answerClarification(field, answer) {
+  const inp = document.getElementById('ci');
+  if (inp) {
+    inp.value = `${field}: ${answer}`;
+    send();
+  }
+}
+
+// ═══════════════ VARIANTS UI ═══════════════
+function addVariants(variants, baseParams) {
+  const area = document.getElementById('tab-chat'); if (!area) return;
+  const d = document.createElement('div'); d.className = 'msg a';
+
+  let html = `<div class="mmeta"><div class="av">A</div>Architect <span style="font-size:9px;opacity:.6">Варианты</span></div>`;
+  html += `<div class="bub" style="max-width:400px">`;
+  html += `<div style="font-weight:600;margin-bottom:8px">🎨 Выберите вариант:</div>`;
+  html += `<div style="display:flex;gap:8px;flex-wrap:wrap">`;
+
+  variants.forEach(v => {
+    html += `<button onclick="selectVariant(${v.id})" style="padding:10px;border-radius:10px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;text-align:left;width:120px;transition:all .15s">`;
+    html += `<div style="font-weight:600;font-size:12px">Вариант ${v.id}</div>`;
+    html += `<div style="font-size:11px;color:#64748b;margin-top:3px">${v.style}</div>`;
+    html += `<div style="font-size:10px;color:#64748b">${v.material}</div>`;
+    html += `<div style="font-size:10px;color:#64748b">Кровля: ${v.roof_type}</div>`;
+    html += `</button>`;
+  });
+
+  html += `</div></div>`;
+  d.innerHTML = html;
+  area.appendChild(d);
+  area.scrollTop = area.scrollHeight;
+}
+
+function selectVariant(id) {
+  addMsg('u', `Вариант ${id}`);
+  // Re-generate with selected variant
+  if (window._variantParams && window._variantParams[id]) {
+    const params = window._variantParams[id];
+    generateWithFallback(params.prompt || '', params);
+  }
+}
+
+// ═══════════════ CONSTRUCTION ANIMATION ═══════════════
+function animateConstruction(scene, buildingGroup, params) {
+  if (!buildingGroup || !buildingGroup.children || buildingGroup.children.length === 0) return;
+
+  const phases = [
+    { name: 'Фундамент', filter: c => c.name && (c.name.includes('Foundation') || c.name.includes('fnd')), duration: 1500 },
+    { name: 'Каркас', filter: c => c.name && (c.name.includes('Column') || c.name.includes('Beam') || c.name.includes('col')), duration: 2000 },
+    { name: 'Стены', filter: c => c.name && (c.name.includes('Wall') || c.name.includes('wall')), duration: 2000 },
+    { name: 'Перекрытия', filter: c => c.name && (c.name.includes('Slab') || c.name.includes('slab') || c.name.includes('Floor')), duration: 1500 },
+    { name: 'Крыша', filter: c => c.name && (c.name.includes('Roof') || c.name.includes('roof') || c.name.includes('Rafter')), duration: 1500 },
+    { name: 'Окна и двери', filter: c => c.name && (c.name.includes('Window') || c.name.includes('Door') || c.name.includes('Glass')), duration: 1000 },
+    { name: 'Интерьер', filter: c => c.name && (c.name.includes('Furniture') || c.name.includes('Sofa') || c.name.includes('Table') || c.name.includes('Bed')), duration: 1500 },
+    { name: 'Инженерия', filter: c => c.name && (c.name.includes('Pipe') || c.name.includes('Duct') || c.name.includes('Cable') || c.name.includes('Radiator')), duration: 1000 },
+  ];
+
+  // Hide all children initially
+  buildingGroup.children.forEach(child => {
+    child.userData._origVisible = child.visible;
+    child.visible = false;
+  });
+
+  // Show overlay
+  const ov = document.getElementById('genov');
+  if (ov) ov.style.display = 'flex';
+  const gtxt = document.getElementById('gtxt');
+  const gsub = document.getElementById('gsub');
+  const gf = document.getElementById('gf');
+  const gsteps = document.getElementById('gsteps');
+
+  let currentPhase = 0;
+  const totalPhases = phases.length;
+
+  function showPhase(idx) {
+    if (idx >= totalPhases) {
+      // Done — show all remaining
+      buildingGroup.children.forEach(child => { child.visible = child.userData._origVisible !== false; });
+      if (ov) ov.style.display = 'none';
+      showNotif('🏗 Строительство завершено!', 'ok');
+      return;
+    }
+
+    const phase = phases[idx];
+    if (gtxt) gtxt.textContent = `🏗 ${phase.name}...`;
+    if (gsub) gsub.textContent = `Этап ${idx + 1} из ${totalPhases}`;
+    if (gf) gf.style.width = `${((idx + 1) / totalPhases) * 100}%`;
+
+    // Show steps list
+    if (gsteps) {
+      gsteps.innerHTML = phases.map((p, i) => {
+        const cls = i < idx ? 'done' : i === idx ? 'active' : '';
+        const icon = i < idx ? '✓' : i === idx ? '●' : '○';
+        return `<div class="gs ${cls}">${icon} ${p.name}</div>`;
+      }).join('');
+    }
+
+    // Find and show objects for this phase
+    const phaseObjects = buildingGroup.children.filter(phase.filter);
+    phaseObjects.forEach((obj, i) => {
+      setTimeout(() => {
+        obj.visible = true;
+        // Scale-in animation
+        obj.scale.set(0.01, 0.01, 0.01);
+        const targetScale = obj.userData._origScale || { x: 1, y: 1, z: 1 };
+        const startTime = Date.now();
+        const dur = 500;
+        function animScale() {
+          const t = Math.min(1, (Date.now() - startTime) / dur);
+          const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+          obj.scale.set(
+            0.01 + (targetScale.x - 0.01) * ease,
+            0.01 + (targetScale.y - 0.01) * ease,
+            0.01 + (targetScale.z - 0.01) * ease
+          );
+          if (t < 1) requestAnimationFrame(animScale);
+        }
+        animScale();
+      }, i * (phase.duration / Math.max(phaseObjects.length, 1)));
+    });
+
+    // Move to next phase
+    setTimeout(() => showPhase(idx + 1), phase.duration + 300);
+  }
+
+  showPhase(0);
+}
+
+// ═══════════════ PROJECTS SIDEBAR ═══════════════
+let projects = JSON.parse(localStorage.getItem('archai_projects') || '[]');
+let currentProjectId = localStorage.getItem('archai_current_project') || null;
+
+function toggleProjSidebar() {
+  const sb = document.getElementById('proj-sidebar');
+  if (!sb) return;
+  const isOpen = sb.style.width !== '0px' && sb.style.width !== '';
+  sb.style.width = isOpen ? '0' : '240px';
+}
+
+function createNewProject() {
+  const id = Date.now().toString(36);
+  const proj = {
+    id,
+    name: 'Проект ' + (projects.length + 1),
+    created: new Date().toISOString(),
+    chatHistory: [],
+    params: null,
+    hasModel: false
+  };
+  projects.push(proj);
+  currentProjectId = id;
+  localStorage.setItem('archai_projects', JSON.stringify(projects));
+  localStorage.setItem('archai_current_project', id);
+  renderProjectsList();
+  // Clear current chat
+  const chat = document.getElementById('tab-chat');
+  if (chat) chat.innerHTML = '';
+  ST.hasModel = false;
+  ST.bld = null;
+  showNotif('Новый проект создан', 'ok');
+}
+
+function switchProject(id) {
+  // Save current project state
+  saveCurrentProject();
+
+  currentProjectId = id;
+  localStorage.setItem('archai_current_project', id);
+  const proj = projects.find(p => p.id === id);
+  if (!proj) return;
+
+  // Restore chat
+  const chat = document.getElementById('tab-chat');
+  if (chat) {
+    chat.innerHTML = '';
+    if (proj.chatHistory) {
+      proj.chatHistory.forEach(msg => addMsg(msg.role, msg.html));
+    }
+  }
+  // Restore params
+  if (proj.params) {
+    ST.bld = proj.params;
+    ST.hasModel = proj.hasModel;
+  }
+  renderProjectsList();
+  showNotif(`Проект: ${proj.name}`, 'ok');
+}
+
+function saveCurrentProject() {
+  if (!currentProjectId) return;
+  const proj = projects.find(p => p.id === currentProjectId);
+  if (!proj) return;
+
+  // Save chat messages
+  const msgs = document.querySelectorAll('#tab-chat .msg');
+  proj.chatHistory = Array.from(msgs).map(m => ({
+    role: m.classList.contains('u') ? 'u' : 'a',
+    html: m.querySelector('.bub')?.innerHTML || ''
+  }));
+  proj.params = ST.bld;
+  proj.hasModel = ST.hasModel;
+
+  localStorage.setItem('archai_projects', JSON.stringify(projects));
+}
+
+function renderProjectsList() {
+  const list = document.getElementById('proj-list');
+  if (!list) return;
+  if (projects.length === 0) {
+    list.innerHTML = '<div style="text-align:center;padding:20px 0;color:var(--txt2);font-size:11px">Нет проектов</div>';
+    return;
+  }
+  list.innerHTML = projects.map(p => `
+    <div onclick="switchProject('${p.id}')" style="padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px;background:${p.id === currentProjectId ? '#f5f3ff' : 'transparent'};border:1px solid ${p.id === currentProjectId ? '#6366f1' : 'transparent'}">
+      <div style="font-size:12px;font-weight:500;color:var(--txt)">${p.name}</div>
+      <div style="font-size:10px;color:var(--txt2)">${new Date(p.created).toLocaleDateString('ru')}</div>
+    </div>
+  `).join('');
+}
+
+// Initialize projects on load
+window.addEventListener('DOMContentLoaded', () => {
+  renderProjectsList();
+  // Auto-save every 30 seconds
+  setInterval(saveCurrentProject, 30000);
+});
+
+// ═══════════════ SELECTION TOOL ═══════════════
+let selectMode = false;
+let selectStart = null;
+let selectRect = null;
+let selectOverlay = null;
+
+function toggleSelect() {
+  selectMode = !selectMode;
+  const btn = document.getElementById('sel-btn');
+  if (btn) {
+    btn.style.background = selectMode ? '#6366f1' : '';
+    btn.style.color = selectMode ? '#fff' : '';
+  }
+  if (!selectMode) {
+    clearSelection();
+  } else {
+    showNotif('Выделите область на модели, затем введите промт', 'ok');
+  }
+}
+
+function clearSelection() {
+  if (selectOverlay) { selectOverlay.remove(); selectOverlay = null; }
+  selectRect = null;
+  selectStart = null;
+}
+
+// Mouse handlers for selection
+const cwrap = document.getElementById('cwrap');
+if (cwrap) {
+  cwrap.addEventListener('mousedown', (e) => {
+    if (!selectMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = cwrap.getBoundingClientRect();
+    selectStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+
+    selectOverlay = document.createElement('div');
+    selectOverlay.style.cssText = 'position:absolute;border:2px dashed #6366f1;background:rgba(99,102,241,.1);pointer-events:none;z-index:50;';
+    cwrap.appendChild(selectOverlay);
+  });
+
+  cwrap.addEventListener('mousemove', (e) => {
+    if (!selectMode || !selectStart || !selectOverlay) return;
+    const rect = cwrap.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const left = Math.min(selectStart.x, x);
+    const top = Math.min(selectStart.y, y);
+    const w = Math.abs(x - selectStart.x);
+    const h = Math.abs(y - selectStart.y);
+    selectOverlay.style.left = left + 'px';
+    selectOverlay.style.top = top + 'px';
+    selectOverlay.style.width = w + 'px';
+    selectOverlay.style.height = h + 'px';
+  });
+
+  cwrap.addEventListener('mouseup', (e) => {
+    if (!selectMode || !selectStart) return;
+    const rect = cwrap.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    selectRect = {
+      x: Math.min(selectStart.x, x) / rect.width,
+      y: Math.min(selectStart.y, y) / rect.height,
+      w: Math.abs(x - selectStart.x) / rect.width,
+      h: Math.abs(y - selectStart.y) / rect.height
+    };
+    selectStart = null;
+
+    // Show prompt input for selected area
+    if (selectRect.w > 0.05 && selectRect.h > 0.05) {
+      addMsg('a', `✂ Область выделена (${Math.round(selectRect.w * 100)}%×${Math.round(selectRect.h * 100)}%). Опишите что изменить:`);
+      const inp = document.getElementById('ci');
+      if (inp) inp.placeholder = 'Опишите изменение для выделенной области…';
+    } else {
+      clearSelection();
+      showNotif('Область слишком маленькая', 'warn');
+    }
+  });
+}
+
+// Override send() to include selection context
+const _originalSend = window.send;
+if (_originalSend) {
+  window.send = async function() {
+    if (selectRect) {
+      const inp = document.getElementById('ci');
+      const text = (inp && inp.value || '').trim();
+      if (text) {
+        // Add selection context to prompt
+        inp.value = `[Выделена область: x=${Math.round(selectRect.x * 100)}%, y=${Math.round(selectRect.y * 100)}%, ${Math.round(selectRect.w * 100)}%×${Math.round(selectRect.h * 100)}%] ${text}`;
+        clearSelection();
+        if (inp) inp.placeholder = 'Опишите здание или прикрепите фото/чертёж…';
+      }
+    }
+    return _originalSend();
+  };
 }
 let typEl=null;
 function showTyping(){const area=document.getElementById('tab-chat');if(!area)return;typEl=document.createElement('div');typEl.id='typ';typEl.className='msg a';typEl.innerHTML='<div class="mmeta"><div class="av">A</div></div><div class="dots"><div class="d"></div><div class="d"></div><div class="d"></div></div>';area.appendChild(typEl);area.scrollTop=area.scrollHeight;}

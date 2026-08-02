@@ -7,9 +7,12 @@ shared/agents/geometry_agent.py — Агент генерации3D геомет
 - Контроль качества геометрии
 """
 
+import logging
 import time
 
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
+
+logger = logging.getLogger(__name__)
 
 
 class GeometryAgent(BaseAgent):
@@ -91,6 +94,26 @@ class GeometryAgent(BaseAgent):
         building_params = task.params.get("building_params", task.params)
         script = generate_bpy_script(building_params)
 
+        # Add structural frame if available
+        structural_calc = task.params.get("structural_calc")
+        if structural_calc:
+            try:
+                from shared.agents.structural_bpy import generate_structural_bpy
+                struct_script = generate_structural_bpy(building_params, structural_calc)
+                script += "\n" + struct_script
+            except Exception as e:
+                logger.warning(f"Structural bpy failed: {e}")
+
+        # Add MEP systems if available
+        mep_calc = task.params.get("mep_calc")
+        if mep_calc:
+            try:
+                from shared.agents.mep_bpy import generate_mep_bpy
+                mep_script = generate_mep_bpy(building_params, mep_calc)
+                script += "\n" + mep_script
+            except Exception as e:
+                logger.warning(f"MEP bpy failed: {e}")
+
         return TaskResult(
             status=TaskStatus.DONE,
             data={"script": script, "type": "building"},
@@ -102,6 +125,23 @@ class GeometryAgent(BaseAgent):
 
         interior_params = task.params.get("interior_params", task.params)
         script = generate_interior_script(interior_params)
+
+        # Add high-quality furniture if available
+        furniture_list = interior_params.get("furniture", [])
+        room_type = interior_params.get("room_type", "living")
+        style = interior_params.get("style", "modern")
+        if furniture_list:
+            try:
+                from shared.agents.furniture_bpy import generate_furniture_bpy
+                furn_script = generate_furniture_bpy(
+                    room_type, furniture_list,
+                    interior_params.get("width", 6),
+                    interior_params.get("length", 8),
+                    style
+                )
+                script += "\n" + furn_script
+            except Exception as e:
+                logger.warning(f"Furniture bpy failed: {e}")
 
         return TaskResult(
             status=TaskStatus.DONE,

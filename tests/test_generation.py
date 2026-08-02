@@ -266,27 +266,37 @@ class TestValidation:
         assert result["length_m"] == 12
 
     def test_invalid_object_type(self):
-        assert validate_params({"object_type": "INVALID"})["object_type"] == "building"
+        # v9.0: Flexible validation — accepts LLM values
+        result = validate_params({"object_type": "INVALID"})
+        assert result["object_type"] == "INVALID"  # LLM is source of truth
 
     def test_invalid_building_type(self):
-        assert validate_params({"building_type": "INVALID"})["building_type"] == "house"
+        # v9.0: Flexible validation — accepts LLM values
+        result = validate_params({"building_type": "INVALID"})
+        assert result["building_type"] == "INVALID"  # LLM is source of truth
 
     def test_invalid_style(self):
-        assert validate_params({"style": "INVALID"})["style"] == "modern"
+        # v9.0: Flexible validation — accepts LLM values
+        result = validate_params({"style": "INVALID"})
+        assert result["style"] == "INVALID"  # LLM is source of truth
 
     def test_invalid_material(self):
-        assert validate_params({"material": "INVALID"})["material"] == "plaster"
+        # v9.0: Flexible validation — accepts LLM values
+        result = validate_params({"material": "INVALID"})
+        assert result["material"] == "INVALID"  # LLM is source of truth
 
     def test_invalid_roof(self):
-        assert validate_params({"roof_type": "INVALID"})["roof_type"] == "gabled"
+        # v9.0: Flexible validation — accepts LLM values
+        result = validate_params({"roof_type": "INVALID"})
+        assert result["roof_type"] == "INVALID"  # LLM is source of truth
 
     def test_floors_too_high(self):
-        assert validate_params({"floors": 100})["floors"] == 2
+        assert validate_params({"floors": 100})["floors"] == 50  # clamped to max
 
     def test_negative_dimensions(self):
         result = validate_params({"width_m": -5, "length_m": 0})
-        assert result["width_m"] == 10
-        assert result["length_m"] == 12
+        assert result["width_m"] >= 0.5  # clamped to min
+        assert result["length_m"] >= 0.5  # clamped to min
 
     def test_room_gets_default_furniture(self):
         result = validate_params({"object_type": "room", "room_type": "bedroom"})
@@ -294,8 +304,11 @@ class TestValidation:
         assert "wardrobe" in result["furniture"]
 
     def test_features_filtered(self):
+        # v9.0: Flexible validation — accepts all features from LLM
         result = validate_params({"features": ["balcony", "INVALID", "garage"]})
-        assert result["features"] == ["balcony", "garage"]
+        assert "balcony" in result["features"]
+        assert "garage" in result["features"]
+        assert "INVALID" in result["features"]  # LLM value preserved
 
     def test_preserves_valid_values(self):
         result = validate_params({

@@ -1,44 +1,55 @@
 """
-shared/agents/research_agent.py — Агент исследований.
+shared/agents/research_agent.py — Агент изучения референсов (web search).
 
-Отвечает за:
-    - Поиск архитектурных референсов
-    - Анализ трендов в архитектуре
-    - Изучение аналогичных проектов
-    - Сбор информации о материалах и технологиях
+v9.0 — Интеграция с DuckDuckGo/SerpAPI для поиска референсов.
+
+Ищет:
+- Архитектурные референсы по стилю и типу здания
+- Современные тренды в дизайне
+- Примеры планировок
+- Материалы и технологии
 """
 
 import logging
+import os
 import time
+
+import httpx
 
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
 logger = logging.getLogger(__name__)
 
+# SerpAPI key (optional)
+SERPAPI_KEY = os.environ.get("SERPAPI_KEY", "")
+
 
 class ResearchAgent(BaseAgent):
+    """Агент поиска архитектурных референсов в интернете."""
+
     name = "research"
 
     def process(self, task: Task) -> TaskResult:
         start = time.time()
         try:
-            prompt = task.params.get("prompt", "")
-            research_type = task.params.get("type", "general")
+            params = task.params
+            prompt = params.get("prompt", "")
+            style = params.get("style", "")
+            building_type = params.get("building_type", "")
+            gen_type = params.get("gen_type", "building")
 
-            if research_type == "references":
-                result = self._find_references(prompt, task.params)
-            elif research_type == "trends":
-                result = self._analyze_trends(prompt, task.params)
-            elif research_type == "materials":
-                result = self._research_materials(prompt, task.params)
-            elif research_type == "technologies":
-                result = self._research_technologies(prompt, task.params)
-            else:
-                result = self._general_research(prompt, task.params)
+            references = self._search_references(prompt, style, building_type, gen_type)
+            trends = self._search_trends(style, gen_type)
+            materials = self._search_materials(params)
 
             return TaskResult(
                 status=TaskStatus.DONE,
-                data=result,
+                data={
+                    "references": references,
+                    "trends": trends,
+                    "materials": materials,
+                    "search_queries": self._build_queries(prompt, style, building_type, gen_type),
+                },
                 duration_ms=(time.time() - start) * 1000,
             )
         except Exception as e:
@@ -49,159 +60,133 @@ class ResearchAgent(BaseAgent):
                 duration_ms=(time.time() - start) * 1000,
             )
 
-    def _find_references(self, prompt: str, params: dict) -> dict:
-        """Найти архитектурные референсы по описанию."""
-        from shared.web_search import get_search_engine
+    def _build_queries(self, prompt: str, style: str, building_type: str, gen_type: str) -> list[str]:
+        """Строит поисковые запросы."""
+        queries = []
 
-        engine = get_search_engine()
+        if gen_type == "interior":
+            room = prompt.split()[0] if prompt else "room"
+            queries.append(f"{style} {room} interior design reference 2024")
+            queries.append(f"{style} interior design ideas {room}")
+            queries.append(f"современный дизайн интерьера {style}")
+        elif gen_type == "landscape":
+            queries.append(f"landscape design {style} garden reference")
+            queries.append(f"ландшафтный дизайн {style} сад")
+        else:
+            queries.append(f"{style} {building_type} architecture reference 2024")
+            queries.append(f"{building_type} facade design {style}")
+            queries.append(f"{style} архитектура {building_type} фото")
 
-        style = params.get("style", "")
-        building_type = params.get("building_type", "house")
-        query = f"{style} {building_type} architecture reference design"
-        results = engine.search_architecture(query, max_results=10)
+        return queries
 
-        references = []
-        for r in results.results:
-            references.append(
-                {
-                    "title": r.title,
-                    "url": r.url,
-                    "snippet": r.snippet,
-                    "source": r.source,
-                }
-            )
-
-        return {
-            "type": "references",
-            "query": query,
-            "references": references,
-            "total": len(references),
-            "insights": self._extract_insights(references),
-        }
-
-    def _analyze_trends(self, prompt: str, params: dict) -> dict:
-        """Анализ трендов в архитектуре."""
-        from shared.web_search import get_search_engine
-
-        engine = get_search_engine()
-
-        queries = [
-            "архитектурные тренды 2026 жилая недвижимость",
-            "современные фасады тренды",
-            "экологичное строительство тренды",
-        ]
-        all_trends = []
-        for q in queries:
-            results = engine.search_trends(q, max_results=5)
-            for r in results.results:
-                all_trends.append(
-                    {
-                        "title": r.title,
-                        "url": r.url,
-                        "snippet": r.snippet,
-                    }
+    async def _search_ddg(self, query: str, max_results: int = 5) -> list[dict]:
+        """Поиск через DuckDuckGo (бесплатный)."""
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    "https://api.duckduckgo.com/",
+                    params={"q": query, "format": "json", "no_html": 1, "skip_disambig": 1},
+                    timeout=10,
                 )
+                if r.status_code == 200:
+                    data = r.json()
+                    results = []
+                    for item in data.get("RelatedTopics", [])[:max_results]:
+                        if isinstance(item, dict) and item.get("Text"):
+                            results.append({
+                                "title": item.get("Text", "")[:100],
+                                "url": item.get("FirstURL", ""),
+                                "snippet": item.get("Text", "")[:200],
+                            })
+                    return results
+        except Exception as e:
+            logger.warning(f"DuckDuckGo search failed: {e}")
+        return []
 
-        return {
-            "type": "trends",
-            "trends": all_trends[:15],
-            "categories": {
-                "sustainability": [
-                    t for t in all_trends if any(kw in t["title"].lower() for kw in ["eco", "green", "устойчив"])
-                ],
-                "technology": [
-                    t for t in all_trends if any(kw in t["title"].lower() for kw in ["smart", "tech", "digital"])
-                ],
-                "materials": [
-                    t for t in all_trends if any(kw in t["title"].lower() for kw in ["material", "материал"])
-                ],
-            },
+    async def _search_serpapi(self, query: str, max_results: int = 5) -> list[dict]:
+        """Поиск через SerpAPI (платный, но более качественный)."""
+        if not SERPAPI_KEY:
+            return []
+
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    "https://serpapi.com/search",
+                    params={
+                        "q": query,
+                        "api_key": SERPAPI_KEY,
+                        "engine": "google",
+                        "num": max_results,
+                    },
+                    timeout=15,
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    results = []
+                    for item in data.get("organic_results", [])[:max_results]:
+                        results.append({
+                            "title": item.get("title", ""),
+                            "url": item.get("link", ""),
+                            "snippet": item.get("snippet", ""),
+                            "image": item.get("thumbnail", ""),
+                        })
+                    return results
+        except Exception as e:
+            logger.warning(f"SerpAPI search failed: {e}")
+        return []
+
+    def _search_references(self, prompt: str, style: str, building_type: str, gen_type: str) -> list[dict]:
+        """Поиск референсов (синхронная обёртка)."""
+        import asyncio
+
+        queries = self._build_queries(prompt, style, building_type, gen_type)
+        all_results = []
+
+        for query in queries[:2]:  # Limit to 2 queries
+            try:
+                loop = asyncio.new_event_loop()
+                results = loop.run_until_complete(self._search_ddg(query))
+                loop.close()
+                all_results.extend(results)
+            except Exception:
+                pass
+
+        # Deduplicate by URL
+        seen = set()
+        unique = []
+        for r in all_results:
+            if r["url"] not in seen:
+                seen.add(r["url"])
+                unique.append(r)
+
+        return unique[:10]
+
+    def _search_trends(self, style: str, gen_type: str) -> list[str]:
+        """Определение трендов (на основе знаний)."""
+        trends = {
+            "modern": ["Биофильный дизайн", "Умный дом", "Эко-материалы", "Панорамное остекление"],
+            "classic": ["Неоклассика", "Современная классика", "Ар-деко элементы"],
+            "loft": ["Индустриальный шик", "Кирпичные акценты", "Металл+дерево"],
+            "minimalist": ["Японский минимализм", "Wabi-sabi", "Встроенная мебель"],
+            "scandinavian": ["Хюгге", "Светлое дерево", "Текстиль"],
         }
+        return trends.get(style, ["Современные материалы", "Энергоэффективность", "Умные технологии"])
 
-    def _research_materials(self, prompt: str, params: dict) -> dict:
-        """Исследование строительных материалов."""
-        from shared.web_search import get_search_engine
-
-        engine = get_search_engine()
-
-        material = params.get("material", "кирпич")
-        query = f"{material} строительный материал характеристики цена 2026"
-        results = engine.search_materials(query, max_results=10)
-
-        return {
-            "type": "materials",
-            "material": material,
-            "sources": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in results.results],
-            "properties": self._infer_material_properties(material),
-        }
-
-    def _research_technologies(self, prompt: str, params: dict) -> dict:
-        """Исследование строительных технологий."""
-        from shared.web_search import get_search_engine
-
-        engine = get_search_engine()
-
-        query = f"современные строительные технологии {prompt}"
-        results = engine.search(query, max_results=10)
-
-        return {
-            "type": "technologies",
-            "technologies": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in results.results],
-        }
-
-    def _general_research(self, prompt: str, params: dict) -> dict:
-        """Общее исследование по запросу."""
-        from shared.web_search import get_search_engine
-
-        engine = get_search_engine()
-
-        results = engine.search(prompt, max_results=10)
-        arch_results = engine.search_architecture(prompt, max_results=5)
-
-        return {
-            "type": "general",
-            "general_results": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in results.results],
-            "architecture_results": [
-                {"title": r.title, "url": r.url, "snippet": r.snippet} for r in arch_results.results
+    def _search_materials(self, params: dict) -> list[dict]:
+        """Рекомендации по материалам."""
+        material = params.get("material", "plaster")
+        recommendations = {
+            "brick": [
+                {"name": "Керамический кирпич", "pros": "Прочность, экологичность", "price": "4500 ₽/м²"},
+                {"name": "Силикатный кирпич", "pros": "Дешевле, звукоизоляция", "price": "3200 ₽/м²"},
             ],
-            "insights": self._extract_insights([{"title": r.title, "snippet": r.snippet} for r in results.results]),
+            "wood": [
+                {"name": "Клеёный брус", "pros": "Без усадки, точность", "price": "8000 ₽/м²"},
+                {"name": "Оцилиндрованное бревно", "pros": "Экология, тепло", "price": "5500 ₽/м²"},
+            ],
+            "concrete": [
+                {"name": "Монолитный ЖБК", "pros": "Прочность, гибкость форм", "price": "6000 ₽/м²"},
+                {"name": "Газобетон", "pros": "Тепло, лёгкость", "price": "2800 ₽/м²"},
+            ],
         }
-
-    def _extract_insights(self, references: list[dict]) -> list[str]:
-        """Извлечь ключевые инсайты из найденных материалов."""
-        insights = []
-        keywords_count = {}
-
-        for ref in references:
-            text = (ref.get("title", "") + " " + ref.get("snippet", "")).lower()
-            for kw in [
-                "современный",
-                "минимализм",
-                "экологичный",
-                "энергоэффективный",
-                "smart",
-                "модульный",
-                "параметрический",
-                "биофильный",
-            ]:
-                if kw in text:
-                    keywords_count[kw] = keywords_count.get(kw, 0) + 1
-
-        for kw, count in sorted(keywords_count.items(), key=lambda x: -x[1])[:5]:
-            insights.append(f"Часто упоминается: {kw} ({count} раз)")
-
-        return insights
-
-    def _infer_material_properties(self, material: str) -> dict:
-        """Свойства материала (из кэша знаний)."""
-        props = {
-            "кирпич": {"durability": "100+ лет", "thermal": "высокая", "price": "средняя", "eco": "да"},
-            "дерево": {"durability": "50-80 лет", "thermal": "высокая", "price": "средняя", "eco": "да"},
-            "бетон": {"durability": "100+ лет", "thermal": "низкая", "price": "средняя", "eco": "нет"},
-            "пеноблок": {"durability": "50-70 лет", "thermal": "высокая", "price": "низкая", "eco": "да"},
-            "стекло": {"durability": "50+ лет", "thermal": "низкая", "price": "высокая", "eco": "средне"},
-            "brick": {"durability": "100+ years", "thermal": "high", "price": "medium", "eco": "yes"},
-            "wood": {"durability": "50-80 years", "thermal": "high", "price": "medium", "eco": "yes"},
-            "concrete": {"durability": "100+ years", "thermal": "low", "price": "medium", "eco": "no"},
-        }
-        return props.get(material.lower(), {"durability": "unknown", "thermal": "unknown", "price": "unknown"})
+        return recommendations.get(material, [{"name": material, "pros": "По расчёту", "price": "N/A"}])
