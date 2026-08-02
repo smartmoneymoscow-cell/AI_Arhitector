@@ -2276,6 +2276,10 @@ async function _sendInner(){
           '• references — массив 3-6 референсов для поиска. Каждый: {query:"поисковый запрос", style:"стиль", type:"building|interior|landscape"}. '+
           '  Запросы на английском для лучшего поиска. Пример: {query:"modern minimalist house exterior", style:"modern", type:"building"} '+
           '  Для интерьера: {query:"loft kitchen interior design", style:"loft", type:"interior"} '+
+          '• suggestions — массив 3-5 подсказок для развития проекта. Это следующие шаги которые клиент может захотеть. '+
+          '  Каждый: {label:"Короткий текст", text:"полный промт для следующего запроса"}. '+
+          '  Примеры: {label:"С гаражом", text:"добавь гараж на 2 машины"}, {label:"Панорамные окна", text:"добавь панорамное остекление"} '+
+          '  Адаптируй под тип: для бани — "с бассейном", "с комнатой отдыха". Для отеля — "с рестораном", "с парковкой". Для ландшафта — "с зоной барбекю", "с прудом". '+
           '• Ты решаешь ЧТО показывать — адаптируй под тип задачи. Для интерьера — про стиль/мебель. Для здания — про материалы/кровлю. Для ландшафта — про растения/рельеф. Для отеля — про номера/инфраструктуру. '+
           'Только JSON, ничего больше.',
           500);
@@ -2322,6 +2326,11 @@ async function _sendInner(){
           // ═══ PREMIUM: Dynamic clarification questions from LLM ═══
           if(j.clarification && j.clarification.length > 0) {
             setTimeout(() => addClarification(j.clarification, j, 0.5), 1200);
+          }
+          
+          // Dynamic suggestions from LLM
+          if(j.suggestions && j.suggestions.length > 0) {
+            setTimeout(() => addSuggestionChips(j.suggestions), 300);
           }
         }
       }catch(e){console.warn('LLM parse failed:',e.message);}
@@ -3193,97 +3202,19 @@ function addVariants(variants, baseParams) {
 
 // ═══════════════ CONTEXT PROMPTS ═══════════════
 function updateContextPrompts(text) {
+  // Now LLM-driven: called from addSuggestionChips()
+  // This function is kept for backward compatibility but does nothing
+  const qpbar = document.getElementById('qpbar');
+  if (qpbar) qpbar.style.display = 'none';
+}
+
+// LLM-driven suggestion chips
+function addSuggestionChips(suggestions) {
   const qpbar = document.getElementById('qpbar');
   if (!qpbar) return;
-  const t = text.toLowerCase();
-  let prompts = [];
-
-  // Interior context
-  if (t.includes('ванн') || t.includes('джакуз')) {
-    prompts = [
-      { label: 'С душевой кабиной', text: text + ' с душевой кабиной' },
-      { label: 'Угловая ванна', text: text.replace('джакузи', 'угловая ванна') },
-      { label: 'Зеркальный потолок', text: text + ' с зеркальным потолком' },
-      { label: 'Тёплый пол', text: text + ' с тёплым полом' },
-    ];
-  } else if (t.includes('кухн')) {
-    prompts = [
-      { label: 'С островом', text: text + ' с кухонным островом' },
-      { label: 'Г-образная', text: text + ' Г-образная планировка' },
-      { label: 'Панорамное остекление', text: text + ' с панорамными окнами' },
-      { label: 'Барная стойка', text: text + ' с барной стойкой' },
-    ];
-  } else if (t.includes('детск')) {
-    prompts = [
-      { label: 'Игровая зона', text: text + ' с игровой зоной' },
-      { label: 'Учебный уголок', text: text + ' с учебным уголком' },
-      { label: 'Двухъярусная кровать', text: text + ' с двухъярусной кроватью' },
-      { label: 'Доска для рисования', text: text + ' с доской для рисования' },
-    ];
-  } else if (t.includes('спальн')) {
-    prompts = [
-      { label: 'Кровать king-size', text: text + ' с кроватью king-size' },
-      { label: 'Гардеробная', text: text + ' с гардеробной' },
-      { label: 'Панорамное окно', text: text + ' с панорамным окном' },
-      { label: 'LED-подсветка', text: text + ' с LED-подсветкой' },
-    ];
-  } else if (t.includes('гостин')) {
-    prompts = [
-      { label: 'Камин', text: text + ' с камином' },
-      { label: 'ТВ-зона', text: text + ' с ТВ-зоной' },
-      { label: 'Зона отдыха', text: text + ' с зоной отдыха' },
-      { label: 'Библиотека', text: text + ' с библиотекой' },
-    ];
-  }
-  // Building context
-  else if (t.includes('дом') || t.includes('коттедж')) {
-    prompts = [
-      { label: 'С гаражом', text: text + ' с гаражом' },
-      { label: 'С террасой', text: text + ' с террасой' },
-      { label: 'С бассейном', text: text + ' с бассейном' },
-      { label: 'Из бруса', text: text.replace(/кирпич|бетон|пеноблок/g, '') + ' из бруса' },
-    ];
-  } else if (t.includes('отель') || t.includes('гостиниц')) {
-    prompts = [
-      { label: 'С бассейном', text: text + ' с бассейном' },
-      { label: 'Ресторан', text: text + ' с рестораном' },
-      { label: 'Парковка', text: text + ' с подземной парковкой' },
-      { label: 'Панорамный ресторан', text: text + ' с панорамным рестораном на крыше' },
-    ];
-  } else if (t.includes('таунхаус')) {
-    prompts = [
-      { label: 'С двориком', text: text + ' с внутренним двориком' },
-      { label: 'С парковкой', text: text + ' с парковкой' },
-      { label: 'С садом', text: text + ' с садом' },
-      { label: 'Пентхаус', text: text.replace('таунхаус', 'пентхаус') },
-    ];
-  }
-  // Landscape context
-  else if (t.includes('ландшафт') || t.includes('сад') || t.includes('участок')) {
-    prompts = [
-      { label: 'С бассейном', text: text + ' с бассейном' },
-      { label: 'Розарий', text: text + ' с розарием' },
-      { label: 'Зона барбекю', text: text + ' с зоной барбекю' },
-      { label: 'Зен-сад', text: text + ' в японском стиле' },
-    ];
-  }
-  // Office context
-  else if (t.includes('офис')) {
-    prompts = [
-      { label: 'Open space', text: text + ' с open space' },
-      { label: 'Зона отдыха', text: text + ' с зоной отдыха' },
-      { label: 'Парковка', text: text + ' с подземной парковкой' },
-      { label: 'Зелёная терраса', text: text + ' с зелёной террасой' },
-    ];
-  }
-
-  if (prompts.length === 0) {
-    qpbar.style.display = 'none';
-    return;
-  }
-
-  qpbar.innerHTML = prompts.map(p =>
-    `<div class="qp" onclick="go('${p.text.replace(/'/g, "\\'")}')">${p.label}</div>`
+  if (!suggestions || suggestions.length === 0) { qpbar.style.display = 'none'; return; }
+  qpbar.innerHTML = suggestions.map(s =>
+    `<div class="qp" onclick="go('${(s.text || '').replace(/'/g, "\\'")}')">${s.label || s.text}</div>`
   ).join('');
   qpbar.style.display = 'flex';
 }
