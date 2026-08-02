@@ -26,6 +26,7 @@ logger = logging.getLogger("archai.orchestrator")
 PIPELINE_PROFILES = {
     "quick": ["parser", "geometry", "texture", "render", "export"],
     "standard": ["parser", "style", "geometry", "texture", "lighting", "render", "quality", "export"],
+    "cad": ["parser", "style", "cad", "geometry", "texture", "lighting", "render", "quality", "compliance", "export"],
     "full": [
         "parser",
         "research",

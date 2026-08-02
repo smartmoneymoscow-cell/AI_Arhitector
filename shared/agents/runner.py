@@ -95,6 +95,7 @@ class AgentRunner:
 
     # Fallback данные для каждого типа агента
     FALLBACK_DATA = {
+        "cad": {"step_path": None, "stl_path": None, "bpy_script": "", "note": "CAD agent skipped"},
         "parser": {
             "params": {
                 "object_type": "building",
@@ -143,6 +144,7 @@ class AgentRunner:
     AGENT_CLASSES = {
         "parser": "shared.agents.parser_agent.ParserAgent",
         "geometry": "shared.agents.geometry_agent.GeometryAgent",
+        "cad": "shared.agents.cad_agent.CADAgent",
         "texture": "shared.agents.texture_agent.TextureAgent",
         "render": "shared.agents.render_agent.RenderAgent",
         "export": "shared.agents.export_agent.ExportAgent",

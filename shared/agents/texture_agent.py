@@ -5,9 +5,12 @@ shared/agents/texture_agent.py — Агент генерации текстур 
 который выполняется в Blender.
 """
 
+import logging
 import time
 
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
+
+logger = logging.getLogger("archai.texture_agent")
 
 # PBR-конфигурации материалов
 MATERIAL_CONFIGS = {
@@ -119,7 +122,11 @@ links_{material_name}.new(bsdf_{material_name}.outputs["BSDF"], output_{material
 
 
 class TextureAgent(BaseAgent):
-    """Агент генерации PBR-материалов для Blender."""
+    """Агент генерации PBR-материалов для Blender.
+
+    v2: Added PBR texture scraping from ambientCG/Poly Haven.
+    Falls back to procedural materials if scraping fails.
+    """
 
     name = "texture"
 
@@ -128,16 +135,39 @@ class TextureAgent(BaseAgent):
         try:
             material = task.params.get("material", "plaster")
             resolution = task.params.get("resolution", 2048)
+            use_pbr_textures = task.params.get("use_pbr_textures", True)
 
             config = MATERIAL_CONFIGS.get(material, MATERIAL_CONFIGS["plaster"])
-            script = generate_pbr_material_script(material, config)
+            procedural_script = generate_pbr_material_script(material, config)
+
+            # Try to get real PBR textures
+            pbr_textures = None
+            pbr_script = ""
+            if use_pbr_textures:
+                try:
+                    from shared.pbr_scraper import PBRScraper
+                    res_label = "2K" if resolution >= 2048 else "1K" if resolution >= 1024 else "1K"
+                    scraper = PBRScraper()
+                    pbr_textures = scraper.get_material(material, resolution=res_label)
+                    if pbr_textures and pbr_textures.get("found"):
+                        pbr_script = scraper.generate_blender_material_script(material, pbr_textures)
+                        logger.info("PBR textures loaded for '%s' from %s", material, pbr_textures.get("source"))
+                except Exception as e:
+                    logger.warning("PBR texture scraping failed, using procedural: %s", e)
+
+            # Use PBR script if available, otherwise procedural
+            final_script = pbr_script if pbr_script else procedural_script
 
             return TaskResult(
                 status=TaskStatus.DONE,
                 data={
                     "material": material,
                     "config": config,
-                    "script": script,
+                    "script": final_script,
+                    "procedural_script": procedural_script,
+                    "pbr_script": pbr_script,
+                    "pbr_textures": pbr_textures,
+                    "has_real_textures": bool(pbr_script),
                     "resolution": resolution,
                 },
                 duration_ms=(time.time() - start) * 1000,

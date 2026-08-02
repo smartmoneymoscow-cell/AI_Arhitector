@@ -25,6 +25,14 @@ Pillow==10.4.0
 # ═══ BIM (optional — C++ build) ═══
 # ifcopenshell==0.8.0  # Uncomment when CI supports C++ builds
 
+# ═══ 3D mesh processing (fast GLB/DXF export) ═══
+trimesh==4.4.0
+numpy>=1.26.0
+
+# ═══ CAD (optional — OpenCascade) ═══
+# pythonocc-core==7.8.1  # Uncomment for full CAD (heavy: ~500MB)
+# build123d==0.7.0       # Uncomment for high-level CAD DSL
+
 # ═══ Testing ═══
 pytest==8.3.0
 pytest-asyncio==0.24.0

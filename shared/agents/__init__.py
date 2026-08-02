@@ -9,9 +9,10 @@ from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
 # ═══ Lazy import через __getattr__ ═══
 _LAZY_IMPORTS = {
-    # Pipeline (6)
+    # Pipeline (7)
     "ParserAgent": "shared.agents.parser_agent",
     "GeometryAgent": "shared.agents.geometry_agent",
+    "CADAgent": "shared.agents.cad_agent",
     "TextureAgent": "shared.agents.texture_agent",
     "RenderAgent": "shared.agents.render_agent",
     "ExportAgent": "shared.agents.export_agent",
@@ -35,6 +36,8 @@ _LAZY_IMPORTS = {
     # New (v7.1)
     "ELAgent": "shared.agents.el_agent",
     "MEPBIMAgent": "shared.agents.mep_bim_agent",
+    # New (v9.1) — CAD agent
+    "CADAgent": "shared.agents.cad_agent",
     # Orchestrator
     "Orchestrator": "shared.agents.orchestrator",
 }
@@ -59,6 +62,7 @@ __all__ = [
     "TaskStatus",
     "ParserAgent",
     "GeometryAgent",
+    "CADAgent",
     "TextureAgent",
     "RenderAgent",
     "ExportAgent",
@@ -89,6 +93,7 @@ class _AgentRegistry:
     _names = [
         "parser",
         "geometry",
+        "cad",
         "texture",
         "render",
         "export",
@@ -114,6 +119,7 @@ class _AgentRegistry:
     _class_map = {
         "parser": "ParserAgent",
         "geometry": "GeometryAgent",
+        "cad": "CADAgent",
         "texture": "TextureAgent",
         "render": "RenderAgent",
         "export": "ExportAgent",
