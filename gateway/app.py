@@ -567,7 +567,7 @@ async def clarify_endpoint(
         "needs_clarification": result.needs_clarification,
         "questions": [
             {
-                "field": q.field,
+                "field": q.field_name,
                 "text": q.text,
                 "options": q.options,
                 "priority": q.priority,

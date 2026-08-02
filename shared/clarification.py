@@ -35,7 +35,7 @@ class ClarificationOption:
 class ClarificationQuestion:
     """Один уточняющий вопрос."""
 
-    field: str
+    field_name: str
     text: str
     options: list[str] = field(default_factory=list)
     visual_options: list[ClarificationOption] = field(default_factory=list)
@@ -63,7 +63,7 @@ class ClarificationEngine:
     MIN_CONFIDENCE = 0.6
 
     # Поля, которые обязательно должны быть определены
-    REQUIRED_FIELDS = {
+    REQUIRED_FIELDS: dict[str, dict] = {
         "object_type": {
             "question": "Что вы хотите построить?",
             "options": ["🏠 Дом", "🏢 Офис", "🌲 Коттедж", "🏘 Таунхаус"],
@@ -77,7 +77,7 @@ class ClarificationEngine:
     }
 
     # Поля, которые желательно уточнить
-    OPTIONAL_FIELDS = {
+    OPTIONAL_FIELDS: dict[str, dict] = {
         "floors": {
             "question": "Сколько этажей?",
             "options": ["1", "2", "3", "5+"],
@@ -116,7 +116,7 @@ class ClarificationEngine:
                     if not self._field_mentioned(field_name, prompt):
                         questions.append(
                             ClarificationQuestion(
-                                field=field_name,
+                                field_name=field_name,
                                 text=config["question"],
                                 options=config["options"],
                                 priority=1,
@@ -129,7 +129,7 @@ class ClarificationEngine:
                 if not parsed_params.get(field_name):
                     questions.append(
                         ClarificationQuestion(
-                            field=field_name,
+                            field_name=field_name,
                             text=config["question"],
                             options=config["options"],
                             priority=1,
@@ -140,7 +140,7 @@ class ClarificationEngine:
                 if not self._field_mentioned(field_name, prompt):
                     questions.append(
                         ClarificationQuestion(
-                            field=field_name,
+                            field_name=field_name,
                             text=config["question"],
                             options=config.get("options", []),
                             priority=2,

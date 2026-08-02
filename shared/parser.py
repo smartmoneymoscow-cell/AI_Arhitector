@@ -297,7 +297,7 @@ class AllModelsFailedError(Exception):
     pass
 
 
-def _validate_and_fix(result: dict | None, text: str) -> dict | None:
+def _validate_and_fix(result: dict | None, text: str) -> dict | str | None:
     """Level 1+2: Pydantic validation + auto-retry with fix prompt."""
     from shared.llm_schemas import build_fix_prompt, validate_llm_response
 
@@ -507,8 +507,9 @@ async def parse_prompt_async(text: str) -> dict:
 
     # LLM cascade with key rotation (L3) + Pydantic validation
     for model_config in LLM_CASCADE:
-        model = model_config["model"]
-        timeout = model_config["timeout"]
+        model: str = model_config["model"]  # type: ignore[assignment]
+        timeout: int = model_config["timeout"]  # type: ignore[assignment]
+        tier: int = model_config["tier"]  # type: ignore[assignment]
 
         for key_idx, api_key in enumerate(api_keys):
             logger.info("Trying LLM: %s (key %d/%d)", model, key_idx + 1, len(api_keys))
@@ -524,7 +525,7 @@ async def parse_prompt_async(text: str) -> dict:
                     return validated
 
                 # Level 2: Retry with fix prompt (one attempt)
-                if isinstance(validated, str) and model_config["tier"] <= 2:
+                if isinstance(validated, str) and tier <= 2:
                     logger.info("Retrying %s with fix prompt", model)
                     fix_result = await _call_openrouter(model, validated, timeout, api_key)
                     if fix_result:
@@ -576,7 +577,7 @@ _MODEL_COSTS = {
 
 def _track_cost(model: str, tokens_in: int, tokens_out: int) -> None:
     """Track cost of an LLM call."""
-    costs = _MODEL_COSTS.get(model, {"input": 0, "output": 0})
+    costs: dict = _MODEL_COSTS.get(model, {"input": 0, "output": 0})  # type: ignore[assignment]
     cost = (tokens_in * costs["input"] + tokens_out * costs["output"]) / 1_000_000
     with _cost_lock:
         stats = _cost_stats.setdefault(model, {"calls": 0, "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0})
