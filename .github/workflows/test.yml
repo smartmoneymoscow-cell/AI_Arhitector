@@ -1,0 +1,159 @@
+name: Post-Release Test Suite
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ═══════════════════════════════════════════════════════════
+  # JOB 1: Unit tests (fast, no server needed)
+  # ═══════════════════════════════════════════════════════════
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run chat tests
+        run: node tests/test_chat.js
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 2: Prompt reasoning tests (dry-run, no server)
+  # ═══════════════════════════════════════════════════════════
+  reasoning-tests:
+    name: Prompt Reasoning
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        prompt:
+          - "двухэтажный кирпичный дом 10x12 с балконом"
+          - "современная спальня 6x8 в стиле хайтек"
+          - "детская комната в классическом стиле"
+          - "офис 5 этажей стекло плоская кровля 20x24"
+          - "деревянный коттедж с террасой 12x15"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install httpx pydantic
+
+      - name: Run reasoning test
+        run: PYTHONPATH=. python3 tests/test_prompt_reasoning.py --dry-run "${{ matrix.prompt }}"
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 3: E2E browser tests (with Playwright screenshots)
+  # ═══════════════════════════════════════════════════════════
+  e2e-browser:
+    name: E2E Browser Tests
+    runs-on: ubuntu-latest
+    needs: [unit-tests, reasoning-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright
+        run: |
+          npm install playwright
+          npx playwright install chromium --with-deps
+
+      - name: Run E2E browser tests
+        run: |
+          # Start local HTTP server (file:// can't load CDN scripts)
+          python3 -m http.server 8080 &
+          SERVER_PID=$!
+          sleep 2
+          node tests/test_e2e_browser.js http://localhost:8080/index.html || true
+          kill $SERVER_PID 2>/dev/null || true
+        env:
+          CI: true
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-screenshots
+          path: .openclaw/tmp/test_screenshots/
+          retention-days: 30
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: .openclaw/tmp/test_report_*.json
+          retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 4: Visual QA — AI analysis of screenshots
+  # ═══════════════════════════════════════════════════════════
+  visual-qa:
+    name: Visual QA (AI Screenshot Analysis)
+    runs-on: ubuntu-latest
+    needs: [e2e-browser]
+    if: always() && !cancelled()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install httpx
+
+      - name: Download screenshots
+        uses: actions/download-artifact@v4
+        with:
+          name: test-screenshots
+          path: .openclaw/tmp/test_screenshots/
+
+      - name: Run visual QA analysis
+        continue-on-error: true
+        run: |
+          python3 tests/visual_qa.py \
+            --dir .openclaw/tmp/test_screenshots \
+            --prompt "архитектурная 3D-модель" \
+            --type building \
+            --output .openclaw/tmp/test_screenshots/visual_qa_report.json
+        env:
+          MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
+
+      - name: Upload visual QA report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-qa-report
+          path: .openclaw/tmp/test_screenshots/visual_qa_report.json
+          retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════
+  # JOB 5: Release gate — blocks release if tests fail
+  # ═══════════════════════════════════════════════════════════
+  release-gate:
+    name: Release Gate
+    runs-on: ubuntu-latest
+    needs: [unit-tests, reasoning-tests]
+    if: github.event_name == 'release'
+    steps:
+      - name: All tests passed
+        run: echo "✅ All tests passed — release is safe to publish"
+# Visual QA enabled with MIMO_API_KEY

@@ -1,0 +1,617 @@
+"""
+gateway/app.py — API Gateway: ALL routing goes through here.
+Nginx → Gateway → LLM Service / Blender Service
+
+NO direct Nginx → service bypass.
+"""
+
+import asyncio
+import json
+import logging
+import os
+import uuid
+
+import httpx
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+
+from shared.auth import get_api_key_required, rate_limit_middleware
+from shared.config import settings
+from shared.logging_config import setup_logging
+
+setup_logging("gateway")
+logger = logging.getLogger("archai.gateway")
+
+app = FastAPI(
+    title="Architect Gateway",
+    description="API Gateway — ALL routing through here. Nginx → Gateway → Services",
+    version="8.0.0",
+)
+
+# CORS — NEVER wildcard in production
+_cors_origins = os.environ.get("CORS_ORIGINS", "")
+if not _cors_origins:
+    logger.error("CORS_ORIGINS not set — defaulting to empty (no CORS)")
+_origins_list = [o.strip() for o in _cors_origins.split(",") if o.strip()]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_origins_list,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "X-API-Key"],
+)
+
+
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error("Unhandled error: %s: %s", type(exc).__name__, str(exc)[:500], exc_info=True)
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(
+        status_code=500,
+        content={"error": "internal", "message": str(exc)[:500]},
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# BLENDER LOAD BALANCER — multiple instances
+# ═══════════════════════════════════════════════════════════════
+
+def _get_blender_urls() -> list[str]:
+    """Get all Blender service URLs (primary + secondary instances)."""
+    urls = []
+    primary = settings.BLENDER_SERVICE_URL
+    if primary:
+        urls.append(primary)
+    # Additional instances from env
+    for i in range(2, 6):
+        url = os.environ.get(f"BLENDER_SERVICE_URL_{i}", "")
+        if url and url not in urls:
+            urls.append(url)
+    return urls
+
+_blender_rr_index = 0  # round-robin counter
+
+def _next_blender_url() -> str:
+    """Get next Blender URL using round-robin with circuit breaker."""
+    global _blender_rr_index
+    urls = _get_blender_urls()
+    if not urls:
+        return ""
+
+    # Filter out circuits that are open
+    available = [u for u in urls if not _check_circuit(u)]
+    if not available:
+        # All circuits open — try primary anyway
+        return urls[0]
+
+    url = available[_blender_rr_index % len(available)]
+    _blender_rr_index += 1
+    return url
+
+
+async def request_with_retry(
+    method: str,
+    url: str,
+    max_retries: int = 2,
+    timeout: float = 120,
+    **kwargs,
+) -> httpx.Response:
+    service = "llm" if ":8081" in url or "llm" in url else "blender" if "blender" in url else "unknown"
+
+    if _check_circuit(service):
+        raise HTTPException(503, f"Service {service} circuit breaker OPEN — try again later")
+
+    last_error = None
+    async with httpx.AsyncClient() as client:
+        for attempt in range(max_retries + 1):
+            try:
+                r = await getattr(client, method)(url, timeout=timeout, **kwargs)
+                _record_success(service)
+                return r
+            except httpx.TimeoutException:
+                last_error = "timeout"
+            except httpx.ConnectError:
+                last_error = "connection_error"
+            if attempt < max_retries:
+                await asyncio.sleep(3 * (attempt + 1))
+
+    _record_failure(service)
+    logger.error("Service unavailable after %d retries: %s %s — %s", max_retries, method, url, last_error)
+    raise HTTPException(502, f"Service {service} unavailable: {last_error}")
+
+
+async def blender_request_with_fallback(
+    method: str,
+    path: str,
+    max_retries: int = 2,
+    timeout: float = 120,
+    **kwargs,
+) -> httpx.Response:
+    """Try Blender request with failover across multiple instances."""
+    urls = _get_blender_urls()
+    if not urls:
+        raise HTTPException(503, "No Blender service configured")
+
+    last_error = None
+    for url in urls:
+        if _check_circuit(url):
+            continue
+        try:
+            result = await request_with_retry(method, f"{url}{path}", max_retries=1, timeout=timeout, **kwargs)
+            _record_success(url)
+            return result
+        except (HTTPException, Exception) as e:
+            last_error = str(e)
+            _record_failure(url)
+            logger.warning("Blender %s failed: %s, trying next", url, last_error[:100])
+
+    raise HTTPException(502, f"All Blender instances failed: {last_error}")
+
+
+# ═══════════════════════════════════════════════════════════════
+# REDIS JOBS STORE
+# ═══════════════════════════════════════════════════════════════
+
+_redis = None
+_jobs_memory: dict[str, dict] = {}  # In-memory fallback when Redis unavailable
+
+
+def _get_redis():
+    global _redis
+    if _redis is not None:
+        return _redis
+    try:
+        import redis
+
+        _redis = redis.from_url(
+            settings.REDIS_URL, decode_responses=True, socket_timeout=5, socket_connect_timeout=5, retry_on_timeout=True
+        )
+        _redis.ping()
+        logger.info("Redis connected for jobs storage")
+        return _redis
+    except Exception as e:
+        logger.warning("Redis unavailable for jobs: %s", e)
+        _redis = None  # ensure retry on next call
+        return None
+
+
+def _store_job(job_id: str, data: dict) -> None:
+    r = _get_redis()
+    if r:
+        try:
+            r.setex(f"job:{job_id}", 86400, json.dumps(data, ensure_ascii=False, default=str))
+            return
+        except Exception as e:
+            logger.error("Redis store failed: %s", e)
+    # Fallback: in-memory (survives within same process)
+    _jobs_memory[job_id] = data
+
+
+def _get_job(job_id: str) -> dict | None:
+    r = _get_redis()
+    if r:
+        try:
+            raw = r.get(f"job:{job_id}")
+            return json.loads(raw) if raw else None
+        except Exception as e:
+            logger.error("Redis get failed: %s", e)
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# HEALTH
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.get("/health")
+@app.get("/api/v1/health")
+async def health():
+    services = {}
+    # LLM service
+    llm_url = settings.LLM_SERVICE_URL
+    if llm_url:
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(f"{llm_url}/health", timeout=15.0)
+                services["llm"] = "ok" if r.status_code == 200 else "error"
+        except Exception:
+            services["llm"] = "unreachable"
+    else:
+        services["llm"] = "not_configured"
+
+    # Blender instances (all)
+    blender_urls = _get_blender_urls()
+    for i, url in enumerate(blender_urls):
+        name = "blender" if i == 0 else f"blender_{i+1}"
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(f"{url}/health", timeout=15.0)
+                services[name] = "ok" if r.status_code == 200 else "error"
+        except Exception:
+            services[name] = "unreachable"
+
+    redis_status = "not_configured"
+    r = _get_redis()
+    if r:
+        try:
+            r.ping()
+            redis_status = "ok"
+        except Exception:
+            redis_status = "unreachable"
+
+    return {
+        "status": "ok",
+        "service": "gateway",
+        "version": "8.1.0",
+        "services": services,
+        "redis": redis_status,
+        "blender_instances": len(blender_urls),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# PARSE → routes to LLM Service
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.post("/api/v1/parse")
+async def parse_proxy(
+    req: dict,
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Proxy parse request to LLM Service."""
+    text = req.get("text", req.get("prompt", ""))
+    if not text:
+        raise HTTPException(400, "No text provided")
+
+    r = await request_with_retry(
+        "post",
+        f"{settings.LLM_SERVICE_URL}/api/v1/parse",
+        json={"text": text},
+        timeout=60,
+    )
+    return r.json()
+
+
+# ═══════════════════════════════════════════════════════════════
+# GENERATE → routes to Blender Service
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.post("/api/v1/generate")
+async def generate_proxy(
+    req: dict,
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Proxy generate request to Blender Service (with failover)."""
+    r = await blender_request_with_fallback(
+        "post", "/api/v1/generate",
+        json=req,
+        timeout=300,
+    )
+    return r.json()
+
+
+# ═══════════════════════════════════════════════════════════════
+# PREVIEW → routes to Blender Service (with failover)
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.post("/api/v1/preview")
+async def preview_proxy(
+    req: dict,
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Proxy preview request to Blender Service (with failover)."""
+    r = await blender_request_with_fallback(
+        "post", "/api/v1/preview",
+        json=req,
+        timeout=120,
+    )
+    return StreamingResponse(r.aiter_bytes(), media_type="image/png")
+
+
+# ═══════════════════════════════════════════════════════════════
+# CHAT → routes to LLM Service
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.post("/api/v1/chat")
+async def chat_proxy(
+    req: dict,
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Proxy chat to LLM Service."""
+    r = await request_with_retry(
+        "post",
+        f"{settings.LLM_SERVICE_URL}/api/v1/chat/completions",
+        json=req,
+        timeout=60,
+    )
+    return r.json()
+
+
+# ═══════════════════════════════════════════════════════════════
+# ORCHESTRATOR — full pipeline (Gateway owns this)
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.post("/api/v1/orchestrator/execute")
+async def orchestrator_execute(
+    req: dict,
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    from shared.agents import Orchestrator
+
+    prompt = req.get("prompt", "")
+    if not prompt:
+        raise HTTPException(400, "No prompt provided")
+
+    quality = req.get("quality", "standard")
+    export_formats = req.get("export_formats", ["glb"])
+    skip_clarification = req.get("skip_clarification", False)
+    pipeline_profile = req.get("pipeline_profile", "standard")
+    session_id = req.get("session_id", "")
+
+    job_id = uuid.uuid4().hex[:8]
+
+    orch = Orchestrator(
+        blender_service_url=settings.BLENDER_SERVICE_URL,
+        llm_service_url=settings.LLM_SERVICE_URL,
+        output_dir=settings.OUTPUT_DIR,
+    )
+
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(
+            None,
+            lambda: orch.execute(
+                prompt,
+                quality=quality,
+                export_formats=export_formats,
+                skip_clarification=skip_clarification,
+                pipeline_profile=pipeline_profile,
+                session_id=session_id,
+            ),
+        )
+    except Exception as e:
+        logger.error("Orchestrator error: %s: %s", type(e).__name__, str(e)[:500], exc_info=True)
+        if "AllModelsFailed" in type(e).__name__:
+            raise HTTPException(503, detail={"error": "all_models_failed", "message": str(e)})
+        raise HTTPException(500, detail={"error": "orchestrator_failed", "message": str(e)[:500]})
+
+    result_job_id = result["job_id"]
+    _store_job(result_job_id, result)
+
+    r = result.get("result") or {}
+    return {
+        "job_id": result_job_id,
+        "session_id": session_id,
+        "status": result["status"],
+        "gen_type": r.get("gen_type"),
+        "quality": quality,
+        "pipeline_profile": pipeline_profile,
+        "params": r.get("params"),
+        "render": r.get("render"),
+        "exports": r.get("exports", {}),
+        "confidence": r.get("confidence"),
+        "duration_ms": result.get("duration_ms", 0),
+        "steps": [
+            {"name": s["name"], "status": s["status"], "duration_ms": s.get("duration_ms", 0)}
+            for s in result.get("steps", [])
+        ],
+        "agent_results": r.get("agent_results", {}),
+    }
+
+
+@app.get("/api/v1/orchestrator/jobs/{job_id}")
+async def orchestrator_job_status(
+    job_id: str,
+    api_key: str = Depends(get_api_key_required),
+):
+    job = _get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return job
+
+
+@app.get("/api/v1/orchestrator/jobs/{job_id}/stream")
+async def orchestrator_stream(
+    job_id: str,
+    api_key: str = Depends(get_api_key_required),
+):
+    from shared.streaming import get_streamer
+
+    streamer = get_streamer(job_id)
+    if not streamer:
+        raise HTTPException(404, "Job not found or stream expired")
+
+    async def event_generator():
+        async for event in streamer.subscribe():
+            yield event.to_sse()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/v1/orchestrator/agents")
+async def orchestrator_agents(
+    api_key: str = Depends(get_api_key_required),
+):
+    from shared.agents import AGENT_REGISTRY
+
+    return {"agents": list(AGENT_REGISTRY.keys())}
+
+
+# ═══════════════════════════════════════════════════════════════
+# CLARIFICATION — уточняющие вопросы
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.post("/api/v1/clarify")
+async def clarify_endpoint(
+    req: dict,
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Analyze prompt and return clarification questions if needed."""
+    from shared.clarification import ClarificationEngine
+
+    prompt = req.get("prompt", "")
+    if not prompt:
+        raise HTTPException(400, "No prompt provided")
+
+    # Parse first
+    r = await request_with_retry(
+        "post",
+        f"{settings.LLM_SERVICE_URL}/api/v1/parse",
+        json={"text": prompt},
+        timeout=60,
+    )
+    parsed = r.json()
+    params = parsed.get("params", parsed)
+    confidence = parsed.get("confidence", 0.5)
+
+    engine = ClarificationEngine()
+    result = engine.analyze(prompt, params, confidence)
+
+    return {
+        "needs_clarification": result.needs_clarification,
+        "questions": [
+            {
+                "field": q.field,
+                "text": q.text,
+                "options": q.options,
+                "priority": q.priority,
+            }
+            for q in result.questions
+        ],
+        "confidence": result.confidence,
+        "partial_params": result.partial_params,
+    }
+
+
+@app.post("/api/v1/clarify/answer")
+async def clarify_answer_endpoint(
+    req: dict,
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Apply clarification answers and return updated params."""
+    from shared.clarification import ClarificationEngine
+
+    params = req.get("params", {})
+    answers = req.get("answers", {})
+
+    engine = ClarificationEngine()
+    updated = engine.apply_answers(params, answers)
+
+    return {"params": updated}
+
+
+# ═══════════════════════════════════════════════════════════════
+# VARIANTS — варианты реализации
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.post("/api/v1/variants")
+async def variants_endpoint(
+    req: dict,
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Generate multiple design variants with preview images."""
+    prompt = req.get("prompt", "")
+    if not prompt:
+        raise HTTPException(400, "No prompt provided")
+
+    num_variants = min(req.get("num_variants", 3), 5)
+
+    # Parse prompt first
+    r = await request_with_retry(
+        "post",
+        f"{settings.LLM_SERVICE_URL}/api/v1/parse",
+        json={"text": prompt},
+        timeout=60,
+    )
+    base_params = r.json()
+
+    # Generate variant params by varying style/material/roof
+    styles = ["modern", "classic", "minimalist"]
+    materials = ["brick", "plaster", "wood"]
+    roofs = ["gabled", "flat", "hip"]
+
+    variants = []
+    for i in range(num_variants):
+        variant_params = dict(base_params)
+        variant_params["style"] = styles[i % len(styles)]
+        variant_params["material"] = materials[i % len(materials)]
+        variant_params["roof_type"] = roofs[i % len(roofs)]
+        variants.append({
+            "id": i + 1,
+            "style": variant_params["style"],
+            "material": variant_params["material"],
+            "roof_type": variant_params["roof_type"],
+            "params": variant_params,
+        })
+
+    return {
+        "prompt": prompt,
+        "variants": variants,
+        "base_params": base_params,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# SESSION CONTEXT — multi-turn dialog management
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.get("/api/v1/context/{session_id}")
+async def get_context(
+    session_id: str,
+    api_key: str = Depends(get_api_key_required),
+):
+    """Get project context for a session."""
+    from shared.context import get_context_store
+
+    store = get_context_store(redis_url=settings.REDIS_URL)
+    ctx = store.get(session_id)
+    if not ctx:
+        raise HTTPException(404, "Session not found")
+    return ctx.to_dict()
+
+
+@app.get("/api/v1/context")
+async def list_contexts(
+    api_key: str = Depends(get_api_key_required),
+):
+    """List recent sessions."""
+    from shared.context import get_context_store
+
+    store = get_context_store(redis_url=settings.REDIS_URL)
+    return {"sessions": store.list_sessions()}
+
+
+@app.delete("/api/v1/context/{session_id}")
+async def delete_context(
+    session_id: str,
+    api_key: str = Depends(get_api_key_required),
+):
+    """Delete a session context."""
+    from shared.context import get_context_store
+
+    store = get_context_store(redis_url=settings.REDIS_URL)
+    store.delete(session_id)
+    return {"deleted": session_id}

@@ -1,0 +1,58 @@
+name: Post-Release Health Check
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"  # Every 30 minutes
+  workflow_dispatch:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check all services
+        run: |
+          echo "=== Service Health Check ==="
+          FAILURES=0
+
+          # Gateway
+          GW=$(curl -s "https://architect-gateway.onrender.com/health" --max-time 30 2>/dev/null || echo '{"status":"error"}')
+          GW_STATUS=$(echo "$GW" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','error'))" 2>/dev/null || echo "error")
+          GW_VERSION=$(echo "$GW" | python3 -c "import json,sys; print(json.load(sys.stdin).get('version','?'))" 2>/dev/null || echo "?")
+          echo "Gateway: $GW_STATUS (v$GW_VERSION)"
+
+          # LLM
+          LLM=$(curl -s "https://ai-arch-llmproxy.onrender.com/health" --max-time 30 2>/dev/null || echo '{"status":"error"}')
+          LLM_STATUS=$(echo "$LLM" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','error'))" 2>/dev/null || echo "error")
+          LLM_MODEL=$(echo "$LLM" | python3 -c "import json,sys; print(json.load(sys.stdin).get('model','none'))" 2>/dev/null || echo "none")
+          echo "LLM: $LLM_STATUS (model: $LLM_MODEL)"
+
+          # Blender
+          BL=$(curl -s "https://ai-arch-blender3d.onrender.com/health" --max-time 30 2>/dev/null || echo '{"status":"error"}')
+          BL_STATUS=$(echo "$BL" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','error'))" 2>/dev/null || echo "error")
+          echo "Blender: $BL_STATUS"
+
+          # Gateway connectivity
+          GW_LLM=$(echo "$GW" | python3 -c "import json,sys; print(json.load(sys.stdin).get('services',{}).get('llm','error'))" 2>/dev/null || echo "error")
+          GW_BL=$(echo "$GW" | python3 -c "import json,sys; print(json.load(sys.stdin).get('services',{}).get('blender','error'))" 2>/dev/null || echo "error")
+          echo "Gateway→LLM: $GW_LLM"
+          echo "Gateway→Blender: $GW_BL"
+
+          # Parse test
+          PARSE=$(curl -s -X POST "https://architect-gateway.onrender.com/api/v1/parse" \
+            -H "Content-Type: application/json" \
+            -d '{"text": "двухэтажный кирпичный дом 10x12"}' --max-time 60 2>/dev/null || echo '{"error":"timeout"}')
+          echo "Parse test: $(echo "$PARSE" | head -c 200)"
+
+          # Fail if critical services are down
+          if [ "$GW_STATUS" != "ok" ]; then echo "::error::Gateway is DOWN"; FAILURES=$((FAILURES+1)); fi
+          if [ "$LLM_STATUS" != "ok" ]; then echo "::error::LLM service is DOWN"; FAILURES=$((FAILURES+1)); fi
+          if [ "$GW_LLM" != "ok" ]; then echo "::error::Gateway cannot reach LLM"; FAILURES=$((FAILURES+1)); fi
+
+          if [ $FAILURES -gt 0 ]; then
+            echo ""
+            echo "❌ $FAILURES critical service(s) down"
+            exit 1
+          fi
+          echo ""
+          echo "✅ All services healthy"

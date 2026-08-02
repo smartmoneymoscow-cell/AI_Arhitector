@@ -1,0 +1,45 @@
+# AI_Arhitector — Requirements (PINNED versions)
+# Last updated: 2026-08-02
+# Run: pip install -r requirements.txt
+
+# ═══ Core ═══
+fastapi==0.115.0
+uvicorn==0.30.0
+httpx==0.27.0
+pydantic==2.9.0
+
+# ═══ Geometry ═══
+shapely==2.0.6
+networkx==3.3
+
+# ═══ Task queue (REMOVED — not used) ═══
+# celery==5.3.0  # ← REMOVED: unused, adds 50MB to images
+# See: https://github.com/smartmoneymoscow-cell/AI_Arhitector/issues/A10
+
+# ═══ Redis ═══
+redis==5.1.0
+
+# ═══ Image processing ═══
+Pillow==10.4.0
+
+# ═══ BIM (optional — C++ build) ═══
+# ifcopenshell==0.8.0  # Uncomment when CI supports C++ builds
+
+# ═══ 3D mesh processing (fast GLB/DXF export) ═══
+trimesh==4.4.0
+numpy>=1.26.0
+
+# ═══ CAD (optional — OpenCascade) ═══
+# pythonocc-core==7.8.1  # Uncomment for full CAD (heavy: ~500MB)
+# build123d==0.7.0       # Uncomment for high-level CAD DSL
+
+# ═══ Testing ═══
+pytest==8.3.0
+pytest-asyncio==0.24.0
+pytest-cov==5.0.0
+pytest-playwright==0.6.2
+
+# ═══ Linting ═══
+ruff==0.9.0
+mypy==1.14.0
+pip-audit==2.7.0

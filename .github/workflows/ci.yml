@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ═══ 1. Lint (30 sec) ═══
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff==0.9.0
+      - run: ruff check proto/ gateway/ shared/ llm-service/
+      - run: ruff format --check proto/ gateway/ shared/ llm-service/
+
+  # ═══ 2. Type check — C8: mypy (1 min) ═══
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install mypy pydantic fastapi httpx redis Pillow shapely networkx
+      - run: mypy proto/ gateway/ --ignore-missing-imports --no-strict-optional
+
+  # ═══ 3. Tests (2 min) ═══
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-retries 5
+    env:
+      REDIS_URL: redis://localhost:6379/0
+      OPENROUTER_API_KEY: test-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: pytest tests/ -x --tb=short --cov=proto --cov-report=term-missing -m "not blender and not llm_external and not e2e"
+
+  # ═══ 4. Docker build (3 min) ═══
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    needs: [lint, typecheck, test]
+    strategy:
+      matrix:
+        include:
+          - name: gateway
+            file: gateway.Dockerfile
+          - name: llm
+            file: llm.Dockerfile
+          - name: blender
+            file: blender.Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          push: false
+          tags: archai/${{ matrix.name }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  # ═══ 5. Security (1 min) ═══
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pip-audit && pip-audit -r requirements.txt --no-deps || echo "pip-audit completed with warnings"

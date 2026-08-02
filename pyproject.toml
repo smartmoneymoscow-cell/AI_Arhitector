@@ -1,0 +1,64 @@
+# ═══════════════════════════════════════════════════════════════
+# Ruff config — Architect v7.0
+# ═══════════════════════════════════════════════════════════════
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "B", "UP", "SIM", "S"]
+ignore = [
+    "RUF001",  # Ambiguous Unicode chars (Cyrillic in Russian project)
+    "RUF002",  # Ambiguous Unicode in docstrings
+    "RUF003",  # Ambiguous Unicode in comments
+    "RUF012",  # Mutable class attribute (used as constants)
+    "E501",    # Line too long (handled by formatter)
+    "E741",    # Ambiguous variable name (l, O, I)
+    "N806",    # Variable in function should be lowercase (W, L, fH are conventional)
+    "S108",    # Probable insecure /tmp usage
+    "S311",    # Standard pseudo-random (not crypto)
+    "S110",    # try-except-pass
+    "SIM102",  # Nested if → single if
+    "SIM105",  # contextlib.suppress
+    "SIM108",  # Ternary operator
+    "UP024",   # Replace aliased errors with OSError
+    "UP035",   # Import from collections.abc
+    "UP045",   # Use X | None instead of Optional
+    "B007",    # Unused loop control variable
+    "BLE001",  # Blind exception (used in bpy scripts and LLM fallbacks)
+    "PLW1510", # subprocess without check
+    "PLW1508", # subprocess without env
+    "ASYNC",   # Async warnings
+    "G",       # Logging format
+    "A",       # Shadowing built-in
+    "ISC",     # Implicitly concatenated string
+    "C",       # Commented-out code
+    "F821",    # Undefined names (ifcopenshell conditional import)
+    "F841",    # Unused variables (in development)
+    "F5",      # f-string issues
+    "E722",    # Bare except
+    "N",       # Naming conventions
+    "B904",    # raise from
+    "B",       # Bugbear
+    "S603",    # subprocess call (used for Blender CLI)
+    "S607",    # subprocess with partial path
+    "S104",    # Bind to all interfaces
+    "E402",    # Module level import not at top (sys.path.insert required)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"shared/ifc_generator.py" = ["F821"]
+"shared/upscaler.py" = ["F401"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-x --tb=short"
+markers = [
+    "blender: tests requiring Blender (deselect with '-m \"not blender\"')",
+    "llm_external: tests requiring external LLM API (deselect with '-m \"not llm_external\"')",
+    "e2e: end-to-end tests (deselect with '-m \"not e2e\"')",
+]

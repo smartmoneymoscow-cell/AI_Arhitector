@@ -1,0 +1,76 @@
+# ════════════════════════════════════════════════════════════
+# Render.com deployment — Architect v7.1
+# Only active services (3 + Redis)
+# ════════════════════════════════════════════════════════════
+
+services:
+  - type: web
+    name: architect
+    runtime: docker
+    dockerfilePath: ./gateway.Dockerfile
+    rootDir: .
+    region: oregon
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: LLM_SERVICE_URL
+        value: https://architect-llm-1s1j.onrender.com
+      - key: BLENDER_SERVICE_URL
+        value: https://ai-arch-blender3d.onrender.com
+      - key: BLENDER_SERVICE_URL_2
+        value: https://architect-blender.onrender.com
+      # Blender #3 — uncomment when deployed on Account 3
+      # - key: BLENDER_SERVICE_URL_3
+      #   value: https://______.onrender.com
+      - key: REDIS_URL
+        value: redis://red-xxx:6379
+      - key: FRONTEND_DIR
+        value: /app/frontend
+      - key: PORT
+        value: "8080"
+      - key: ARCH_API_KEYS
+        sync: false
+      - key: CORS_ORIGINS
+        value: "https://smartmoneymoscow-cell.github.io"
+
+  - type: web
+    name: ai-arch-llmproxy
+    runtime: docker
+    dockerfilePath: ./llm.Dockerfile
+    rootDir: .
+    region: oregon
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: REDIS_URL
+        value: redis://red-xxx:6379
+      - key: PORT
+        value: "8081"
+
+  - type: web
+    name: ai-arch-blender3d
+    runtime: docker
+    dockerfilePath: ./blender.Dockerfile
+    rootDir: .
+    region: oregon
+    plan: standard
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8082"
+      - key: BLENDER_PATH
+        value: blender
+      - key: OUTPUT_DIR
+        value: /app/output
+      - key: LLM_SERVICE_URL
+        value: https://ai-arch-llmproxy.onrender.com
+      - key: REDIS_URL
+        value: redis://red-xxx:6379
+
+  - type: redis
+    name: architect-redis
+    plan: starter
+    ipAllowList: []
+    maxmemoryPolicy: allkeys-lru

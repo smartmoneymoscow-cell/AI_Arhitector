@@ -1,0 +1,96 @@
+# ═══════════════════════════════════════════════════════════════
+# Dependabot — auto-update dependencies
+# ═══════════════════════════════════════════════════════════════
+version: 2
+updates:
+  # Python (root)
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: "Europe/Moscow"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps"
+
+  # Python (gateway)
+  - package-ecosystem: pip
+    directory: "/gateway"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "gateway"
+
+  # Python (llm-service)
+  - package-ecosystem: pip
+    directory: "/llm-service"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "llm-service"
+
+  # Python (blender-service)
+  - package-ecosystem: pip
+    directory: "/blender-service"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "blender-service"
+
+  # Docker
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: docker
+    directory: "/gateway"
+    schedule:
+      interval: weekly
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: docker
+    directory: "/llm-service"
+    schedule:
+      interval: weekly
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: docker
+    directory: "/blender-service"
+    schedule:
+      interval: weekly
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"

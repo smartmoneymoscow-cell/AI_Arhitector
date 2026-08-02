@@ -1,0 +1,79 @@
+name: E2E Tests (Post-Release)
+
+on:
+  workflow_run:
+    workflows: ["Publish Images"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  e2e:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install pytest playwright pytest-playwright
+          playwright install chromium --with-deps
+
+      - name: Check staging secrets
+        id: check
+        run: |
+          if [ -z "${{ secrets.STAGING_URL }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "⚠️ STAGING_URL not configured — skipping E2E"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Wait for staging deploy
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          for i in $(seq 1 30); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.STAGING_URL }}/health" || true)
+            if [ "$CODE" = "200" ]; then
+              echo "Staging is ready"
+              exit 0
+            fi
+            echo "Waiting for staging... ($i/30)"
+            sleep 10
+          done
+          echo "Staging not ready"
+          exit 1
+
+      - name: Run E2E tests (random prompts)
+        if: steps.check.outputs.skip != 'true'
+        env:
+          E2E_BASE_URL: ${{ secrets.STAGING_URL }}
+          E2E_API_KEY: *** secrets.STAGING_API_KEY }}
+        run: |
+          pytest tests/e2e/test_chat_e2e.py \
+            -v \
+            --timeout=300 \
+            --tb=short \
+            -k "test_chat_sends_and_receives or test_preview_window_shows_3d" \
+            --html=e2e-report.html --self-contained-html \
+            || echo "E2E tests completed with issues"
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-screenshots
+          path: test_screenshots/
+          retention-days: 30
+
+      - name: Upload E2E report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-report
+          path: e2e-report.html

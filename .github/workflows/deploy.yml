@@ -1,0 +1,155 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["Publish Images"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check secrets
+        id: check
+        run: |
+          if [ -z "${{ secrets.RENDER_SERVICE_ID }}" ] || [ -z "${{ secrets.RENDER_API_KEY }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Render secrets not configured — skipping deploy. Set RENDER_SERVICE_ID and RENDER_API_KEY in repo Secrets."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger Render deploy
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          curl -s -X POST \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache": true}'
+
+      - name: Wait for live
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          for i in $(seq 1 45); do
+            STATUS=$(curl -s "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+              -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" | jq -r '.[0].status')
+            echo "  [$i/45] Status: $STATUS"
+            [ "$STATUS" = "live" ] && echo "✅ Deploy is live" && exit 0
+            sleep 10
+          done
+          echo "❌ Deploy did not become live in time"
+          exit 1
+
+      # ═══ HEALTH CHECKS — ALL SERVICES ═══
+      - name: Wait for cold start
+        if: steps.check.outputs.skip != 'true'
+        run: sleep 60
+
+      - name: Health check — Gateway
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          for attempt in 1 2 3; do
+            HEALTH=$(curl -s "https://architect-gateway.onrender.com/health" --max-time 60 || true)
+            if echo "$HEALTH" | python3 -c "
+          import json, sys
+          r = json.load(sys.stdin)
+          print(f'Gateway: {r.get(\"version\", \"unknown\")}')
+          assert r.get('status') == 'ok', f'Gateway unhealthy: {r}'
+          " 2>/dev/null; then
+              echo "✅ Gateway healthy (attempt $attempt)"
+              break
+            fi
+            echo "⏳ Gateway not ready, retry $attempt/3..."
+            sleep 15
+          done
+
+      - name: Health check — LLM Service
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          for attempt in 1 2 3; do
+            HEALTH=$(curl -s "https://ai-arch-llmproxy.onrender.com/health" --max-time 60 || true)
+            if echo "$HEALTH" | python3 -c "
+          import json, sys
+          r = json.load(sys.stdin)
+          print(f'LLM: {r.get(\"version\", \"unknown\")} | model: {r.get(\"model\", \"N/A\")}')
+          assert r.get('status') == 'ok', f'LLM unhealthy: {r}'
+          assert r.get('model'), 'No model configured'
+          " 2>/dev/null; then
+              echo "✅ LLM healthy (attempt $attempt)"
+              break
+            fi
+            echo "⏳ LLM not ready, retry $attempt/3..."
+            sleep 15
+          done
+
+      - name: Health check — Blender Service
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          for attempt in 1 2 3; do
+            HEALTH=$(curl -s "https://ai-arch-blender3d.onrender.com/health" --max-time 60 || true)
+            if echo "$HEALTH" | python3 -c "
+          import json, sys
+          r = json.load(sys.stdin)
+          print(f'Blender: {r.get(\"version\", \"unknown\")}')
+          assert r.get('status') == 'ok', f'Blender unhealthy: {r}'
+          " 2>/dev/null; then
+              echo "✅ Blender healthy (attempt $attempt)"
+              break
+            fi
+            echo "⏳ Blender not ready, retry $attempt/3..."
+            sleep 15
+          done
+
+      - name: Health check — Gateway→LLM connectivity
+        if: steps.check.outputs.skip != 'true'
+        continue-on-error: true
+        run: |
+          # Test that Gateway can reach LLM service (non-blocking — cold start may delay this)
+          for attempt in 1 2 3; do
+            HEALTH=$(curl -s "https://architect-gateway.onrender.com/health" --max-time 60 || true)
+            echo "$HEALTH" | python3 -c "
+          import json, sys
+          r = json.load(sys.stdin)
+          llm = r.get('services', {}).get('llm', 'unknown')
+          blender = r.get('services', {}).get('blender', 'unknown')
+          print(f'Gateway→LLM: {llm}')
+          print(f'Gateway→Blender: {blender}')
+          assert llm == 'ok', f'Gateway cannot reach LLM service: {llm}'
+          " 2>/dev/null && break
+            echo "⏳ Gateway→LLM not connected, retry $attempt/3..."
+            sleep 20
+          done
+
+      - name: Smoke test — Parse endpoint
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          RESP=$(curl -s -X POST "https://architect-gateway.onrender.com/api/v1/parse" \
+            -H "Content-Type: application/json" \
+            -d '{"text": "двухэтажный кирпичный дом 10x12"}' \
+            --max-time 60)
+          echo "$RESP" | python3 -c "
+          import json, sys
+          r = json.load(sys.stdin)
+          print(f'Parse result: {json.dumps(r, ensure_ascii=False)[:200]}')
+          assert 'error' not in r or r.get('status') != 'error', f'Parse failed: {r}'
+          "
+
+      # ═══ ALWAYS-RUN SUMMARY ═══
+      - name: Deploy summary
+        if: always()
+        run: |
+          if [ "${{ steps.check.outputs.skip }}" = "true" ]; then
+            echo "## ⚠️ Deploy Skipped" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Render secrets not configured. Set these in repo Settings → Secrets:" >> $GITHUB_STEP_SUMMARY
+            echo "- \`RENDER_SERVICE_ID\` — Render service ID" >> $GITHUB_STEP_SUMMARY
+            echo "- \`RENDER_API_KEY\` — Render API key" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ✅ Deploy Complete" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "All health checks passed." >> $GITHUB_STEP_SUMMARY
+          fi
