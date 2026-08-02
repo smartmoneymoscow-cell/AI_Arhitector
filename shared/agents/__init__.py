@@ -17,7 +17,8 @@ _LAZY_IMPORTS = {
     "RenderAgent": "shared.agents.render_agent",
     "ExportAgent": "shared.agents.export_agent",
     "QualityAgent": "shared.agents.quality_agent",
-    # Intelligence (8)
+    # Intelligence (9)
+    "DialogAgent": "shared.agents.dialog_agent",
     "ResearchAgent": "shared.agents.research_agent",
     "MarketAgent": "shared.agents.market_agent",
     "ConceptAgent": "shared.agents.concept_agent",
@@ -67,6 +68,7 @@ __all__ = [
     "RenderAgent",
     "ExportAgent",
     "QualityAgent",
+    "DialogAgent",
     "ResearchAgent",
     "MarketAgent",
     "ConceptAgent",
@@ -92,6 +94,7 @@ class _AgentRegistry:
 
     _names = [
         "parser",
+        "dialog",
         "geometry",
         "cad",
         "texture",
@@ -118,6 +121,7 @@ class _AgentRegistry:
 
     _class_map = {
         "parser": "ParserAgent",
+        "dialog": "DialogAgent",
         "geometry": "GeometryAgent",
         "cad": "CADAgent",
         "texture": "TextureAgent",

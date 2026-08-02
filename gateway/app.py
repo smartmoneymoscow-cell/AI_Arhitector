@@ -359,6 +359,7 @@ async def orchestrator_execute(
     export_formats = req.get("export_formats", ["glb"])
     skip_clarification = req.get("skip_clarification", False)
     pipeline_profile = req.get("pipeline_profile", "standard")
+    session_id = req.get("session_id", "")
 
     job_id = uuid.uuid4().hex[:8]
 
@@ -378,6 +379,7 @@ async def orchestrator_execute(
                 export_formats=export_formats,
                 skip_clarification=skip_clarification,
                 pipeline_profile=pipeline_profile,
+                session_id=session_id,
             ),
         )
     except Exception as e:
@@ -392,6 +394,7 @@ async def orchestrator_execute(
     r = result.get("result") or {}
     return {
         "job_id": result_job_id,
+        "session_id": session_id,
         "status": result["status"],
         "gen_type": r.get("gen_type"),
         "quality": quality,
@@ -568,3 +571,47 @@ async def variants_endpoint(
         "variants": variants,
         "base_params": base_params,
     }
+
+
+# ═══════════════════════════════════════════════════════════════
+# SESSION CONTEXT — multi-turn dialog management
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.get("/api/v1/context/{session_id}")
+async def get_context(
+    session_id: str,
+    api_key: str = Depends(get_api_key_required),
+):
+    """Get project context for a session."""
+    from shared.context import get_context_store
+
+    store = get_context_store(redis_url=settings.REDIS_URL)
+    ctx = store.get(session_id)
+    if not ctx:
+        raise HTTPException(404, "Session not found")
+    return ctx.to_dict()
+
+
+@app.get("/api/v1/context")
+async def list_contexts(
+    api_key: str = Depends(get_api_key_required),
+):
+    """List recent sessions."""
+    from shared.context import get_context_store
+
+    store = get_context_store(redis_url=settings.REDIS_URL)
+    return {"sessions": store.list_sessions()}
+
+
+@app.delete("/api/v1/context/{session_id}")
+async def delete_context(
+    session_id: str,
+    api_key: str = Depends(get_api_key_required),
+):
+    """Delete a session context."""
+    from shared.context import get_context_store
+
+    store = get_context_store(redis_url=settings.REDIS_URL)
+    store.delete(session_id)
+    return {"deleted": session_id}

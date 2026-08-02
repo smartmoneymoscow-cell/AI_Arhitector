@@ -27,6 +27,7 @@ PIPELINE_PROFILES = {
     "quick": ["parser", "geometry", "texture", "render", "export"],
     "standard": ["parser", "style", "geometry", "texture", "lighting", "render", "quality", "export"],
     "cad": ["parser", "style", "cad", "geometry", "texture", "lighting", "render", "quality", "compliance", "export"],
+    "interactive": ["dialog", "parser", "style", "geometry", "texture", "lighting", "render", "quality", "export"],
     "full": [
         "parser",
         "research",
@@ -139,6 +140,7 @@ class Orchestrator:
         quality: str = "standard",
         export_formats: list[str] | None = None,
         pipeline_profile: str = "standard",
+        session_id: str = "",
     ) -> dict:
         """
         Full generation cycle with isolated agents.
@@ -171,11 +173,38 @@ class Orchestrator:
         self.jobs[job_id] = job
 
         try:
+            # ═══ Step 0: Dialog (multi-turn context) ═══
+            dialog_enriched_prompt = prompt
+            dialog_merged_params = {}
+            if session_id and "dialog" in agent_sequence:
+                streamer.emit("dialog", "running", progress=2, message="Analyzing conversation context...")
+                dialog_result = self._run_agent(
+                    "dialog",
+                    {"name": "dialog", "agent": "dialog", "params": {
+                        "prompt": prompt,
+                        "session_id": session_id,
+                        "context": {},
+                    }},
+                    timeout=15,
+                )
+                if dialog_result.status == TaskStatus.DONE and dialog_result.data:
+                    dialog_data = dialog_result.data
+                    if dialog_data.get("has_context"):
+                        dialog_enriched_prompt = dialog_data.get("enriched_prompt", prompt)
+                        dialog_merged_params = dialog_data.get("merged_params", {})
+                        if dialog_data.get("is_modification"):
+                            streamer.emit("dialog", "done", progress=5,
+                                          message=f"Modification detected: {dialog_data.get('modification_type', '')} {dialog_data.get('modification_target', '')}")
+                        else:
+                            streamer.emit("dialog", "done", progress=5, message="Context loaded")
+                    else:
+                        streamer.emit("dialog", "done", progress=5, message="No prior context")
+
             # ═══ Step 1: Parse (CRITICAL) ═══
             streamer.emit("parse", "running", progress=3, message="Parsing prompt...")
             parse_result = self._run_agent(
                 "parser",
-                {"name": "parse", "agent": "parser", "params": {"prompt": prompt, "use_llm": True}},
+                {"name": "parse", "agent": "parser", "params": {"prompt": dialog_enriched_prompt, "use_llm": True}},
                 timeout=60,
             )
 
@@ -189,6 +218,15 @@ class Orchestrator:
             params = parsed.get("params", {})
             gen_type = parsed.get("gen_type", "building")
             confidence = parsed.get("confidence", 0.5)
+
+            # Merge dialog modification params
+            if dialog_merged_params:
+                for k, v in dialog_merged_params.items():
+                    if k.startswith("_"):
+                        # Special keys like _rooms_override, _add_room
+                        params[k] = v
+                    elif v and not params.get(k):
+                        params[k] = v
 
             if parse_result.fallback:
                 job["fallback_agents"].append("parser")
