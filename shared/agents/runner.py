@@ -1,8 +1,8 @@
 """
-shared/agents/runner.py — Изолированное выполнение агентов.
+shared/agents/runner.py - Изолированное выполнение агентов.
 
 КАЖДЫЙ агент выполняется в ОТДЕЛЬНОМ subprocess.
-Если агент падает — НЕ роняет pipeline, возвращает fallback.
+Если агент падает - НЕ роняет pipeline, возвращает fallback.
 
 Использование:
     runner = AgentRunner(timeout=120)
@@ -87,7 +87,7 @@ class AgentRunner:
     """
     Запускает агентов в изолированных subprocess.
 
-    Каждый агент — отдельный процесс. Если падает:
+    Каждый агент - отдельный процесс. Если падает:
     - Логирует ошибку
     - Возвращает fallback результат
     - Pipeline продолжает работу
@@ -136,7 +136,7 @@ class AgentRunner:
         "mep_bim": {"model": None, "note": "MEP BIM skipped"},
     }
 
-    # Агенты, которые КРИТИЧНЫ — pipeline не может продолжить без них
+    # Агенты, которые КРИТИЧНЫ - pipeline не может продолжить без них
     CRITICAL_AGENTS = {"parser", "geometry"}
 
     # Agent class paths for import
@@ -171,14 +171,7 @@ class AgentRunner:
     def run(self, agent_name: str, task_params: dict, timeout: int | None = None) -> IsolatedResult:
         """
         Запускает агента в изолированном subprocess.
-
-        Args:
-            agent_name: имя агента (geometry, texture, etc.)
-            task_params: параметры задачи
-            timeout: таймаут в секундах (default: self.default_timeout)
-
-        Returns:
-            IsolatedResult с данными или fallback
+        Fallback: если multiprocessing не работает (Render free tier) — in-process.
         """
         timeout = timeout or self.default_timeout
         agent_class = self.AGENT_CLASSES.get(agent_name)
@@ -187,17 +180,75 @@ class AgentRunner:
             logger.error("Unknown agent: %s", agent_name)
             return self._fallback(agent_name, f"Unknown agent: {agent_name}")
 
+        # Try subprocess first, fallback to in-process if multiprocessing fails
+        try:
+            return self._run_subprocess(agent_name, agent_class, task_params, timeout)
+        except (OSError, PermissionError, RuntimeError) as e:
+            logger.warning("Subprocess failed for %s (%s), running in-process", agent_name, e)
+            return self._run_in_process(agent_name, agent_class, task_params)
+
+    def _run_in_process(self, agent_name: str, agent_class_path: str, task_params: dict) -> IsolatedResult:
+        """Fallback: run agent in current process (no isolation)."""
+        try:
+            import importlib
+            module_path, class_name = agent_class_path.rsplit(".", 1)
+            module = importlib.import_module(module_path)
+            agent_cls = getattr(module, class_name)
+            agent = agent_cls()
+
+            task = Task(
+                name=task_params.get("name", ""),
+                agent=task_params.get("agent", ""),
+                params=task_params.get("params", {}),
+            )
+
+            start = time.time()
+            result = agent.process(task)
+            duration = (time.time() - start) * 1000
+
+            if result.status == TaskStatus.FAILED:
+                if agent_name in self.CRITICAL_AGENTS:
+                    return IsolatedResult(
+                        status=TaskStatus.FAILED,
+                        error=result.error,
+                        duration_ms=duration,
+                        fallback=False,
+                        agent_name=agent_name,
+                    )
+                return self._fallback(agent_name, result.error or "Agent failed")
+
+            return IsolatedResult(
+                status=result.status,
+                data=result.data,
+                error=result.error,
+                duration_ms=duration,
+                fallback=False,
+                agent_name=agent_name,
+            )
+        except Exception as e:
+            logger.error("In-process %s failed: %s", agent_name, e)
+            if agent_name in self.CRITICAL_AGENTS:
+                return IsolatedResult(
+                    status=TaskStatus.FAILED,
+                    error=str(e),
+                    duration_ms=0,
+                    fallback=False,
+                    agent_name=agent_name,
+                )
+            return self._fallback(agent_name, str(e))
+
+    def _run_subprocess(self, agent_name: str, agent_class_path: str, task_params: dict, timeout: int) -> IsolatedResult:
+        """Run agent in isolated subprocess."""
         result_queue = multiprocessing.Queue()
         process = multiprocessing.Process(
             target=_run_agent_in_subprocess,
-            args=(agent_class, task_params, result_queue),
+            args=(agent_class_path, task_params, result_queue),
             daemon=True,
         )
 
         start = time.time()
         process.start()
 
-        # Ждём результат с таймаутом
         try:
             if result_queue.empty():
                 process.join(timeout=timeout)
@@ -249,7 +300,7 @@ class AgentRunner:
         fallback_data = self.FALLBACK_DATA.get(agent_name, {"note": f"Agent {agent_name} skipped"})
 
         if agent_name in self.CRITICAL_AGENTS:
-            logger.error("CRITICAL agent %s failed — pipeline cannot continue: %s", agent_name, error[:200])
+            logger.error("CRITICAL agent %s failed - pipeline cannot continue: %s", agent_name, error[:200])
             return IsolatedResult(
                 status=TaskStatus.FAILED,
                 error=f"Critical agent {agent_name} failed: {error}",
@@ -258,7 +309,7 @@ class AgentRunner:
                 agent_name=agent_name,
             )
 
-        logger.warning("Agent %s failed — using fallback: %s", agent_name, error[:200])
+        logger.warning("Agent %s failed - using fallback: %s", agent_name, error[:200])
         return IsolatedResult(
             status=TaskStatus.DONE,
             data=fallback_data,
