@@ -72,6 +72,33 @@ print(f"\n[2/7] Preparing scene script...")
 ASSETS_DIR = args.assets
 MANIFEST_PATH = os.path.join(ASSETS_DIR, "manifest.json")
 
+# Try loading v9.1.0 shared modules
+try:
+    sys.path.insert(0, "/kaggle/input/architect-shared")
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
+    from shared.pbr_scraper import PBRScraper
+    pbr_scraper = PBRScraper(cache_dir=os.path.join(ASSETS_DIR, "textures"))
+    HAS_PBR_SCRAPER = True
+    print("  v9.1.0 PBRScraper loaded")
+except ImportError:
+    HAS_PBR_SCRAPER = False
+    print("  PBRScraper not available, using local assets")
+
+try:
+    from shared.cad_builder import WallBuilder, WallSpec, WallOpening, BuildingSpec
+    HAS_CAD = True
+    print("  v9.1.0 CAD Builder loaded")
+except ImportError:
+    HAS_CAD = False
+    print("  CAD Builder not available, using bpy geometry")
+
+try:
+    from shared.compliance import ComplianceChecker
+    HAS_COMPLIANCE = True
+    print("  v9.1.0 Compliance Checker loaded")
+except ImportError:
+    HAS_COMPLIANCE = False
+
 # Check for assets
 has_assets = os.path.exists(MANIFEST_PATH)
 has_textures = os.path.exists(os.path.join(ASSETS_DIR, "textures"))
@@ -590,6 +617,26 @@ else:
 # ============================================================
 # Summary
 # ============================================================
+# Compliance check (if available)
+if 'HAS_COMPLIANCE' in dir() and HAS_COMPLIANCE:
+    print(f"\n[7/7] Compliance check...")
+    checker = ComplianceChecker()
+    building_params = {
+        "floors": args.floors,
+        "fH": 2.8,
+        "W": args.width,
+        "L": args.length,
+        "rooms": [],
+    }
+    llm_params = {"building_type": "house", "style": args.style}
+    result = checker.check_building(llm_params, building_params)
+    print(f"  Score: {result.score:.2f}")
+    print(f"  Passed: {result.passed}")
+    for issue in result.issues:
+        print(f"  ❌ {issue.code}: {issue.message}")
+    for warn in result.warnings:
+        print(f"  ⚠️ {warn.code}: {warn.message}")
+
 print(f"\n{'='*60}")
 print("OUTPUT:")
 for f in sorted(os.listdir("/kaggle/working/")):
