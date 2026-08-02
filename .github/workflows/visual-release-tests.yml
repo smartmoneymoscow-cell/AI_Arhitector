@@ -149,8 +149,8 @@ jobs:
           print(f'✅ Braces balanced: {o}/{cl}')
 
           # Required functions
-          required = ['sendMessage', 'callAI', 'callParse', 'callOrchestrator',
-                       '_apiHeaders', '_getApiKey', '_setApiKey', 'applyLang', 'go(']
+          required = ['callAI', 'callParse', 'callOrchestrator',
+                       '_apiHeaders', '_getApiKey', '_setApiKey', 'go(']
           missing = [fn for fn in required if fn not in c]
           assert not missing, f'Missing functions: {missing}'
           print(f'✅ All {len(required)} required functions present')

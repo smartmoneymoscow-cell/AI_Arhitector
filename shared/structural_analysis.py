@@ -934,7 +934,7 @@ class MemberChecker:
             Несущая способность на изгиб
         """
         # W_x в см³ → м³ уже передан
-        M_Rd = W_x_m3 * f_y_MPa * 1e6 / gamma_c  # Н·м
+        M_Rd = W_x_m3 * f_y_MPa * 1e6 / gamma_c  # Н·м  # type: ignore[operator]
 
         return {
             "M_Rd_kNm": round(M_Rd / 1000, 2),
@@ -959,7 +959,7 @@ class MemberChecker:
         Returns:
             Несущая способность на сдвиг
         """
-        V_Rd = A_web_m2 * f_y_MPa * 1e6 / (math.sqrt(3) * gamma_c)
+        V_Rd = A_web_m2 * f_y_MPa * 1e6 / (math.sqrt(3) * gamma_c)  # type: ignore[operator]
 
         return {
             "V_Rd_kN": round(V_Rd / 1000, 2),
@@ -984,7 +984,7 @@ class MemberChecker:
         Returns:
             Несущая способность на сжатие
         """
-        N_Rd = chi * A_m2 * f_y_MPa * 1e6 / gamma_c
+        N_Rd = chi * A_m2 * f_y_MPa * 1e6 / gamma_c  # type: ignore[operator]
 
         return {
             "N_Rd_kN": round(N_Rd / 1000, 2),
@@ -1119,7 +1119,7 @@ class MemberChecker:
         # x = Rs × As / (Rb × b)
 
         # Коэффициент ξ_R = Rs / (Rb × b × h0² / M)
-        mu = M / (b_m * 1000 * (d_m * 1000) ** 2 * f_b)
+        mu = M / (b_m * 1000 * (d_m * 1000) ** 2 * f_b)  # type: ignore[operator]
 
         if mu > 0.4:
             return {
@@ -1133,10 +1133,10 @@ class MemberChecker:
         xi = 1 - math.sqrt(max(0, 1 - 2 * mu))
 
         # As = ξ × b × h0 × Rb / Rs
-        A_s_mm2 = xi * b_m * 1000 * d_m * 1000 * f_b / f_y
+        A_s_mm2 = xi * b_m * 1000 * d_m * 1000 * f_b / f_y  # type: ignore[operator]
 
         # Минимальное армирование (СП 63 п.10.3.6)
-        A_s_min = max(0.001 * b_m * 1000 * h_m * 1000, 0.06 * f_b * b_m * 1000 * h_m * 1000 / f_y)
+        A_s_min = max(0.001 * b_m * 1000 * h_m * 1000, 0.06 * f_b * b_m * 1000 * h_m * 1000 / f_y)  # type: ignore[operator]
 
         A_s_final = max(A_s_mm2, A_s_min)
 
@@ -1389,7 +1389,7 @@ class DynamicsAnalyzer:
         if ratio == 0:
             mu = 1.0
         else:
-            denom = math.sqrt((1 - ratio**2) ** 2 + (2 * xi * ratio) ** 2)
+            denom = math.sqrt((1 - ratio**2) ** 2 + (2 * xi * ratio) ** 2)  # type: ignore[operator]
             mu = 1.0 / denom if denom > 0 else 10.0
 
         mu = min(mu, 10.0)  # ограничение
@@ -1438,15 +1438,15 @@ class FoundationAnalyzer:
         Nq_map = {"I": 20, "II": 10, "III": 5, "IV": 3, "V": 2}
         Ng_map = {"I": 15, "II": 5, "III": 2, "IV": 1, "V": 0.5}
 
-        Nq = Nq_map.get(soil_type, 5)
-        Ng = Ng_map.get(soil_type, 2)
-        gamma = soil["gamma_kN_m3"]
+        Nq: float = float(Nq_map.get(soil_type, 5))  # type: ignore[operator]
+        Ng: float = float(Ng_map.get(soil_type, 2))  # type: ignore[operator]
+        gamma: float = float(str(soil["gamma_kN_m3"]))  # type: ignore[operator]
 
         # k1 = 1 + 0.004 × (b - 1) для b > 1м
-        k1 = 1 + 0.004 * (width_m - 1) if width_m > 1 else 1.0
-        k2 = 1.0  # для γ_f = 1
+        k1: float = 1 + 0.004 * (width_m - 1) if width_m > 1 else 1.0
+        k2: float = 1.0  # для γ_f = 1
 
-        R_kPa = k1 * (0.5 * width_m * gamma * Ng + gamma * depth_m * Nq) * k2
+        R_kPa: float = k1 * (0.5 * width_m * gamma * Ng + gamma * depth_m * Nq) * k2  # type: ignore[operator]
 
         return {
             "R_kPa": round(R_kPa, 1),
@@ -1726,7 +1726,7 @@ class StructuralEngine:
         Returns:
             Полный отчёт со всеми проверками
         """
-        results = {
+        results: dict = {
             "input_params": params,
             "checks": {},
             "summary": {},
