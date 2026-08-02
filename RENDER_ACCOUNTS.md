@@ -1,79 +1,98 @@
-# Render Accounts — Распределение сервисов
+# Render Accounts — Распределение по 5 аккаунтам
 
-> ⚠️ Не заполняй ключи в этом файле — только в `.env` или Render Dashboard.
-> Столбец "Ключ" показывает **какая переменная** нужна, не сам ключ.
+Каждый аккаунт = отдельный Render проект со своими сервисами.
 
 ## Архитектура
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Аккаунт 1  │────▶│  Аккаунт 2  │────▶│  Аккаунт 3  │
-│  Gateway    │     │  LLM Service│     │  Blender #1 │
-│  + Redis    │     │  (парсинг)  │     │  EEVEE 4K   │
-└─────────────┘     └─────────────┘     └─────────────┘
-       │                                        │
-       │              ┌─────────────┐           │
-       ├─────────────▶│  Аккаунт 4  │           │
-       │              │  Blender #2 │◀──────────┘
-       │              │  EEVEE 4K   │
-       │              └─────────────┘
-       │                    │
-       │              ┌─────────────┐
-       └─────────────▶│  Аккаунт 5  │
-                      │  Blender #3 │
-                      │  Tiled 16K  │
-                      └─────────────┘
+Аккаунт 1 (основной)         Аккаунт 2                Аккаунт 3
+┌─────────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+│ Gateway :8080       │      │ Blender #1 :8082│      │ Blender #2 :8082│
+│ ├── FastAPI          │─────▶│ ├── Blender CLI  │      │ ├── Blender CLI  │
+│ ├── Frontend (HTML)  │      │ ├── Xvfb         │      │ ├── Xvfb         │
+│ ├── Оркестратор      │      │ ├── EEVEE 4K     │      │ ├── EEVEE 4K     │
+│ └── Redis :6379      │      │ └── GLB экспорт  │      │ └── GLB экспорт  │
+└─────────────────────┘      └─────────────────┘      └─────────────────┘
+        │                                                     │
+        │         Аккаунт 4                Аккаунт 5          │
+        │        ┌─────────────────┐      ┌─────────────────┐ │
+        │        │ Blender #3 :8082│      │ LLM Service:8081│ │
+        └───────▶│ ├── Blender CLI  │      │ ├── Каскад 7 LLM│◀┘
+                 │ ├── Xvfb         │      │ ├── Redis кеш   │
+                 │ ├── Cycles 16K   │      │ └── OpenRouter  │
+                 │ └── Tiled render │      └─────────────────┘
+                 └─────────────────┘
 ```
 
 ## Таблица аккаунтов
 
-| # | Аккаунт | URL сервисов | Ключи | Что работает | План | Статус |
-|---|---------|-------------|-------|--------------|------|--------|
-| 1 | Gateway + Redis | `https://______.onrender.com` + `redis://red-______:6379` | `ARCH_API_KEYS` | API Gateway, frontend, оркестрация, Redis кеш | starter | ⬜ Не заполнено |
-| 2 | LLM Service | `https://______.onrender.com` | `OPENROUTER_API_KEY` | Парсинг промтов через каскад 7 LLM, Redis кеш | starter | ❌ Не отвечает |
-| 3 | Blender #1 | `https://ai-arch-blender3d.onrender.com` | — | EEVEE 4K рендер, превью, экспорт GLB | standard | ✅ Живой |
-| 4 | Blender #2 | `https://______.onrender.com` | — | EEVEE 4K рендер (параллельный, failover) | starter | ⬜ Не заполнено |
-| 5 | Blender #3 | `https://______.onrender.com` | — | Tiled Cycles 16K рендер (тяжёлый) | starter | ⬜ Не заполнено |
+| # | Аккаунт | URL | Ключи | Что работает на аккаунте | План | Статус |
+|---|---------|-----|-------|--------------------------|------|--------|
+| 1 | Gateway | `https://______.onrender.com` | `ARCH_API_KEYS` | Gateway (FastAPI), Frontend (HTML/JS), Оркестратор, Redis кеш, маршрутизация между Blender инстансами | starter | ⬜ |
+| 2 | Blender #1 | `https://______.onrender.com` | — | Blender CLI + Xvfb, EEVEE 4K рендер, превью, экспорт GLB, материалы PBR | starter | ⬜ |
+| 3 | Blender #2 | `https://______.onrender.com` | — | Blender CLI + Xvfb, EEVEE 4K рендер (параллельный), failover для #2 | starter | ⬜ |
+| 4 | Blender #3 | `https://______.onrender.com` | — | Blender CLI + Xvfb, Cycles 16K tiled рендер (4×3 тайла), тяжёлые рендеры | starter | ⬜ |
+| 5 | LLM Service | `https://______.onrender.com` | `OPENROUTER_API_KEY` | Парсинг промтов (каскад 7 LLM), Redis кеш ответов, определение типа генерации | starter | ⬜ |
 
-## Как заполнить
+## Распределение нагрузки
 
-1. Задеплой сервис на каждом аккаунте
-2. Заполни URL в таблице выше
-3. Пропиши URL в `.env`:
-
-```bash
-# Аккаунт 1 — Gateway
-GATEWAY_URL=https://______.onrender.com
-ARCH_API_KEYS=your-key-here
-
-# Аккаунт 2 — LLM
-LLM_SERVICE_URL=https://______.onrender.com
-OPENROUTER_API_KEY=sk-or-______
-
-# Аккаунт 3 — Blender #1 (основной)
-BLENDER_SERVICE_URL=https://ai-arch-blender3d.onrender.com
-
-# Аккаунт 4 — Blender #2 (параллельный)
-BLENDER_SERVICE_URL_2=https://______.onrender.com
-
-# Аккаунт 5 — Blender #3 (16K tiled)
-BLENDER_SERVICE_URL_3=https://______.onrender.com
-```
-
-## Load Balancing
-
-Gateway автоматически распределяет запросы между Blender инстансами:
-
-```
-Запрос на превью    → Blender #1 или #2 (round-robin)
-Запрос на 4K рендер → Blender #1 или #2 (round-robin)
-Запрос на 16K рендер → Blender #3 (tiled rendering)
-Fallback            → Любой живой инстанс
-```
+| Тип запроса | Куда идёт | Почему |
+|-------------|-----------|--------|
+| Превью (быстрое) | Blender #1 или #2 (round-robin) | EEVEE — быстро, 4K достаточно |
+| Рендер 4K | Blender #1 или #2 (round-robin) | EEVEE 4K, параллельно |
+| Рендер 16K | Blender #3 (только он) | Cycles tiled, нужно много ресурсов |
+| Парсинг промта | LLM Service | 7 моделей в каскаде |
+| Всё остальное | Gateway | API, frontend, оркестрация |
 
 ## Failover
 
-Если инстанс не отвечает (timeout 30s):
-1. Gateway пробует следующий Blender инстанс
-2. Circuit breaker: 5 ошибок → инстанс отключается на 60s
-3. Если все Blender мертвы → EEVEE fallback в браузере
+```
+Blender #1 упал? → Gateway пробует Blender #2
+Blender #2 упал? → Gateway пробует Blender #1
+Все Blender мертвы? → EEVEE fallback в браузере
+LLM Service упал? → Ollama local fallback (если настроен)
+```
+
+## Env переменные (прописать в Аккаунте 1 — Gateway)
+
+```bash
+# Ссылки на другие аккаунты
+LLM_SERVICE_URL=https://______.onrender.com          # Аккаунт 5
+BLENDER_SERVICE_URL=https://______.onrender.com       # Аккаунт 2
+BLENDER_SERVICE_URL_2=https://______.onrender.com     # Аккаунт 3
+BLENDER_SERVICE_URL_3=https://______.onrender.com     # Аккаунт 4
+REDIS_URL=redis://red-______:6379                     # Свой Redis
+ARCH_API_KEYS=your-secret-key
+CORS_ORIGINS=https://smartmoneymoscow-cell.github.io
+```
+
+## Что деплоить на каждом аккаунте
+
+### Аккаунт 1 — Gateway
+```bash
+# Dockerfile: gateway.Dockerfile
+# Port: 8080
+# Env: см. выше
+```
+
+### Аккаунты 2, 3, 4 — Blender
+```bash
+# Dockerfile: blender.Dockerfile
+# Port: 8082
+# Env:
+PORT=8082
+BLENDER_PATH=blender
+OUTPUT_DIR=/app/output
+LLM_SERVICE_URL=https://______.onrender.com  # Аккаунт 5
+REDIS_URL=redis://red-______:6379            # Аккаунт 1
+```
+
+### Аккаунт 5 — LLM Service
+```bash
+# Dockerfile: llm.Dockerfile
+# Port: 8081
+# Env:
+PORT=8081
+OPENROUTER_API_KEY=***
+REDIS_URL=redis://red-______:6379  # Аккаунт 1
+```
