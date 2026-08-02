@@ -245,7 +245,9 @@ def _get_redis():
         import redis
 
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/1")
-        _redis = redis.from_url(redis_url, decode_responses=True, socket_timeout=3, socket_connect_timeout=5, retry_on_timeout=True)
+        _redis = redis.from_url(
+            redis_url, decode_responses=True, socket_timeout=3, socket_connect_timeout=5, retry_on_timeout=True
+        )
         _redis.ping()
         return _redis
     except Exception:

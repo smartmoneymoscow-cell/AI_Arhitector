@@ -191,6 +191,7 @@ class AgentRunner:
         """Fallback: run agent in current process (no isolation)."""
         try:
             import importlib
+
             module_path, class_name = agent_class_path.rsplit(".", 1)
             module = importlib.import_module(module_path)
             agent_cls = getattr(module, class_name)
@@ -237,7 +238,9 @@ class AgentRunner:
                 )
             return self._fallback(agent_name, str(e))
 
-    def _run_subprocess(self, agent_name: str, agent_class_path: str, task_params: dict, timeout: int) -> IsolatedResult:
+    def _run_subprocess(
+        self, agent_name: str, agent_class_path: str, task_params: dict, timeout: int
+    ) -> IsolatedResult:
         """Run agent in isolated subprocess."""
         result_queue = multiprocessing.Queue()
         process = multiprocessing.Process(
