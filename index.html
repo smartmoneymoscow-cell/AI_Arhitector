@@ -440,7 +440,7 @@ function applyParams(text,p){
 }
 
 // ═══════════════════ STATE ════════════════════════════════════
-const ST={view:'ext',hasModel:false,bld:null,ann:true,wire:false,curFloor:0,lod:'exterior'};
+const ST={view:'ext',hasModel:false,bld:null,ann:true,wire:false,curFloor:0,lod:'exterior',winType:'double',winFrame:'pvc',winColor:'#3a3d40',generating:false,_genStart:0};
 
 // ═══════════════════ WEB-IFC PARSER (browser-side IFC) ════════════════════
 let ifcApi = null;
@@ -866,6 +866,27 @@ function checkLOD(){
 // Build a wall as segments AROUND openings (real holes for windows/doors)
 // axis 'x' = wall runs along world X (front/back, normal=Z, fixedCoord=z)
 // axis 'z' = wall runs along world Z (sides, normal=X, fixedCoord=x)
+function addInteriorFurniture(furniture, rW, rL){
+  const fMat=new THREE.MeshStandardMaterial({color:0x8b6914,roughness:.7});
+  const cMat=new THREE.MeshStandardMaterial({color:0x4a4a4a,roughness:.5});
+  const sMat=new THREE.MeshStandardMaterial({color:0xd4c5a9,roughness:.8});
+  furniture.forEach((f,i)=>{
+    const x=(i%2===0?-1:1)*(rW/4);
+    const z=(i<2?-1:1)*(rL/4);
+    if(f==='sofa') bG.add(mkBox(2,.5,1,sMat,x,.25,z));
+    else if(f==='table'||f==='coffee_table') bG.add(mkBox(1,.45,.6,fMat.clone(),x,.225,z));
+    else if(f==='bed') bG.add(mkBox(2,.4,1.5,sMat.clone(),x,.2,z));
+    else if(f==='desk') bG.add(mkBox(1.2,.75,.6,fMat.clone(),x,.375,z));
+    else if(f==='chair') bG.add(mkBox(.45,.45,.45,cMat,x,.225,z));
+    else if(f==='wardrobe') bG.add(mkBox(1.2,2,.6,new THREE.MeshStandardMaterial({color:0x6b4226,roughness:.7}),x,1,z-rL/2+.3));
+    else if(f==='bookshelf') bG.add(mkBox(1,1.8,.3,fMat.clone(),x,.9,z-rL/2+.15));
+    else if(f==='chandelier') bG.add(mkBox(.6,.3,.6,new THREE.MeshStandardMaterial({color:0xffd700,roughness:.3,metalness:.5}),x,2.6,z));
+    else if(f==='bath') bG.add(mkBox(1.8,.5,.8,new THREE.MeshStandardMaterial({color:0xffffff,roughness:.2}),x,.25,z));
+    else if(f==='dresser') bG.add(mkBox(1,.8,.5,fMat.clone(),x,.4,z));
+    else if(f==='lamp') bG.add(mkBox(.15,1.2,.15,new THREE.MeshStandardMaterial({color:0x333333,roughness:.5}),x,.6,z));
+  });
+}
+
 function buildWallSegments(axis,length,fH,thick,fixedCoord,yB,openings,mat){
   const yBreaks=new Set([0,fH]);
   openings.forEach(o=>{yBreaks.add(Math.max(0,o.y0));yBreaks.add(Math.min(fH,o.y1));});
@@ -2155,16 +2176,29 @@ async function _sendInner(){
     addThink(['✅ Стиль: '+ip.style+' | Мебель: '+ip.furniture.join(', '),'🖥 Генерирую интерьер…']);
     const ok = await renderInteriorViaServer(text, ip.style, ip.furniture);
     if(ok) return;
-    // FALLBACK — local interior
-    console.warn('Blender unavailable for interior, local fallback');
+    // FALLBACK — local interior: render room with furniture
+    console.warn('Blender unavailable for interior, rendering local room');
     addThink(['⚠️ Сервер недоступен','🖥 Генерирую интерьер локально…']);
-    const intBld = applyParams(text, {type:'room', object_type:'interior', floors:1, width:5, length:4, roof_type:'flat', facade_material:'plaster'});
-    intBld.isInterior = true;
-    intBld.style = ip.style;
-    intBld.furniture = ip.furniture;
-    addMsg('a', '⚠️ Сервер недоступен — показываю локальное 3D-превью интерьера.');
-    showNotif('Локальный рендер интерьера','warn');
-    setTimeout(()=>startGen(intBld), 300);
+    try {
+      if(!scene) initThree();
+      if(bG){scene.remove(bG);bG=null;}
+      bG=new THREE.Group();
+      const rW=5, rL=4, rH=2.8;
+      const wMat=new THREE.MeshStandardMaterial({color:0xf0ece4,roughness:.9});
+      const fMat=new THREE.MeshStandardMaterial({map:woodTex('#b8864e'),roughness:.7});
+      bG.add(mkBox(rW,.02,rL,fMat,0,.01,0));
+      bG.add(mkBox(rW,.02,rL,new THREE.MeshStandardMaterial({color:0xffffff,roughness:.95}),0,rH,0));
+      bG.add(mkBox(rW,rH,.15,wMat.clone(),0,rH/2,-rL/2));
+      buildWallSegments('x',rW,rH,.15,rL/2,0,[{center:0,width:.9,y0:0,y1:2.1}],wMat.clone());
+      bG.add(mkBox(.15,rH,rL,wMat.clone(),-rW/2,rH/2,0));
+      bG.add(mkBox(.15,rH,rL,wMat.clone(),rW/2,rH/2,0));
+      addInteriorFurniture(ip.furniture, rW, rL);
+      scene.add(bG);
+      camera.position.set(0,2.5,5); camera.lookAt(0,1.2,0);
+      renderer.render(scene,camera);
+      ST.hasModel=true; ST.bld={isInterior:true,W:rW,L:rL,floors:1};
+      addMsg('a','✅ Интерьер: '+ip.style+' ('+ip.furniture.join(', ')+') — локальное 3D-превью');
+    } catch(e) { console.error('Interior fallback:',e); addMsg('a','❌ Интерьер: '+e.message); }
     return;
   }
 
@@ -2250,17 +2284,29 @@ async function _sendInner(){
       addThink(['✅ Комната: '+roomType+' | Стиль: '+style,'🖥 Генерирую интерьер…']);
       const ok = await renderInteriorViaServer(text, style, furniture);
       if(ok) return;
-      // FALLBACK — local interior preview
-      console.warn('Blender unavailable for interior, falling back to local Three.js');
+      // FALLBACK — local interior: render room with furniture
+      console.warn('Blender unavailable for interior, rendering local room');
       addThink(['⚠️ Сервер недоступен','🖥 Генерирую интерьер локально…']);
-      const intParams = parseInteriorParams(text);
-      const intBld = applyParams(text, {type:'room', object_type:'interior', room_type:roomType, style:style, floors:1, width:5, length:4, roof_type:'flat', facade_material:'plaster'});
-      intBld.isInterior = true;
-      intBld.style = style;
-      intBld.furniture = furniture;
-      addMsg('a', '⚠️ Сервер недоступен — показываю локальное 3D-превью интерьера.');
-      showNotif('Локальный рендер интерьера','warn');
-      setTimeout(()=>startGen(intBld), 300);
+      try {
+        if(!scene) initThree();
+        if(bG){scene.remove(bG);bG=null;}
+        bG=new THREE.Group();
+        const rW=5, rL=4, rH=2.8;
+        const wMat=new THREE.MeshStandardMaterial({color:0xf0ece4,roughness:.9});
+        const fMat=new THREE.MeshStandardMaterial({map:woodTex('#b8864e'),roughness:.7});
+        bG.add(mkBox(rW,.02,rL,fMat,0,.01,0));
+        bG.add(mkBox(rW,.02,rL,new THREE.MeshStandardMaterial({color:0xffffff,roughness:.95}),0,rH,0));
+        bG.add(mkBox(rW,rH,.15,wMat.clone(),0,rH/2,-rL/2));
+        buildWallSegments('x',rW,rH,.15,rL/2,0,[{center:0,width:.9,y0:0,y1:2.1}],wMat.clone());
+        bG.add(mkBox(.15,rH,rL,wMat.clone(),-rW/2,rH/2,0));
+        bG.add(mkBox(.15,rH,rL,wMat.clone(),rW/2,rH/2,0));
+        addInteriorFurniture(furniture, rW, rL);
+        scene.add(bG);
+        camera.position.set(0,2.5,5); camera.lookAt(0,1.2,0);
+        renderer.render(scene,camera);
+        ST.hasModel=true; ST.bld={isInterior:true,W:rW,L:rL,floors:1};
+        addMsg('a','✅ Интерьер: '+style+' ('+furniture.join(', ')+') — локальное 3D-превью');
+      } catch(e) { console.error('Interior fallback:',e); addMsg('a','❌ Интерьер: '+e.message); }
       return;
     }
 

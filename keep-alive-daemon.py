@@ -15,7 +15,7 @@ SERVICES = [
     'https://architect-blender.onrender.com/health',
     'https://architect-llm-1s1j.onrender.com/health',
 ]
-INTERVAL = 600  # 10 minutes
+INTERVAL = 180  # 3 minutes
 
 def ping_all():
     ts = time.strftime('%Y-%m-%d %H:%M:%S')
