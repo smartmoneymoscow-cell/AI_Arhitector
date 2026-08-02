@@ -2155,8 +2155,16 @@ async function _sendInner(){
     addThink(['✅ Стиль: '+ip.style+' | Мебель: '+ip.furniture.join(', '),'🖥 Генерирую интерьер…']);
     const ok = await renderInteriorViaServer(text, ip.style, ip.furniture);
     if(ok) return;
-    addMsg('a', '❌ Сервер рендеринга недоступен. Генерация интерьера требует сервер (Blender). Попробуйте позже.');
-    showNotif('Сервер недоступен','warn');
+    // FALLBACK — local interior
+    console.warn('Blender unavailable for interior, local fallback');
+    addThink(['⚠️ Сервер недоступен','🖥 Генерирую интерьер локально…']);
+    const intBld = applyParams(text, {type:'room', object_type:'interior', floors:1, width:5, length:4, roof_type:'flat', facade_material:'plaster'});
+    intBld.isInterior = true;
+    intBld.style = ip.style;
+    intBld.furniture = ip.furniture;
+    addMsg('a', '⚠️ Сервер недоступен — показываю локальное 3D-превью интерьера.');
+    showNotif('Локальный рендер интерьера','warn');
+    setTimeout(()=>startGen(intBld), 300);
     return;
   }
 
@@ -2165,8 +2173,13 @@ async function _sendInner(){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🌳 Планирую ландшафт…']);
     const lOk = await generateWithFallback(text, {object_type: 'landscape'});
     if(lOk) return;
-    addMsg('a', '❌ Сервер рендеринга недоступен. Ландшафтный дизайн требует серверную генерацию. Попробуйте позже.');
-    showNotif('Сервер недоступен','warn');
+    // FALLBACK — local landscape
+    console.warn('Blender unavailable for landscape, local fallback');
+    addThink(['⚠️ Сервер недоступен','🖥 Генерирую ландшафт локально…']);
+    const lBld = applyParams(text, {type:'landscape', object_type:'building', floors:1, width:20, length:20, roof_type:'flat', facade_material:'stone'});
+    addMsg('a', '⚠️ Сервер недоступен — показываю локальное 3D-превью ландшафта.');
+    showNotif('Локальный рендер ландшафта','warn');
+    setTimeout(()=>startGen(lBld), 300);
     return;
   }
 
@@ -2175,8 +2188,13 @@ async function _sendInner(){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🏗 Анализирую конструкцию…']);
     const cOk = await generateWithFallback(text, {object_type: 'building'});
     if(cOk) return;
-    addMsg('a', '❌ Сервер рендеринга недоступен. Генерация конструкций требует сервер. Попробуйте позже.');
-    showNotif('Сервер недоступен','warn');
+    // FALLBACK — local construction
+    console.warn('Blender unavailable for construction, local fallback');
+    addThink(['⚠️ Сервер недоступен','🖥 Генерирую конструкцию локально…']);
+    const cBld = applyParams(text, parsed || {type:'building', floors:2, width:10, length:12, roof_type:'gabled', facade_material:'brick'});
+    addMsg('a', '⚠️ Сервер недоступен — показываю локальное 3D-превью.');
+    showNotif('Локальный рендер конструкции','warn');
+    setTimeout(()=>startGen(cBld), 300);
     return;
   }
 
@@ -2232,8 +2250,17 @@ async function _sendInner(){
       addThink(['✅ Комната: '+roomType+' | Стиль: '+style,'🖥 Генерирую интерьер…']);
       const ok = await renderInteriorViaServer(text, style, furniture);
       if(ok) return;
-      addMsg('a', '❌ Сервер рендеринга недоступен. Генерация интерьера требует сервер. Попробуйте позже.');
-      showNotif('Сервер недоступен','warn');
+      // FALLBACK — local interior preview
+      console.warn('Blender unavailable for interior, falling back to local Three.js');
+      addThink(['⚠️ Сервер недоступен','🖥 Генерирую интерьер локально…']);
+      const intParams = parseInteriorParams(text);
+      const intBld = applyParams(text, {type:'room', object_type:'interior', room_type:roomType, style:style, floors:1, width:5, length:4, roof_type:'flat', facade_material:'plaster'});
+      intBld.isInterior = true;
+      intBld.style = style;
+      intBld.furniture = furniture;
+      addMsg('a', '⚠️ Сервер недоступен — показываю локальное 3D-превью интерьера.');
+      showNotif('Локальный рендер интерьера','warn');
+      setTimeout(()=>startGen(intBld), 300);
       return;
     }
 
@@ -2241,8 +2268,13 @@ async function _sendInner(){
     const serverOk = await generateViaBlenderServer(text);
     if(serverOk) return;
     
-    addMsg('a', '❌ Сервер рендеринга недоступен, LLM-парсинг не удался. Не могу сгенерировать модель. Попробуйте позже.');
-    showNotif('Сервер недоступен','warn');
+    // Step 4: FALLBACK — local Three.js render (always works)
+    console.warn('Blender server unavailable, falling back to local Three.js render');
+    addThink(['⚠️ Сервер рендеринга недоступен','🖥 Генерирую 3D-превью локально (Three.js)…']);
+    const bld = applyParams(text, parsed);
+    addMsg('a', '⚠️ Сервер рендеринга недоступен — показываю локальное 3D-превью. Качество рендера ограничено. Для полного рендера попробуйте позже.');
+    showNotif('Локальный рендер (сервер недоступен)','warn');
+    setTimeout(()=>startGen(bld), 300);
     return;
   }
   // General chat — needs backend
