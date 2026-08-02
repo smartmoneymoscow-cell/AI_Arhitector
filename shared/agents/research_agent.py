@@ -93,11 +93,13 @@ class ResearchAgent(BaseAgent):
                     results = []
                     for item in data.get("RelatedTopics", [])[:max_results]:
                         if isinstance(item, dict) and item.get("Text"):
-                            results.append({
-                                "title": item.get("Text", "")[:100],
-                                "url": item.get("FirstURL", ""),
-                                "snippet": item.get("Text", "")[:200],
-                            })
+                            results.append(
+                                {
+                                    "title": item.get("Text", "")[:100],
+                                    "url": item.get("FirstURL", ""),
+                                    "snippet": item.get("Text", "")[:200],
+                                }
+                            )
                     return results
         except Exception as e:
             logger.warning(f"DuckDuckGo search failed: {e}")
@@ -124,12 +126,14 @@ class ResearchAgent(BaseAgent):
                     data = r.json()
                     results = []
                     for item in data.get("organic_results", [])[:max_results]:
-                        results.append({
-                            "title": item.get("title", ""),
-                            "url": item.get("link", ""),
-                            "snippet": item.get("snippet", ""),
-                            "image": item.get("thumbnail", ""),
-                        })
+                        results.append(
+                            {
+                                "title": item.get("title", ""),
+                                "url": item.get("link", ""),
+                                "snippet": item.get("snippet", ""),
+                                "image": item.get("thumbnail", ""),
+                            }
+                        )
                     return results
         except Exception as e:
             logger.warning(f"SerpAPI search failed: {e}")

@@ -63,6 +63,7 @@ class CADAgent(BaseAgent):
         bpy_script = ""
         try:
             from shared.cad_builder import generate_building_from_params_bpy
+
             bpy_script = generate_building_from_params_bpy(params, building_params)
         except Exception as e:
             logger.warning("bpy script generation failed: %s", e)

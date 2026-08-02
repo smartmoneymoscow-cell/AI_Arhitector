@@ -146,6 +146,7 @@ class TextureAgent(BaseAgent):
             if use_pbr_textures:
                 try:
                     from shared.pbr_scraper import PBRScraper
+
                     res_label = "2K" if resolution >= 2048 else "1K" if resolution >= 1024 else "1K"
                     scraper = PBRScraper()
                     pbr_textures = scraper.get_material(material, resolution=res_label)

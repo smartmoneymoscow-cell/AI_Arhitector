@@ -20,7 +20,6 @@ Usage:
 import logging
 import os
 import uuid
-from typing import Optional
 
 logger = logging.getLogger("archai.trimesh_export")
 
@@ -30,9 +29,9 @@ logger = logging.getLogger("archai.trimesh_export")
 
 TRIMESH_AVAILABLE = False
 try:
+    import numpy as np
     import trimesh
     import trimesh.creation
-    import numpy as np
 
     TRIMESH_AVAILABLE = True
     logger.info("[trimesh_export] trimesh loaded successfully")
@@ -56,9 +55,9 @@ class TrimeshExporter:
         width: float,
         length: float,
         height: float,
-        filepath: Optional[str] = None,
+        filepath: str | None = None,
         color: tuple[float, float, float, float] = (0.8, 0.8, 0.8, 1.0),
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Export a simple box to GLB.
 
@@ -97,8 +96,8 @@ class TrimeshExporter:
     def export_building_to_glb(
         self,
         building_params: dict,
-        filepath: Optional[str] = None,
-    ) -> Optional[str]:
+        filepath: str | None = None,
+    ) -> str | None:
         """
         Export building geometry to GLB from params.
 
@@ -210,11 +209,11 @@ class TrimeshExporter:
     def export_floorplan_to_svg(
         self,
         building_params: dict,
-        filepath: Optional[str] = None,
+        filepath: str | None = None,
         scale: float = 50.0,  # pixels per meter
         show_dimensions: bool = True,
         show_room_names: bool = True,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Export floor plan to SVG with dimensions.
 
@@ -231,13 +230,11 @@ class TrimeshExporter:
 
             svg_parts = [
                 f'<svg xmlns="http://www.w3.org/2000/svg" width="{svg_w}" height="{svg_h}" viewBox="-50 -50 {svg_w} {svg_h}">',
-                '<style>text { font-family: Arial; font-size: 10px; } .dim { font-size: 8px; fill: #666; } .wall { fill: none; stroke: #333; stroke-width: 3; } .room { fill: #f5f5f5; stroke: #999; stroke-width: 1; }</style>',
+                "<style>text { font-family: Arial; font-size: 10px; } .dim { font-size: 8px; fill: #666; } .wall { fill: none; stroke: #333; stroke-width: 3; } .room { fill: #f5f5f5; stroke: #999; stroke-width: 1; }</style>",
             ]
 
             # Outer walls
-            svg_parts.append(
-                f'<rect x="0" y="0" width="{width * scale}" height="{length * scale}" class="wall"/>'
-            )
+            svg_parts.append(f'<rect x="0" y="0" width="{width * scale}" height="{length * scale}" class="wall"/>')
 
             # Rooms
             for room in rooms:
@@ -291,7 +288,7 @@ class TrimeshExporter:
             logger.error("SVG export failed: %s", e)
             return None
 
-    def occt_to_glb(self, occt_shape, filepath: Optional[str] = None) -> Optional[str]:
+    def occt_to_glb(self, occt_shape, filepath: str | None = None) -> str | None:
         """
         Convert OCCT shape to GLB via trimesh tessellation.
 
@@ -302,11 +299,11 @@ class TrimeshExporter:
 
         try:
             # Tessellate OCCT shape
-            from OCP.BRepMesh import BRepMesh_IncrementalMesh
-            from OCP.StlAPI import StlAPI_Writer
-
             # First export to STL (temp), then load with trimesh
             import tempfile
+
+            from OCP.BRepMesh import BRepMesh_IncrementalMesh
+            from OCP.StlAPI import StlAPI_Writer
 
             with tempfile.NamedTemporaryFile(suffix=".stl", delete=False) as tmp:
                 tmp_path = tmp.name

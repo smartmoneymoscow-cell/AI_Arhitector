@@ -181,7 +181,9 @@ def _foundation_bpy(width: float, length: float, foundation: dict) -> str:
         lines.append(f"    for iy in range({ny}):")
         lines.append(f"        px = -{width}/2 + ix * ({width}/({nx}-1))")
         lines.append(f"        py = -{length}/2 + iy * ({length}/({ny}-1))")
-        lines.append(f"        bpy.ops.mesh.primitive_cylinder_add(radius=0.15, depth={depth}, location=(px, py, -{depth}/2))")
+        lines.append(
+            f"        bpy.ops.mesh.primitive_cylinder_add(radius=0.15, depth={depth}, location=(px, py, -{depth}/2))"
+        )
         lines.append(f"        pile = bpy.context.active_object; pile.name = f'Pile_{{ix}}_{{iy}}'")
         lines.append(f"        pile.data.materials.append(mat_concrete)")
         lines.append(f"# Pile cap (ростверк)")
@@ -304,8 +306,16 @@ def _walls_bpy(width: float, length: float, height: float, floors: int, walls: d
 
     # 4 walls
     wall_defs = [
-        (f"(0, -{length}/2 - {thickness}/2, {total_h}/2)", f"({width}/2 + {thickness}, {thickness}/2, {total_h}/2)", "Front"),
-        (f"(0, {length}/2 + {thickness}/2, {total_h}/2)", f"({width}/2 + {thickness}, {thickness}/2, {total_h}/2)", "Back"),
+        (
+            f"(0, -{length}/2 - {thickness}/2, {total_h}/2)",
+            f"({width}/2 + {thickness}, {thickness}/2, {total_h}/2)",
+            "Front",
+        ),
+        (
+            f"(0, {length}/2 + {thickness}/2, {total_h}/2)",
+            f"({width}/2 + {thickness}, {thickness}/2, {total_h}/2)",
+            "Back",
+        ),
         (f"(-{width}/2 - {thickness}/2, 0, {total_h}/2)", f"({thickness}/2, {length}/2, {total_h}/2)", "Left"),
         (f"({width}/2 + {thickness}/2, 0, {total_h}/2)", f"({thickness}/2, {length}/2, {total_h}/2)", "Right"),
     ]
@@ -344,7 +354,9 @@ def _roof_structure_bpy(width: float, length: float, height: float, floors: int,
     if "двускатн" in roof_type.lower() or "gable" in roof_type.lower():
         # Ridge beam
         lines.append(f"# Ridge beam")
-        lines.append(f"bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, {z_base} + {rafter_len} * math.sin(math.radians({slope}))/2))")
+        lines.append(
+            f"bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, {z_base} + {rafter_len} * math.sin(math.radians({slope}))/2))"
+        )
         lines.append(f"ridge = bpy.context.active_object; ridge.name = 'Ridge_Beam'")
         lines.append(f"ridge.scale = (0.05, {length}/2, 0.05)")
         lines.append(f"bpy.ops.object.transform_apply(scale=True)")
@@ -436,7 +448,9 @@ def _rebar_bpy(width: float, length: float, foundation: dict) -> str:
         lines.append(f"# Longitudinal rebar in strip foundation")
         lines.append(f"for dy in [-{length}/2, {length}/2]:")
         lines.append(f"    for iz in range(3):  # 3 layers")
-        lines.append(f"        bpy.ops.mesh.primitive_cylinder_add(radius=rebar_r, depth={width}, location=(0, dy, -{depth} + 0.1 + iz * 0.15))")
+        lines.append(
+            f"        bpy.ops.mesh.primitive_cylinder_add(radius=rebar_r, depth={width}, location=(0, dy, -{depth} + 0.1 + iz * 0.15))"
+        )
         lines.append(f"        rb = bpy.context.active_object; rb.name = f'Rebar_H_{{iz}}'")
         lines.append(f"        rb.rotation_euler[1] = math.radians(90)")
         lines.append(f"        rb.data.materials.append(mat_rebar)")

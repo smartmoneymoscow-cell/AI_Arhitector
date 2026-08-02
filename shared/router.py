@@ -218,7 +218,7 @@ def route_generation(prompt: str, llm_params: dict | None = None) -> GenerationP
 
 def _detect_type(prompt: str, params: dict) -> str:
     """Определяет тип генерации из промта и параметров.
-    
+
     Приоритет:
     1. Explicit LLM object_type (if not default 'building')
     2. Ключевые слова в промте
@@ -227,37 +227,48 @@ def _detect_type(prompt: str, params: dict) -> str:
     """
     t = prompt.lower()
     obj_type = (params.get("object_type") or "").strip().lower()
-    
+
     # Explicit LLM types (not building)
     if obj_type in ("interior", "room"):
         return "interior"
     if obj_type == "landscape":
         return "landscape"
-    
+
     # Keyword-based detection (before defaulting to building)
     # Landscape keywords
-    landscape_kw = ["ландшафт", "ландшафтн", "сад", "двор", "участок", "дорожк", "клумб", "газон", "пруд", "бассейн во двор"]
+    landscape_kw = [
+        "ландшафт",
+        "ландшафтн",
+        "сад",
+        "двор",
+        "участок",
+        "дорожк",
+        "клумб",
+        "газон",
+        "пруд",
+        "бассейн во двор",
+    ]
     if any(kw in t for kw in landscape_kw):
         building_in_landscape = ["постро", "создай дом", "построй здание"]
         if not any(kw in t for kw in building_in_landscape):
             return "landscape"
-    
+
     # Interior keywords
     interior_strong = ["ванн", "кухн", "спальн", "детск", "гостин", "интерьер", "дизайн комнат"]
     if any(kw in t for kw in interior_strong):
         building_strong = ["постро", "создай дом", "возвед", "строительств"]
         if not any(kw in t for kw in building_strong):
             return "interior"
-    
+
     # LLM object_type = 'building' or default
     if obj_type == "building" or not obj_type:
         return "building"
-    
+
     # Fallback: interior keywords from list
     for kw in INTERIOR_KEYWORDS:
         if kw in t:
             return "interior"
-    
+
     return "building"
 
 

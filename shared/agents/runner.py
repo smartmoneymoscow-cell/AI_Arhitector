@@ -96,7 +96,13 @@ class AgentRunner:
     # Fallback данные для каждого типа агента
     FALLBACK_DATA = {
         "cad": {"step_path": None, "stl_path": None, "bpy_script": "", "note": "CAD agent skipped"},
-        "dialog": {"enriched_prompt": "", "is_modification": False, "merged_params": {}, "has_context": False, "note": "Dialog skipped"},
+        "dialog": {
+            "enriched_prompt": "",
+            "is_modification": False,
+            "merged_params": {},
+            "has_context": False,
+            "note": "Dialog skipped",
+        },
         "parser": {
             "params": {
                 "object_type": "building",

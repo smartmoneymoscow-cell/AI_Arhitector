@@ -51,23 +51,41 @@ class ComplianceResult:
     checks_run: list[str] = field(default_factory=list)
 
     def add_error(self, code: str, message: str, fix: str = "", standard: str = "", category: str = ""):
-        issue = ComplianceIssue(code=code, severity="error", message=message, fix=fix, standard=standard, category=category)
+        issue = ComplianceIssue(
+            code=code, severity="error", message=message, fix=fix, standard=standard, category=category
+        )
         self.issues.append(issue)
         self.passed = False
 
     def add_warning(self, code: str, message: str, fix: str = "", standard: str = "", category: str = ""):
-        issue = ComplianceIssue(code=code, severity="warning", message=message, fix=fix, standard=standard, category=category)
+        issue = ComplianceIssue(
+            code=code, severity="warning", message=message, fix=fix, standard=standard, category=category
+        )
         self.warnings.append(issue)
 
     def to_dict(self) -> dict:
         return {
             "passed": self.passed,
             "issues": [
-                {"code": i.code, "severity": i.severity, "message": i.message, "fix": i.fix, "standard": i.standard, "category": i.category}
+                {
+                    "code": i.code,
+                    "severity": i.severity,
+                    "message": i.message,
+                    "fix": i.fix,
+                    "standard": i.standard,
+                    "category": i.category,
+                }
                 for i in self.issues
             ],
             "warnings": [
-                {"code": w.code, "severity": w.severity, "message": w.message, "fix": w.fix, "standard": w.standard, "category": w.category}
+                {
+                    "code": w.code,
+                    "severity": w.severity,
+                    "message": w.message,
+                    "fix": w.fix,
+                    "standard": w.standard,
+                    "category": w.category,
+                }
                 for w in self.warnings
             ],
             "score": self.score,
@@ -297,7 +315,7 @@ class ComplianceChecker:
                 if area > 20:
                     result.add_warning(
                         "NATURAL_LIGHT",
-                        f"Комната '{name}' ({area}м²) — убедитесь что площадь остекления ≥ {area/8:.1f}м² (1/8 площади пола)",
+                        f"Комната '{name}' ({area}м²) — убедитесь что площадь остекления ≥ {area / 8:.1f}м² (1/8 площади пола)",
                         fix="Добавить окна или увеличить площадь остекления",
                         standard="СП 54.13330.2016 п.6.2",
                         category="layout",
@@ -354,7 +372,7 @@ class ComplianceChecker:
         # We don't have exact window data, so informational
         result.add_warning(
             "ENERGY_WINDOW",
-            f"Площадь стен ≈{wall_area:.0f}м² — площадь окон не должна превышать 40% ({wall_area*0.4:.0f}м²)",
+            f"Площадь стен ≈{wall_area:.0f}м² — площадь окон не должна превышать 40% ({wall_area * 0.4:.0f}м²)",
             fix="Проверить соотношение площади окон и стен",
             standard="СП 50.13330.2012",
             category="energy",

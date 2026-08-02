@@ -25,21 +25,21 @@ class QualityAgent(BaseAgent):
     # СТРОГИЕ минимальные разрешения для каждого уровня
     MIN_RESOLUTIONS = {
         "preview": (1280, 720),
-        "standard": (3840, 2160),      # 4K
-        "high": (7680, 4320),           # 8K
-        "ultra": (15360, 8640),         # 16K
-        "16k": (15360, 8640),           # 16K
-        "16k_force": (15360, 8640),     # 16K forced
+        "standard": (3840, 2160),  # 4K
+        "high": (7680, 4320),  # 8K
+        "ultra": (15360, 8640),  # 16K
+        "16k": (15360, 8640),  # 16K
+        "16k_force": (15360, 8640),  # 16K forced
     }
 
     # Minimum file sizes for quality levels (bytes)
     MIN_FILE_SIZES = {
-        "preview": 50_000,        # 50 KB
-        "standard": 500_000,      # 500 KB
-        "high": 2_000_000,        # 2 MB
-        "ultra": 8_000_000,       # 8 MB
-        "16k": 8_000_000,         # 8 MB
-        "16k_force": 8_000_000,   # 8 MB
+        "preview": 50_000,  # 50 KB
+        "standard": 500_000,  # 500 KB
+        "high": 2_000_000,  # 2 MB
+        "ultra": 8_000_000,  # 8 MB
+        "16k": 8_000_000,  # 8 MB
+        "16k_force": 8_000_000,  # 8 MB
     }
 
     def process(self, task: Task) -> TaskResult:
@@ -176,7 +176,7 @@ class QualityAgent(BaseAgent):
     def _check_visual_bugs(self, image_path: str, prompt: str, gen_type: str) -> dict:
         """AI-анализ визуальных багов (арматура, балки, артефакты)."""
         try:
-            from shared.preview import analyze_render, detect_visual_bugs
+            from shared.preview import detect_visual_bugs
 
             bugs = detect_visual_bugs(image_path)
             return {
@@ -247,7 +247,10 @@ class QualityAgent(BaseAgent):
             bugs = result.get("bugs", [])
             for bug in bugs:
                 bug_lower = str(bug).lower()
-                if any(kw in bug_lower for kw in ["rebar", "арматур", "balcony", "балк", "protruding", "торчит", "стick", "artifact"]):
+                if any(
+                    kw in bug_lower
+                    for kw in ["rebar", "арматур", "balcony", "балк", "protruding", "торчит", "стick", "artifact"]
+                ):
                     anomalies.append(str(bug))
 
             return {

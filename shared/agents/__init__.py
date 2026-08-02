@@ -37,8 +37,6 @@ _LAZY_IMPORTS = {
     # New (v7.1)
     "ELAgent": "shared.agents.el_agent",
     "MEPBIMAgent": "shared.agents.mep_bim_agent",
-    # New (v9.1) — CAD agent
-    "CADAgent": "shared.agents.cad_agent",
     # Orchestrator
     "Orchestrator": "shared.agents.orchestrator",
 }

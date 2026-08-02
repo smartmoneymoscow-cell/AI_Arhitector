@@ -21,7 +21,6 @@ Usage:
 
 import logging
 import os
-from typing import Optional
 
 logger = logging.getLogger("archai.pbr_scraper")
 
@@ -286,7 +285,7 @@ links.new(disp_node.outputs["Displacement"], output.inputs["Displacement"])
 
     # ── Internal methods ──
 
-    def _check_disk_cache(self, material_dir: str, resolution: str) -> Optional[dict]:
+    def _check_disk_cache(self, material_dir: str, resolution: str) -> dict | None:
         """Check if textures already downloaded."""
         result = {
             "albedo": None,
@@ -306,6 +305,7 @@ links.new(disp_node.outputs["Displacement"], output.inputs["Displacement"])
                 for ext in ["jpg", "png", "jpeg"]:
                     pattern = os.path.join(material_dir, f"*{alias}*.{ext}")
                     import glob
+
                     matches = glob.glob(pattern)
                     if matches:
                         result[channel] = matches[0]
@@ -318,7 +318,7 @@ links.new(disp_node.outputs["Displacement"], output.inputs["Displacement"])
 
         return None
 
-    def _try_ambientcg(self, search_term: str, resolution: str, output_dir: str) -> Optional[dict]:
+    def _try_ambientcg(self, search_term: str, resolution: str, output_dir: str) -> dict | None:
         """Try downloading from ambientCG API."""
         try:
             import httpx
@@ -419,7 +419,7 @@ links.new(disp_node.outputs["Displacement"], output.inputs["Displacement"])
             logger.warning("ambientCG scraping failed: %s", e)
             return None
 
-    def _try_polyhaven(self, search_term: str, resolution: str, output_dir: str) -> Optional[dict]:
+    def _try_polyhaven(self, search_term: str, resolution: str, output_dir: str) -> dict | None:
         """Try downloading from Poly Haven API."""
         try:
             import httpx
@@ -520,7 +520,7 @@ class HDRIScraper:
         self.cache_dir = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
 
-    def get_hdri(self, preset: str = "day", resolution: str = "2k") -> Optional[str]:
+    def get_hdri(self, preset: str = "day", resolution: str = "2k") -> str | None:
         """
         Get HDRI file path for a preset.
 

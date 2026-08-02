@@ -327,6 +327,7 @@ class LandscapeAgent(BaseAgent):
     def _generate_bpy_script(self, trees, shrubs, pathways, water_features, params) -> str:
         """Генерация bpy-скрипта для Blender."""
         import re as _re
+
         def _safe_name(s: str) -> str:
             """Sanitize name for safe use in bpy script string literals."""
             return _re.sub(r"[^a-zA-Z0-9_]", "_", str(s))
@@ -346,11 +347,11 @@ class LandscapeAgent(BaseAgent):
 
         # Деревья как низкополигональные объекты
         for i, tree in enumerate(trees[:20]):  # ограничим 20 деревьями
-            safe_name = _safe_name(tree.get('name', 'tree'))
-            spread = float(tree.get('spread', 2))
-            height = float(tree.get('height', 3))
-            x = float(tree.get('x', 0))
-            y = float(tree.get('y', 0))
+            safe_name = _safe_name(tree.get("name", "tree"))
+            spread = float(tree.get("spread", 2))
+            height = float(tree.get("height", 3))
+            x = float(tree.get("x", 0))
+            y = float(tree.get("y", 0))
             lines.append(f"# Tree: {safe_name}")
             lines.append(
                 f"bpy.ops.mesh.primitive_cone_add(radius1={spread / 2}, depth={height}, location=({x - 15}, {y - 15}, {height / 2}))"

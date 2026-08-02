@@ -55,9 +55,9 @@ class DialogAgent(BaseAgent):
 
             # Load context
             from shared.context import (
-                get_context_store,
-                enrich_prompt_with_context,
                 detect_modification_intent,
+                enrich_prompt_with_context,
+                get_context_store,
             )
 
             store = get_context_store()
@@ -182,12 +182,19 @@ class DialogAgent(BaseAgent):
         elif target == "style":
             # Extract style from prompt
             style_map = {
-                "модерн": "modern", "современн": "modern",
-                "классическ": "classic", "классик": "classic",
-                "минимализм": "minimalist", "минималист": "minimalist",
-                "лофт": "loft", "хайтек": "hitech", "hi-tech": "hitech",
-                "скандинавск": "scandi", "прованс": "provence",
-                "барокко": "baroque", "японск": "japanese",
+                "модерн": "modern",
+                "современн": "modern",
+                "классическ": "classic",
+                "классик": "classic",
+                "минимализм": "minimalist",
+                "минималист": "minimalist",
+                "лофт": "loft",
+                "хайтек": "hitech",
+                "hi-tech": "hitech",
+                "скандинавск": "scandi",
+                "прованс": "provence",
+                "барокко": "baroque",
+                "японск": "japanese",
             }
             for kw, style in style_map.items():
                 if kw in prompt_lower:
@@ -196,10 +203,15 @@ class DialogAgent(BaseAgent):
 
         elif target == "material":
             mat_map = {
-                "кирпич": "brick", "дерев": "wood", "деревянн": "wood",
-                "бетон": "concrete", "стекл": "glass",
-                "штукатурк": "plaster", "камен": "stone",
-                "металл": "metal", "пеноблок": "foam_block",
+                "кирпич": "brick",
+                "дерев": "wood",
+                "деревянн": "wood",
+                "бетон": "concrete",
+                "стекл": "glass",
+                "штукатурк": "plaster",
+                "камен": "stone",
+                "металл": "metal",
+                "пеноблок": "foam_block",
             }
             for kw, mat in mat_map.items():
                 if kw in prompt_lower:

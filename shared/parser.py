@@ -299,7 +299,7 @@ class AllModelsFailedError(Exception):
 
 def _validate_and_fix(result: dict | None, text: str) -> dict | None:
     """Level 1+2: Pydantic validation + auto-retry with fix prompt."""
-    from shared.llm_schemas import ParsedParams, build_fix_prompt, validate_llm_response
+    from shared.llm_schemas import build_fix_prompt, validate_llm_response
 
     parsed, errors = validate_llm_response(result)
     if parsed:
@@ -558,19 +558,21 @@ async def parse_prompt_async(text: str) -> dict:
 # ═══════════════════════════════════════════════════════════════
 
 import threading as _threading
+
 _cost_lock = _threading.Lock()
 _cost_stats: dict[str, dict] = {}  # {model: {calls, tokens_in, tokens_out, cost_usd}}
 
 # Approximate costs per 1M tokens (input/output) — update as needed
 _MODEL_COSTS = {
-    "google/gemini-2.5-pro":         {"input": 1.25, "output": 10.0},
-    "anthropic/claude-sonnet-4":     {"input": 3.0,  "output": 15.0},
-    "google/gemini-2.5-flash":       {"input": 0.075, "output": 0.3},
-    "openai/gpt-4o-mini":           {"input": 0.15, "output": 0.6},
+    "google/gemini-2.5-pro": {"input": 1.25, "output": 10.0},
+    "anthropic/claude-sonnet-4": {"input": 3.0, "output": 15.0},
+    "google/gemini-2.5-flash": {"input": 0.075, "output": 0.3},
+    "openai/gpt-4o-mini": {"input": 0.15, "output": 0.6},
     "meta-llama/llama-4-maverick:free": {"input": 0, "output": 0},
-    "qwen/qwen3-235b-a22b:free":    {"input": 0, "output": 0},
+    "qwen/qwen3-235b-a22b:free": {"input": 0, "output": 0},
     "deepseek/deepseek-chat-v3-0324:free": {"input": 0, "output": 0},
 }
+
 
 def _track_cost(model: str, tokens_in: int, tokens_out: int) -> None:
     """Track cost of an LLM call."""
@@ -582,6 +584,7 @@ def _track_cost(model: str, tokens_in: int, tokens_out: int) -> None:
         stats["tokens_in"] += tokens_in
         stats["tokens_out"] += tokens_out
         stats["cost_usd"] = round(stats["cost_usd"] + cost, 6)
+
 
 def get_cost_stats() -> dict:
     """Return cost tracking statistics."""

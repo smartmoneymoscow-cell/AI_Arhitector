@@ -23,7 +23,6 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger("archai.context")
 
@@ -38,9 +37,9 @@ class ConversationTurn:
     parsed_params: dict = field(default_factory=dict)
     gen_type: str = ""
     result: dict = field(default_factory=dict)
-    model_url: Optional[str] = None
-    ifc_url: Optional[str] = None
-    render_url: Optional[str] = None
+    model_url: str | None = None
+    ifc_url: str | None = None
+    render_url: str | None = None
     confidence: float = 0.0
     duration_ms: float = 0.0
 
@@ -76,9 +75,9 @@ class ProjectContext:
     current_params: dict = field(default_factory=dict)
     current_building_params: dict = field(default_factory=dict)
     current_gen_type: str = ""
-    current_model_url: Optional[str] = None
-    current_ifc_url: Optional[str] = None
-    current_render_url: Optional[str] = None
+    current_model_url: str | None = None
+    current_ifc_url: str | None = None
+    current_render_url: str | None = None
     current_compliance: dict = field(default_factory=dict)
 
     # Accumulated modifications
@@ -89,7 +88,7 @@ class ProjectContext:
         return len(self.turns)
 
     @property
-    def last_turn(self) -> Optional[ConversationTurn]:
+    def last_turn(self) -> ConversationTurn | None:
         return self.turns[-1] if self.turns else None
 
     def add_turn(
@@ -229,7 +228,7 @@ class ContextStore:
         self._memory[ctx.session_id] = ctx
         return ctx
 
-    def get(self, session_id: str) -> Optional[ProjectContext]:
+    def get(self, session_id: str) -> ProjectContext | None:
         """Get context by session_id."""
         # Memory
         if session_id in self._memory:
@@ -273,13 +272,15 @@ class ContextStore:
         """List recent sessions."""
         sessions = []
         for ctx in sorted(self._memory.values(), key=lambda c: c.updated_at, reverse=True)[:limit]:
-            sessions.append({
-                "session_id": ctx.session_id,
-                "turn_count": ctx.turn_count,
-                "updated_at": ctx.updated_at,
-                "current_gen_type": ctx.current_gen_type,
-                "last_prompt": ctx.last_turn.user_prompt[:100] if ctx.last_turn else "",
-            })
+            sessions.append(
+                {
+                    "session_id": ctx.session_id,
+                    "turn_count": ctx.turn_count,
+                    "updated_at": ctx.updated_at,
+                    "current_gen_type": ctx.current_gen_type,
+                    "last_prompt": ctx.last_turn.user_prompt[:100] if ctx.last_turn else "",
+                }
+            )
         return sessions
 
     def _deserialize(self, data: dict) -> ProjectContext:
@@ -340,7 +341,7 @@ def enrich_prompt_with_context(prompt: str, ctx: ProjectContext) -> str:
 
 Новый запрос пользователя: {prompt}
 
-Учти контекст проекта при парсинге. Если пользователь говорит "добавь балкон" — 
+Учти контекст проекта при парсинге. Если пользователь говорит "добавь балкон" —
 это означает добавление к текущему зданию, а не создание нового.
 Если "измени стиль" — модифицируй текущий стиль, сохранив остальные параметры.
 """

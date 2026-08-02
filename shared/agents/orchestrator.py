@@ -180,11 +180,15 @@ class Orchestrator:
                 streamer.emit("dialog", "running", progress=2, message="Analyzing conversation context...")
                 dialog_result = self._run_agent(
                     "dialog",
-                    {"name": "dialog", "agent": "dialog", "params": {
-                        "prompt": prompt,
-                        "session_id": session_id,
-                        "context": {},
-                    }},
+                    {
+                        "name": "dialog",
+                        "agent": "dialog",
+                        "params": {
+                            "prompt": prompt,
+                            "session_id": session_id,
+                            "context": {},
+                        },
+                    },
                     timeout=15,
                 )
                 if dialog_result.status == TaskStatus.DONE and dialog_result.data:
@@ -193,8 +197,12 @@ class Orchestrator:
                         dialog_enriched_prompt = dialog_data.get("enriched_prompt", prompt)
                         dialog_merged_params = dialog_data.get("merged_params", {})
                         if dialog_data.get("is_modification"):
-                            streamer.emit("dialog", "done", progress=5,
-                                          message=f"Modification detected: {dialog_data.get('modification_type', '')} {dialog_data.get('modification_target', '')}")
+                            streamer.emit(
+                                "dialog",
+                                "done",
+                                progress=5,
+                                message=f"Modification detected: {dialog_data.get('modification_type', '')} {dialog_data.get('modification_target', '')}",
+                            )
                         else:
                             streamer.emit("dialog", "done", progress=5, message="Context loaded")
                     else:
@@ -289,8 +297,10 @@ class Orchestrator:
             # Run pre-agents in PARALLEL (they are independent)
             if pre_agents:
                 import concurrent.futures
-                streamer.emit("pre_pipeline", "running", progress=15,
-                              message=f"Running {len(pre_agents)} agents in parallel...")
+
+                streamer.emit(
+                    "pre_pipeline", "running", progress=15, message=f"Running {len(pre_agents)} agents in parallel..."
+                )
 
                 def _run_pre_agent(agent_name):
                     agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
@@ -313,8 +323,12 @@ class Orchestrator:
                             job["fallback_agents"].append(agent_name)
                             logger.warning("Pre-agent %s skipped: %s", agent_name, result.error)
 
-                streamer.emit("pre_pipeline", "done", progress=30,
-                              message=f"{len(pre_pipeline_results)}/{len(pre_agents)} agents complete")
+                streamer.emit(
+                    "pre_pipeline",
+                    "done",
+                    progress=30,
+                    message=f"{len(pre_pipeline_results)}/{len(pre_agents)} agents complete",
+                )
 
             # ═══ Step 3+4: Geometry + Texture (PARALLEL, geometry CRITICAL) ═══
             streamer.emit("geometry", "running", progress=35, message="Generating 3D geometry...")
@@ -394,8 +408,10 @@ class Orchestrator:
 
             if mid_agents:
                 import concurrent.futures
-                streamer.emit("mid_pipeline", "running", progress=55,
-                              message=f"Running {len(mid_agents)} agents in parallel...")
+
+                streamer.emit(
+                    "mid_pipeline", "running", progress=55, message=f"Running {len(mid_agents)} agents in parallel..."
+                )
 
                 def _run_mid_agent(agent_name):
                     agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
@@ -417,8 +433,9 @@ class Orchestrator:
                         else:
                             job["fallback_agents"].append(agent_name)
 
-                streamer.emit("mid_pipeline", "done", progress=65,
-                              message=f"{len(mid_results)}/{len(mid_agents)} agents complete")
+                streamer.emit(
+                    "mid_pipeline", "done", progress=65, message=f"{len(mid_results)}/{len(mid_agents)} agents complete"
+                )
 
             # ═══ Render (non-critical, uses Blender service) ═══
             streamer.emit("render", "running", progress=70, message="Rendering...")
@@ -472,11 +489,13 @@ class Orchestrator:
                 if res_check and not res_check.get("passed", True):
                     logger.warning(
                         "Quality gate: 16K requested but got %s. Retrying with higher settings.",
-                        res_check.get("actual", "unknown")
+                        res_check.get("actual", "unknown"),
                     )
                     streamer.emit(
-                        "quality", "warning", progress=87,
-                        message=f"Quality below 16K ({res_check.get('actual', '?')}), retrying..."
+                        "quality",
+                        "warning",
+                        progress=87,
+                        message=f"Quality below 16K ({res_check.get('actual', '?')}), retrying...",
                     )
                     # Retry render with forced 16K settings
                     render_result_retry = self._run_agent(
@@ -541,10 +560,10 @@ class Orchestrator:
             drawings = {}
             try:
                 from shared.agents.drawings_svg import (
-                    generate_floor_plan_svg,
-                    generate_section_svg,
                     generate_elevation_svg,
+                    generate_floor_plan_svg,
                     generate_mep_diagram_svg,
+                    generate_section_svg,
                 )
 
                 drawings["floor_plan"] = generate_floor_plan_svg(params, building_params.get("rooms", []))

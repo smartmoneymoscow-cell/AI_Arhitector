@@ -55,28 +55,28 @@ def _mock_llm_response(raw_params: dict):
 # Параметры для анти-галлюцинационной матрицы
 HALLUCINATION_MATRIX = [
     ("сделай дизайн коттеджа", "building", "cottage", None, []),
-    ("сделай дизайн интерьера детской", "room", "children", None, []),
-    ("красивую спальню в стиле хайтек", "room", "bedroom", "hitech", []),
+    ("сделай дизайн интерьера детской", "interior", "children", None, []),
+    ("красивую спальню в стиле хайтек", "interior", "bedroom", "hitech", []),
     ("интерьерный дизайн квартиры на 64 кв метра", "interior", "apartment", None, []),
     ("офис 5 этажей стекло плоская кровля 20×24", "building", "office", None, []),
     ("двухэтажный кирпичный дом 10×12 с балконом", "building", "house", None, ["balcony"]),
     ("деревянный коттедж 2 этажа терраса гараж 12×15", "building", "cottage", None, ["terrace", "garage"]),
     ("построй что-нибудь красивое", "building", "house", None, []),
-    ("кухня в стиле лофт 4×5", "room", "kitchen", "loft", []),
+    ("кухня в стиле лофт 4×5", "interior", "kitchen", "loft", []),
     ("современный таунхаус 3 этажа минимализм", "building", "townhouse", "minimalist", []),
 ]
 
 # Мок LLM ответы для каждого промта из матрицы
 MOCK_LLM_RESPONSES = {
     "сделай дизайн коттеджа": {"object_type": "building", "building_type": "cottage", "floors": 2, "width_m": 10, "length_m": 12, "style": "modern", "material": "plaster", "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.7},
-    "сделай дизайн интерьера детской": {"object_type": "room", "room_type": "children", "floors": 1, "width_m": 4, "length_m": 5, "style": "modern", "material": "plaster", "roof_type": "flat", "features": [], "furniture": ["bed", "desk", "bookshelf"], "confidence": 0.9},
-    "красивую спальню в стиле хайтек": {"object_type": "room", "room_type": "bedroom", "floors": 1, "width_m": 5, "length_m": 6, "style": "hitech", "material": "plaster", "roof_type": "flat", "features": [], "furniture": ["bed", "wardrobe", "nightstand"], "confidence": 0.85},
+    "сделай дизайн интерьера детской": {"object_type": "interior", "room_type": "children", "floors": 1, "width_m": 4, "length_m": 5, "style": "modern", "material": "plaster", "roof_type": "flat", "features": [], "furniture": ["bed", "desk", "bookshelf"], "confidence": 0.9},
+    "красивую спальню в стиле хайтек": {"object_type": "interior", "room_type": "bedroom", "floors": 1, "width_m": 5, "length_m": 6, "style": "hitech", "material": "plaster", "roof_type": "flat", "features": [], "furniture": ["bed", "wardrobe", "nightstand"], "confidence": 0.85},
     "интерьерный дизайн квартиры на 64 кв метра": {"object_type": "interior", "building_type": "apartment", "floors": 1, "width_m": 8, "length_m": 8, "style": "modern", "material": "plaster", "roof_type": "flat", "features": [], "furniture": [], "confidence": 0.6},
     "офис 5 этажей стекло плоская кровля 20×24": {"object_type": "building", "building_type": "office", "floors": 5, "width_m": 20, "length_m": 24, "style": "modern", "material": "glass", "roof_type": "flat", "features": [], "furniture": [], "confidence": 0.95},
     "двухэтажный кирпичный дом 10×12 с балконом": {"object_type": "building", "building_type": "house", "floors": 2, "width_m": 10, "length_m": 12, "style": "modern", "material": "brick", "roof_type": "gabled", "features": ["balcony"], "furniture": [], "confidence": 0.95},
     "деревянный коттедж 2 этажа терраса гараж 12×15": {"object_type": "building", "building_type": "cottage", "floors": 2, "width_m": 12, "length_m": 15, "style": "modern", "material": "wood", "roof_type": "gabled", "features": ["terrace", "garage"], "furniture": [], "confidence": 0.95},
     "построй что-нибудь красивое": {"object_type": "building", "building_type": "house", "floors": 2, "width_m": 10, "length_m": 12, "style": "modern", "material": "plaster", "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.3},
-    "кухня в стиле лофт 4×5": {"object_type": "room", "room_type": "kitchen", "floors": 1, "width_m": 4, "length_m": 5, "style": "loft", "material": "plaster", "roof_type": "flat", "features": [], "furniture": ["table", "sink", "stove"], "confidence": 0.9},
+    "кухня в стиле лофт 4×5": {"object_type": "interior", "room_type": "kitchen", "floors": 1, "width_m": 4, "length_m": 5, "style": "loft", "material": "plaster", "roof_type": "flat", "features": [], "furniture": ["table", "sink", "stove"], "confidence": 0.9},
     "современный таунхаус 3 этажа минимализм": {"object_type": "building", "building_type": "townhouse", "floors": 3, "width_m": 10, "length_m": 12, "style": "minimalist", "material": "plaster", "roof_type": "flat", "features": [], "furniture": [], "confidence": 0.85},
 }
 

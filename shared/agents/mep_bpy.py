@@ -9,8 +9,6 @@ shared/agents/mep_bpy.py — Генерация bpy-скрипта инжене�
 - Отопление (трубы, радиаторы)
 """
 
-import math
-
 
 def generate_mep_bpy(params: dict, mep_calc: dict) -> str:
     """
@@ -135,7 +133,7 @@ def _plumbing_bpy(width: float, length: float, height: float, floors: int, plumb
 
     # Pipe diameters (approximate mm → m)
     cold_r = 0.0125  # Ду25 = 25mm diameter
-    hot_r = 0.010    # Ду20
+    hot_r = 0.010  # Ду20
     sewer_r = 0.055  # Ду110
 
     lines = [
@@ -149,32 +147,42 @@ def _plumbing_bpy(width: float, length: float, height: float, floors: int, plumb
 
         # Cold water riser (blue, left side)
         lines.append(f"# Cold water riser floor {fl + 1}")
-        lines.append(f"bpy.ops.mesh.primitive_cylinder_add(radius={cold_r}, depth={height}, location=(-{width}/2 + 0.3, -{length}/2 + 0.3, {z}))")
+        lines.append(
+            f"bpy.ops.mesh.primitive_cylinder_add(radius={cold_r}, depth={height}, location=(-{width}/2 + 0.3, -{length}/2 + 0.3, {z}))"
+        )
         lines.append(f"cw = bpy.context.active_object; cw.name = 'ColdWater_Riser_F{fl + 1}'")
         lines.append(f"cw.data.materials.append(mat_cold_water)")
 
         # Hot water riser (red, left side)
         lines.append(f"# Hot water riser floor {fl + 1}")
-        lines.append(f"bpy.ops.mesh.primitive_cylinder_add(radius={hot_r}, depth={height}, location=(-{width}/2 + 0.5, -{length}/2 + 0.3, {z}))")
+        lines.append(
+            f"bpy.ops.mesh.primitive_cylinder_add(radius={hot_r}, depth={height}, location=(-{width}/2 + 0.5, -{length}/2 + 0.3, {z}))"
+        )
         lines.append(f"hw = bpy.context.active_object; hw.name = 'HotWater_Riser_F{fl + 1}'")
         lines.append(f"hw.data.materials.append(mat_hot_water)")
 
         # Horizontal branches to bathroom/kitchen
         lines.append(f"# Water branches to bathroom")
-        lines.append(f"bpy.ops.mesh.primitive_cylinder_add(radius={cold_r}, depth={width}/2, location=(-{width}/4, -{length}/2 + 0.3, {z}))")
+        lines.append(
+            f"bpy.ops.mesh.primitive_cylinder_add(radius={cold_r}, depth={width}/2, location=(-{width}/4, -{length}/2 + 0.3, {z}))"
+        )
         lines.append(f"cwb = bpy.context.active_object; cwb.name = 'ColdWater_Branch_F{fl + 1}'")
         lines.append(f"cwb.rotation_euler[1] = math.radians(90)")
         lines.append(f"cwb.data.materials.append(mat_cold_water)")
 
         # Sewer riser (brown, larger diameter)
         lines.append(f"# Sewer riser floor {fl + 1}")
-        lines.append(f"bpy.ops.mesh.primitive_cylinder_add(radius={sewer_r}, depth={height}, location=(-{width}/2 + 0.3, -{length}/2 + 0.6, {z}))")
+        lines.append(
+            f"bpy.ops.mesh.primitive_cylinder_add(radius={sewer_r}, depth={height}, location=(-{width}/2 + 0.3, -{length}/2 + 0.6, {z}))"
+        )
         lines.append(f"sw = bpy.context.active_object; sw.name = 'Sewer_Riser_F{fl + 1}'")
         lines.append(f"sw.data.materials.append(mat_sewer)")
 
         # Sewer branch with slope
         lines.append(f"# Sewer branch (with slope)")
-        lines.append(f"bpy.ops.mesh.primitive_cylinder_add(radius={sewer_r}, depth={width}/2, location=(-{width}/4, -{length}/2 + 0.6, {z} - 0.05))")
+        lines.append(
+            f"bpy.ops.mesh.primitive_cylinder_add(radius={sewer_r}, depth={width}/2, location=(-{width}/4, -{length}/2 + 0.6, {z} - 0.05))"
+        )
         lines.append(f"swb = bpy.context.active_object; swb.name = 'Sewer_Branch_F{fl + 1}'")
         lines.append(f"swb.rotation_euler[1] = math.radians(90)")
         lines.append(f"swb.rotation_euler[2] = math.radians(-2)  # slope")
@@ -183,7 +191,9 @@ def _plumbing_bpy(width: float, length: float, height: float, floors: int, plumb
 
     # Main sewer outlet
     lines.append(f"# Main sewer outlet (underground)")
-    lines.append(f"bpy.ops.mesh.primitive_cylinder_add(radius={sewer_r}, depth={width} + 2, location=(0, -{length}/2 - 1, -0.3))")
+    lines.append(
+        f"bpy.ops.mesh.primitive_cylinder_add(radius={sewer_r}, depth={width} + 2, location=(0, -{length}/2 - 1, -0.3))"
+    )
     lines.append(f"msw = bpy.context.active_object; msw.name = 'Sewer_Main'")
     lines.append(f"msw.rotation_euler[1] = math.radians(90)")
     lines.append(f"msw.data.materials.append(mat_sewer)")
@@ -217,7 +227,9 @@ def _electrical_bpy(width: float, length: float, height: float, floors: int, ele
 
         # Cable tray (main trunk)
         lines.append(f"# Cable trunk floor {fl + 1}")
-        lines.append(f"bpy.ops.mesh.primitive_cube_add(size=1, location=(-{width}/2 + 0.15, 0, {z_base} + {height} - 0.1))")
+        lines.append(
+            f"bpy.ops.mesh.primitive_cube_add(size=1, location=(-{width}/2 + 0.15, 0, {z_base} + {height} - 0.1))"
+        )
         lines.append(f"tray = bpy.context.active_object; tray.name = 'CableTray_F{fl + 1}'")
         lines.append(f"tray.scale = (0.02, {length}/2, 0.02)")
         lines.append(f"bpy.ops.object.transform_apply(scale=True)")
@@ -227,7 +239,9 @@ def _electrical_bpy(width: float, length: float, height: float, floors: int, ele
         # Branch cables to rooms
         lines.append(f"# Branch cables floor {fl + 1}")
         lines.append(f"for room_x in [-{width}/3, 0, {width}/3]:")
-        lines.append(f"    bpy.ops.mesh.primitive_cylinder_add(radius=0.005, depth={length}/2, location=(room_x, 0, {z_base} + {height} - 0.1))")
+        lines.append(
+            f"    bpy.ops.mesh.primitive_cylinder_add(radius=0.005, depth={length}/2, location=(room_x, 0, {z_base} + {height} - 0.1))"
+        )
         lines.append(f"    cab = bpy.context.active_object; cab.name = f'Cable_Branch_{{room_x}}'")
         lines.append(f"    cab.rotation_euler[0] = math.radians(90)")
         lines.append(f"    cab.data.materials.append(mat_cable)")
@@ -291,7 +305,9 @@ def _hvac_bpy(width: float, length: float, height: float, floors: int, hvac: dic
         # Radiators (under windows)
         lines.append(f"# Radiators floor {fl + 1}")
         lines.append(f"for rx in [-{width}/3, 0, {width}/3]:")
-        lines.append(f"    bpy.ops.mesh.primitive_cube_add(size=1, location=(rx, -{length}/2 - 0.05, {height} * {fl} + 0.3))")
+        lines.append(
+            f"    bpy.ops.mesh.primitive_cube_add(size=1, location=(rx, -{length}/2 - 0.05, {height} * {fl} + 0.3))"
+        )
         lines.append(f"    rad = bpy.context.active_object; rad.name = f'Radiator'")
         lines.append(f"    rad.scale = (0.4, 0.05, 0.3)")
         lines.append(f"    bpy.ops.object.transform_apply(scale=True)")
@@ -300,7 +316,9 @@ def _hvac_bpy(width: float, length: float, height: float, floors: int, hvac: dic
         # Heating pipes
         lines.append(f"# Heating pipes floor {fl + 1}")
         lines.append(f"for px in [-{width}/3, {width}/3]:")
-        lines.append(f"    bpy.ops.mesh.primitive_cylinder_add(radius=0.01, depth=0.6, location=(px, -{length}/2 - 0.05, {height} * {fl} + 0.6))")
+        lines.append(
+            f"    bpy.ops.mesh.primitive_cylinder_add(radius=0.01, depth=0.6, location=(px, -{length}/2 - 0.05, {height} * {fl} + 0.6))"
+        )
         lines.append(f"    hp = bpy.context.active_object; hp.name = f'HeatPipe'")
         lines.append(f"    hp.data.materials.append(mat_hot_water)")
         lines.append("")

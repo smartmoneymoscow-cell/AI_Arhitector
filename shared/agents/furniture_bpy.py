@@ -9,7 +9,9 @@ shared/agents/furniture_bpy.py — Высококачественная мебе
 """
 
 
-def generate_furniture_bpy(room_type: str, furniture_list: list, room_w: float, room_l: float, style: str = "modern") -> str:
+def generate_furniture_bpy(
+    room_type: str, furniture_list: list, room_w: float, room_l: float, style: str = "modern"
+) -> str:
     """
     Генерирует bpy-скрипт высококачественной мебели.
 
@@ -68,7 +70,7 @@ mat_wood_furn = bpy.data.materials.new("Furniture_Wood")
 mat_wood_furn.use_nodes = True
 bsdf = mat_wood_furn.node_tree.nodes.get("Principled BSDF")
 if bsdf:
-    bsdf.inputs["Base Color"].default_value = ({c['wood'][0]}, {c['wood'][1]}, {c['wood'][2]}, 1.0)
+    bsdf.inputs["Base Color"].default_value = ({c["wood"][0]}, {c["wood"][1]}, {c["wood"][2]}, 1.0)
     bsdf.inputs["Roughness"].default_value = 0.6
     bsdf.inputs["Metallic"].default_value = 0.0
 
@@ -76,7 +78,7 @@ mat_fabric = bpy.data.materials.new("Furniture_Fabric")
 mat_fabric.use_nodes = True
 bsdf = mat_fabric.node_tree.nodes.get("Principled BSDF")
 if bsdf:
-    bsdf.inputs["Base Color"].default_value = ({c['fabric'][0]}, {c['fabric'][1]}, {c['fabric'][2]}, 1.0)
+    bsdf.inputs["Base Color"].default_value = ({c["fabric"][0]}, {c["fabric"][1]}, {c["fabric"][2]}, 1.0)
     bsdf.inputs["Roughness"].default_value = 0.95
     bsdf.inputs["Metallic"].default_value = 0.0
 
@@ -92,7 +94,7 @@ mat_metal_furn = bpy.data.materials.new("Furniture_Metal")
 mat_metal_furn.use_nodes = True
 bsdf = mat_metal_furn.node_tree.nodes.get("Principled BSDF")
 if bsdf:
-    bsdf.inputs["Base Color"].default_value = ({c['metal'][0]}, {c['metal'][1]}, {c['metal'][2]}, 1.0)
+    bsdf.inputs["Base Color"].default_value = ({c["metal"][0]}, {c["metal"][1]}, {c["metal"][2]}, 1.0)
     bsdf.inputs["Roughness"].default_value = 0.3
     bsdf.inputs["Metallic"].default_value = 0.9
 

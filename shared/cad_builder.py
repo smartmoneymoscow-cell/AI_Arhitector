@@ -36,17 +36,17 @@ logger = logging.getLogger("archai.cad_builder")
 
 OCCT_AVAILABLE = False
 try:
-    from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox  # noqa: F401
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut  # noqa: F401
     from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform  # noqa: F401
-    from OCP.BRepMesh import BRepMesh_IncrementalMesh  # noqa: F401
-    from OCP.gp import gp_Pnt, gp_Trsf, gp_Vec  # noqa: F401
-    from OCP.TopoDS import TopoDS_Shape, TopoDS_Compound, TopoDS_Builder  # noqa: F401
-    from OCP.StlAPI import StlAPI_Writer  # noqa: F401
-    from OCP.STEPControl import STEPControl_Writer, STEPControl_AsIs  # noqa: F401
-    from OCP.IFSelect import IFSelect_RetDone  # noqa: F401
-    from OCP.GProp import GProp_GProps  # noqa: F401
     from OCP.BRepGProp import BRepGProp  # noqa: F401
+    from OCP.BRepMesh import BRepMesh_IncrementalMesh  # noqa: F401
+    from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox  # noqa: F401
+    from OCP.gp import gp_Pnt, gp_Trsf, gp_Vec  # noqa: F401
+    from OCP.GProp import GProp_GProps  # noqa: F401
+    from OCP.IFSelect import IFSelect_RetDone  # noqa: F401
+    from OCP.STEPControl import STEPControl_AsIs, STEPControl_Writer  # noqa: F401
+    from OCP.StlAPI import StlAPI_Writer  # noqa: F401
+    from OCP.TopoDS import TopoDS_Builder, TopoDS_Compound, TopoDS_Shape  # noqa: F401
 
     OCCT_AVAILABLE = True
     logger.info("[cad_builder] OpenCascade (OCCT) loaded successfully")
@@ -176,9 +176,7 @@ class WallBuilder:
         # 2. Cut openings
         result = wall_shape
         for opening in spec.openings:
-            opening_shape = self._make_opening_box(
-                opening, wall_length, spec.thickness, spec.height
-            )
+            opening_shape = self._make_opening_box(opening, wall_length, spec.thickness, spec.height)
             if opening_shape:
                 try:
                     result = BRepAlgoAPI_Cut(result, opening_shape).Shape()
@@ -360,7 +358,9 @@ class WallBuilder:
         if opening.offset + opening.width > wall_length:
             logger.warning(
                 "Opening at offset %.2f + width %.2f exceeds wall length %.2f",
-                opening.offset, opening.width, wall_length,
+                opening.offset,
+                opening.width,
+                wall_length,
             )
             # Clamp
             opening.width = wall_length - opening.offset - 0.01
@@ -430,7 +430,7 @@ class BuildingBuilder:
             for r in fl_rooms:
                 room_specs.append(
                     RoomSpec(
-                        name=r.get("n", f"Room {fl+1}"),
+                        name=r.get("n", f"Room {fl + 1}"),
                         x=r.get("x", 0),
                         y=r.get("z", 0),
                         width=r.get("w", 4),
@@ -642,8 +642,8 @@ def generate_building_from_params_bpy(params: dict, building_params: dict) -> st
                 )
                 # Offset z by elevation
                 wall_script = wall_script.replace(
-                    f"location=({round((ws[0]+we[0])/2, 4)}, {round((ws[1]+we[1])/2, 4)}, {round(room.height/2, 4)})",
-                    f"location=({round((ws[0]+we[0])/2, 4)}, {round((ws[1]+we[1])/2, 4)}, {round(elevation + room.height/2, 4)})"
+                    f"location=({round((ws[0] + we[0]) / 2, 4)}, {round((ws[1] + we[1]) / 2, 4)}, {round(room.height / 2, 4)})",
+                    f"location=({round((ws[0] + we[0]) / 2, 4)}, {round((ws[1] + we[1]) / 2, 4)}, {round(elevation + room.height / 2, 4)})",
                 )
                 scripts.append(wall_script)
 

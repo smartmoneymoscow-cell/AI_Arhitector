@@ -65,6 +65,7 @@ _CIRCUIT_FAIL_THRESHOLD = 5
 _CIRCUIT_OPEN_SECONDS = 60
 _CIRCUIT_HALF_OPEN_AFTER = 30  # seconds before allowing a probe request
 
+
 def _check_circuit(service: str) -> bool:
     """Check if circuit is OPEN (service disabled). Returns True if blocked."""
     state = _circuit_state.get(service)
@@ -77,6 +78,7 @@ def _check_circuit(service: str) -> bool:
         return False  # allow one probe request
     return state.get("open_until", 0) > now
 
+
 def _record_failure(service: str) -> None:
     """Record a failure. Open circuit after threshold."""
     state = _circuit_state.setdefault(service, {"failures": 0, "open_until": 0, "last_failure": 0})
@@ -84,8 +86,10 @@ def _record_failure(service: str) -> None:
     state["last_failure"] = time.time()
     if state["failures"] >= _CIRCUIT_FAIL_THRESHOLD:
         state["open_until"] = time.time() + _CIRCUIT_OPEN_SECONDS
-        logger.warning("Circuit breaker OPEN for %s (%d failures, retry in %ds)",
-                        service, state["failures"], _CIRCUIT_OPEN_SECONDS)
+        logger.warning(
+            "Circuit breaker OPEN for %s (%d failures, retry in %ds)", service, state["failures"], _CIRCUIT_OPEN_SECONDS
+        )
+
 
 def _record_success(service: str) -> None:
     """Record a success. Reset circuit."""
@@ -95,17 +99,23 @@ def _record_success(service: str) -> None:
             logger.info("Circuit breaker CLOSED for %s (recovered after %d failures)", service, old_failures)
     _circuit_state[service] = {"failures": 0, "open_until": 0, "last_failure": 0}
 
+
 def _get_circuit_stats() -> dict:
     """Return circuit breaker state for health/debug endpoints."""
-    return {svc: {
-        "failures": s.get("failures", 0),
-        "is_open": _check_circuit(svc),
-        "last_failure_ago": int(time.time() - s.get("last_failure", 0)) if s.get("last_failure") else None,
-    } for svc, s in _circuit_state.items()}
+    return {
+        svc: {
+            "failures": s.get("failures", 0),
+            "is_open": _check_circuit(svc),
+            "last_failure_ago": int(time.time() - s.get("last_failure", 0)) if s.get("last_failure") else None,
+        }
+        for svc, s in _circuit_state.items()
+    }
+
 
 # ═══════════════════════════════════════════════════════════════
 # BLENDER LOAD BALANCER — multiple instances
 # ═══════════════════════════════════════════════════════════════
+
 
 def _get_blender_urls() -> list[str]:
     """Get all Blender service URLs (primary + secondary instances)."""
@@ -120,7 +130,9 @@ def _get_blender_urls() -> list[str]:
             urls.append(url)
     return urls
 
+
 _blender_rr_index = 0  # round-robin counter
+
 
 def _next_blender_url() -> str:
     """Get next Blender URL using round-robin with circuit breaker."""
@@ -273,7 +285,7 @@ async def health():
     # Blender instances (all)
     blender_urls = _get_blender_urls()
     for i, url in enumerate(blender_urls):
-        name = "blender" if i == 0 else f"blender_{i+1}"
+        name = "blender" if i == 0 else f"blender_{i + 1}"
         try:
             async with httpx.AsyncClient() as client:
                 r = await client.get(f"{url}/health", timeout=15.0)
@@ -339,7 +351,8 @@ async def generate_proxy(
 ):
     """Proxy generate request to Blender Service (with failover)."""
     r = await blender_request_with_fallback(
-        "post", "/api/v1/generate",
+        "post",
+        "/api/v1/generate",
         json=req,
         timeout=300,
     )
@@ -359,7 +372,8 @@ async def preview_proxy(
 ):
     """Proxy preview request to Blender Service (with failover)."""
     r = await blender_request_with_fallback(
-        "post", "/api/v1/preview",
+        "post",
+        "/api/v1/preview",
         json=req,
         timeout=120,
     )
@@ -621,13 +635,15 @@ async def variants_endpoint(
         variant_params["style"] = styles[i % len(styles)]
         variant_params["material"] = materials[i % len(materials)]
         variant_params["roof_type"] = roofs[i % len(roofs)]
-        variants.append({
-            "id": i + 1,
-            "style": variant_params["style"],
-            "material": variant_params["material"],
-            "roof_type": variant_params["roof_type"],
-            "params": variant_params,
-        })
+        variants.append(
+            {
+                "id": i + 1,
+                "style": variant_params["style"],
+                "material": variant_params["material"],
+                "roof_type": variant_params["roof_type"],
+                "params": variant_params,
+            }
+        )
 
     return {
         "prompt": prompt,
