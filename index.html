@@ -2133,17 +2133,9 @@ async function _sendInner(){
       // rejected from file:// origins). Never leave the user with a
       // dead end: fall back to text-based parsing of whatever they typed
       // plus the filename, and still generate a model.
-      console.error('Vision analysis failed, using fallback:',e);
-      const fallbackText=(ftext||'')+' '+fname;
-      const parsed=parseLocal(fallbackText);
-      const bld=applyParams(ftext||('здание (фото: '+fname+')'),parsed);
-      addThink([
-        '⚠️ AI Vision недоступен: '+e.message,
-        '📝 Использую текстовый анализ имени файла/подписи',
-        '🚀 Генерирую базовую модель — уточните детали в чате'
-      ]);
-      addMsg('a','⚠️ Анализ фото не удался ('+e.message+'). Сгенерирована базовая модель по доступной текстовой информации — вы можете уточнить параметры обычным текстом (например «сделай 2 этажа, кирпич, двускатная кровля»).');
-      setTimeout(()=>startGen(bld),300);
+      console.error('Vision analysis failed:',e);
+      addMsg('a','❌ Анализ фото не удался: '+e.message+'. Попробуйте описать здание текстом или загрузить другое фото.');
+      showNotif('Анализ фото не удался','warn');
     }
     return;
   }
@@ -2163,45 +2155,28 @@ async function _sendInner(){
     addThink(['✅ Стиль: '+ip.style+' | Мебель: '+ip.furniture.join(', '),'🖥 Генерирую интерьер…']);
     const ok = await renderInteriorViaServer(text, ip.style, ip.furniture);
     if(ok) return;
-    // Fallback: generate room via Three.js
-    addThink(['⚠️ Blender недоступен, генерирую интерьер в браузере…']);
-    let parsed=parseLocal('комната 1 этаж 6x8');
-    parsed.type='room';
-    parsed.room_type = /детск|children/.test(text.toLowerCase()) ? 'children' :
-                        /спальн|bedroom/.test(text.toLowerCase()) ? 'bedroom' :
-                        /кухн|kitchen/.test(text.toLowerCase()) ? 'kitchen' :
-                        /ванн|bath/.test(text.toLowerCase()) ? 'bathroom' : 'living';
-    const bld=applyParams(text,parsed);
-    bld.label='Интерьер: '+ip.style+' ('+parsed.room_type+')';
-    bld.isInterior = true;
-    bld.room_type = parsed.room_type;
-    bld.furniture = ip.furniture;
-    setTimeout(()=>startGen(bld),300);
+    addMsg('a', '❌ Сервер рендеринга недоступен. Генерация интерьера требует сервер (Blender). Попробуйте позже.');
+    showNotif('Сервер недоступен','warn');
     return;
   }
 
   // ── LANDSCAPE PATH ───────────────────────────────────
   if(LANDSCAPE_RE.test(text)){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🌳 Планирую ландшафт…']);
-    // For now, generate a building with landscape features
-    let parsed=parseLocal('дом 1 этаж 8x10');
-    parsed.type='house';
-    const bld=applyParams(text,parsed);
-    bld.label='Ландшафтный проект';
-    addThink(['✅ Ландшафт: '+text.slice(0,60),'🚀 Генерирую 3D…']);
-    setTimeout(()=>startGen(bld),300);
+    const lOk = await generateWithFallback(text, {object_type: 'landscape'});
+    if(lOk) return;
+    addMsg('a', '❌ Сервер рендеринга недоступен. Ландшафтный дизайн требует серверную генерацию. Попробуйте позже.');
+    showNotif('Сервер недоступен','warn');
     return;
   }
 
   // ── CONSTRUCTION PATH ────────────────────────────────
   if(CONSTRUCT_RE.test(text)){
     addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🏗 Анализирую конструкцию…']);
-    let parsed=parseLocal('дом 1 этаж 10x12');
-    parsed.type='house';
-    const bld=applyParams(text,parsed);
-    bld.label='Конструктивный элемент';
-    addThink(['✅ Конструкция: '+text.slice(0,60),'🚀 Генерирую 3D…']);
-    setTimeout(()=>startGen(bld),300);
+    const cOk = await generateWithFallback(text, {object_type: 'building'});
+    if(cOk) return;
+    addMsg('a', '❌ Сервер рендеринга недоступен. Генерация конструкций требует сервер. Попробуйте позже.');
+    showNotif('Сервер недоступен','warn');
     return;
   }
 
@@ -2257,16 +2232,8 @@ async function _sendInner(){
       addThink(['✅ Комната: '+roomType+' | Стиль: '+style,'🖥 Генерирую интерьер…']);
       const ok = await renderInteriorViaServer(text, style, furniture);
       if(ok) return;
-      addThink(['⚠️ Сервер недоступен, генерирую интерьер в браузере…']);
-      let rParsed=parseLocal('комната 1 этаж 6x8');
-      rParsed.type='room';
-      rParsed.room_type=roomType;
-      const bld=applyParams(text,rParsed);
-      bld.label='Интерьер: '+style+' ('+roomType+')';
-      bld.isInterior=true;
-      bld.room_type=roomType;
-      bld.furniture=furniture;
-      setTimeout(()=>startGen(bld),300);
+      addMsg('a', '❌ Сервер рендеринга недоступен. Генерация интерьера требует сервер. Попробуйте позже.');
+      showNotif('Сервер недоступен','warn');
       return;
     }
 
@@ -2274,10 +2241,8 @@ async function _sendInner(){
     const serverOk = await generateViaBlenderServer(text);
     if(serverOk) return;
     
-    // Step 4: Generate locally with Three.js
-    const bld=applyParams(text,parsed);
-    addThink(['✅ '+bld.label,'📐 '+bld.W+'×'+bld.L+'м | '+bld.floors+' эт. | '+bld.mat,'🚀 Генерирую 3D…']);
-    setTimeout(()=>startGen(bld),300);
+    addMsg('a', '❌ Сервер рендеринга недоступен, LLM-парсинг не удался. Не могу сгенерировать модель. Попробуйте позже.');
+    showNotif('Сервер недоступен','warn');
     return;
   }
   // General chat — needs backend

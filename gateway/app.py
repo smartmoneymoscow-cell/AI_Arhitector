@@ -405,3 +405,122 @@ async def orchestrator_agents(
     from shared.agents import AGENT_REGISTRY
 
     return {"agents": list(AGENT_REGISTRY.keys())}
+
+
+# ═══════════════════════════════════════════════════════════════
+# CLARIFICATION — уточняющие вопросы
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.post("/api/v1/clarify")
+async def clarify_endpoint(
+    req: dict,
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Analyze prompt and return clarification questions if needed."""
+    from shared.clarification import ClarificationEngine
+
+    prompt = req.get("prompt", "")
+    if not prompt:
+        raise HTTPException(400, "No prompt provided")
+
+    # Parse first
+    r = await request_with_retry(
+        "post",
+        f"{settings.LLM_SERVICE_URL}/api/v1/parse",
+        json={"text": prompt},
+        timeout=60,
+    )
+    parsed = r.json()
+    params = parsed.get("params", parsed)
+    confidence = parsed.get("confidence", 0.5)
+
+    engine = ClarificationEngine()
+    result = engine.analyze(prompt, params, confidence)
+
+    return {
+        "needs_clarification": result.needs_clarification,
+        "questions": [
+            {
+                "field": q.field,
+                "text": q.text,
+                "options": q.options,
+                "priority": q.priority,
+            }
+            for q in result.questions
+        ],
+        "confidence": result.confidence,
+        "partial_params": result.partial_params,
+    }
+
+
+@app.post("/api/v1/clarify/answer")
+async def clarify_answer_endpoint(
+    req: dict,
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Apply clarification answers and return updated params."""
+    from shared.clarification import ClarificationEngine
+
+    params = req.get("params", {})
+    answers = req.get("answers", {})
+
+    engine = ClarificationEngine()
+    updated = engine.apply_answers(params, answers)
+
+    return {"params": updated}
+
+
+# ═══════════════════════════════════════════════════════════════
+# VARIANTS — варианты реализации
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.post("/api/v1/variants")
+async def variants_endpoint(
+    req: dict,
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Generate multiple design variants with preview images."""
+    prompt = req.get("prompt", "")
+    if not prompt:
+        raise HTTPException(400, "No prompt provided")
+
+    num_variants = min(req.get("num_variants", 3), 5)
+
+    # Parse prompt first
+    r = await request_with_retry(
+        "post",
+        f"{settings.LLM_SERVICE_URL}/api/v1/parse",
+        json={"text": prompt},
+        timeout=60,
+    )
+    base_params = r.json()
+
+    # Generate variant params by varying style/material/roof
+    styles = ["modern", "classic", "minimalist"]
+    materials = ["brick", "plaster", "wood"]
+    roofs = ["gabled", "flat", "hip"]
+
+    variants = []
+    for i in range(num_variants):
+        variant_params = dict(base_params)
+        variant_params["style"] = styles[i % len(styles)]
+        variant_params["material"] = materials[i % len(materials)]
+        variant_params["roof_type"] = roofs[i % len(roofs)]
+        variants.append({
+            "id": i + 1,
+            "style": variant_params["style"],
+            "material": variant_params["material"],
+            "roof_type": variant_params["roof_type"],
+            "params": variant_params,
+        })
+
+    return {
+        "prompt": prompt,
+        "variants": variants,
+        "base_params": base_params,
+    }

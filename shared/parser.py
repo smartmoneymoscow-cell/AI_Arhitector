@@ -30,7 +30,7 @@ logger = logging.getLogger("archai.parser")
 # SYSTEM PROMPT — FLEXIBLE, no hardcoded values
 # ═══════════════════════════════════════════════════════════════
 
-SYSTEM_PROMPT_VERSION = "v8.1"  # ← bump to invalidate all caches
+SYSTEM_PROMPT_VERSION = "v8.2"  # ← bump to invalidate all caches
 
 SYSTEM_PROMPT = """Ты — парсер архитектурных описаний для 3D-генератора.
 Отвечай ТОЛЬКО валидным JSON. Никаких рассуждений, пояснений, markdown.
@@ -72,6 +72,12 @@ SYSTEM_PROMPT = """Ты — парсер архитектурных описан
    - Если "дизайн детской" → object_type="interior", room_type="children"
    - Если "кухня в стиле хайтек" → object_type="interior", room_type="kitchen"
 
+ВАЖНО - РАЗЛИЧАЙ ИНТЕРЬЕР И ЭКСТЬЕР:
+- Если пользователь просит "дизайн кухни", "ванную", "спальню", "детскую", "гостиную", "интерьер" → object_type="interior"
+- Если просит "построить дом", "здание", "офис", "коттедж" → object_type="building"
+- Если просит "ландшафт", "сад", "двор", "участок" → object_type="landscape"
+- НИКОГДА не путай интерьер с экстерьером!
+
 3. material — НЕ ограничивайся. "из брёвен" → "log". "из соломы" → "straw".
 
 4. style — НЕ ограничивайся. "в японском стиле" → "japanese". "средневековый" → "medieval".
@@ -81,7 +87,9 @@ SYSTEM_PROMPT = """Ты — парсер архитектурных описан
    Отель: 24×36×3.2м (4 этажа). Квартира: 6×8×2.8м.
    Ванная: 2.5×3×2.8м. Кухня: 4×5×2.8м. Спальня: 4×5×2.8м.
 
-6. Русские слова: сарай=barn, навес=carport, беседка=gazebo, гараж=garage,
+6. Если "ландшафт", "сад", "двор", "участок" → object_type="landscape", building_type="landscape"
+
+7. Русские слова: сарай=barn, навес=carport, беседка=gazebo, гараж=garage,
    теплица=greenhouse, баня=bathhouse, курятник=chicken_coop, забор=fence,
    ворота=gate, сруб=log_cabin, изба=izba, отель=hotel, гостиница=hotel.
 """
@@ -302,7 +310,7 @@ async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) 
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
-        "max_tokens": 1024,
+        "max_tokens": 2048,
         "temperature": 0.1,
     }
 
@@ -386,7 +394,15 @@ def _validate_result(result: dict) -> bool:
     if w <= 0 or l <= 0 or w > 500 or l > 500:
         return False
     floors = result.get("floors", 0)
-    return not (floors <= 0 or floors > 50)
+    if floors <= 0 or floors > 50:
+        return False
+    # Interior requests MUST have room_type
+    if result.get("object_type") in ("interior", "room") and not result.get("room_type"):
+        result["room_type"] = "living"  # default
+    # Ensure building_type is not empty
+    if not result.get("building_type"):
+        result["building_type"] = "house"  # default
+    return True
 
 
 def _minimal_defaults(reason: str) -> dict:

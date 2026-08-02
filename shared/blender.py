@@ -105,15 +105,25 @@ for s in range(steps_n):
     st.scale=(0.5,step_d/2,step_h/2)
     bpy.ops.object.transform_apply(scale=True)
     st.data.materials.append(mat_concrete)
-# Railing
-bpy.ops.mesh.primitive_cylinder_add(radius=0.02,depth={fH},location=({W}/2-0.35,-{L}/2+0.15,{fH}/2))
+# Railing posts (thicker)
+bpy.ops.mesh.primitive_cylinder_add(radius=0.04,depth={fH},location=({W}/2-0.35,-{L}/2+0.15,{fH}/2))
 sr=bpy.context.active_object;sr.name="StairRailing_L"
 sr.data.materials.append(mat_railing)
-bpy.ops.mesh.primitive_cylinder_add(radius=0.02,depth={fH},location=({W}/2-0.85,-{L}/2+0.15,{fH}/2))
+bpy.ops.mesh.primitive_cylinder_add(radius=0.04,depth={fH},location=({W}/2-0.85,-{L}/2+0.15,{fH}/2))
 sr2=bpy.context.active_object;sr2.name="StairRailing_R"
 sr2.data.materials.append(mat_railing)
+# Box-shaped handrail
+bpy.ops.mesh.primitive_cube_add(size=1,location=({W}/2-0.35,-{L}/2+0.15,{fH}+0.03))
+hr1=bpy.context.active_object;hr1.name="Handrail_L"
+hr1.scale=(0.04,0.04,{fH}/2);bpy.ops.object.transform_apply(scale=True)
+hr1.data.materials.append(mat_railing)
+bpy.ops.mesh.primitive_cube_add(size=1,location=({W}/2-0.85,-{L}/2+0.15,{fH}+0.03))
+hr2=bpy.context.active_object;hr2.name="Handrail_R"
+hr2.scale=(0.04,0.04,{fH}/2);bpy.ops.object.transform_apply(scale=True)
+hr2.data.materials.append(mat_railing)
+# Balusters (wider)
 for s in range(4):
-    bpy.ops.mesh.primitive_cylinder_add(radius=0.015,depth=0.8,location=({W}/2-0.35,-{L}/2+0.15+s*0.8,{fH}/2))
+    bpy.ops.mesh.primitive_cylinder_add(radius=0.03,depth=0.8,location=({W}/2-0.35,-{L}/2+0.15+s*0.8,{fH}/2))
     vb=bpy.context.active_object;vb.name=f"Baluster_{{s}}"
     vb.data.materials.append(mat_railing)
 """
@@ -125,13 +135,25 @@ for s in range(4):
 
 
 def _downspout_code(W: str, L: str, total_h: str) -> str:
-    """Генерирует водосточные трубы."""
+    """Генерирует водосточные трубы (прямоугольные короба)."""
     return f"""
-# Downspouts
+# Downspouts (box-shaped gutters)
 for dx,dy in [(-{W}/2-0.15,-{L}/2-0.15),({W}/2+0.15,-{L}/2-0.15),(-{W}/2-0.15,{L}/2+0.15),({W}/2+0.15,{L}/2+0.15)]:
-    bpy.ops.mesh.primitive_cylinder_add(radius=0.04,depth={total_h},location=(dx,dy,{total_h}/2))
+    # Main vertical gutter channel
+    bpy.ops.mesh.primitive_cube_add(size=1,location=(dx,dy,{total_h}/2))
     ds=bpy.context.active_object;ds.name="Downspout"
+    ds.scale=(0.08,0.04,{total_h}/2);bpy.ops.object.transform_apply(scale=True)
     ds.data.materials.append(mat_railing)
+    # Gutter channel at roof edge
+    bpy.ops.mesh.primitive_cube_add(size=1,location=(dx,dy,{total_h}+0.02))
+    gc=bpy.context.active_object;gc.name="GutterChannel"
+    gc.scale=(0.1,0.06,0.02);bpy.ops.object.transform_apply(scale=True)
+    gc.data.materials.append(mat_railing)
+    # Elbow at bottom (box bend)
+    bpy.ops.mesh.primitive_cube_add(size=1,location=(dx,dy+0.08,0.15))
+    el=bpy.context.active_object;el.name="GutterElbow"
+    el.scale=(0.08,0.1,0.04);bpy.ops.object.transform_apply(scale=True)
+    el.data.materials.append(mat_railing)
 """
 
 
@@ -278,18 +300,18 @@ if "{roof_type}"=="gabled" and floors >= 2:
             dw.scale=(0.4,0.02,0.35);bpy.ops.object.transform_apply(scale=True)
             dw.data.materials.append(mat_glass)
 
-# Bay window on front wall
+# Bay window on front wall (flush with front wall)
 if floors >= 2:
-    bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2-0.6,fH*0.45))
+    bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2-0.3,fH*0.45))
     bay=bpy.context.active_object;bay.name="BayWindow"
-    bay.scale=(2.2,0.6,0.9);bpy.ops.object.transform_apply(scale=True)
+    bay.scale=(2.2,0.3,0.9);bpy.ops.object.transform_apply(scale=True)
     bay.data.materials.append(mat_wall)
-    bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2-0.6,fH*0.95))
+    bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2-0.3,fH*0.95))
     bayroof=bpy.context.active_object;bayroof.name="BayRoof"
-    bayroof.scale=(2.4,0.7,0.04);bpy.ops.object.transform_apply(scale=True)
+    bayroof.scale=(2.4,0.4,0.04);bpy.ops.object.transform_apply(scale=True)
     bayroof.data.materials.append(mat_roof)
     for pi,px in enumerate([-0.7,0,0.7]):
-        bpy.ops.mesh.primitive_cube_add(size=1,location=(px,-L/2-0.85,fH*0.45))
+        bpy.ops.mesh.primitive_cube_add(size=1,location=(px,-L/2-0.45,fH*0.45))
         bg=bpy.context.active_object;bg.name=f"BayGlass_{{pi}}"
         bg.scale=(0.5,0.02,0.7);bpy.ops.object.transform_apply(scale=True)
         bg.data.materials.append(mat_glass)
@@ -304,13 +326,13 @@ cornice_bot=bpy.context.active_object;cornice_bot.name="CorniceBot"
 cornice_bot.scale=(W/2+0.45,L/2+0.45,0.04);bpy.ops.object.transform_apply(scale=True)
 cornice_bot.data.materials.append(mat_concrete)
 
-# Quoins at corners
-for cx,cy in [(-W/2,-L/2),(W/2,-L/2),(-W/2,L/2),(W/2,L/2)]:
+# Quoins at corners (flush with wall surface, slightly larger)
+for cx,cy,ox,oy in [(-W/2,-L/2,-0.1,-0.1),(W/2,-L/2,0.1,-0.1),(-W/2,L/2,-0.1,0.1),(W/2,L/2,0.1,0.1)]:
     for qi in range(floors):
         qz=qi*fH+fH/2
-        bpy.ops.mesh.primitive_cube_add(size=1,location=(cx,cy,qz))
+        bpy.ops.mesh.primitive_cube_add(size=1,location=(cx+ox,cy+oy,qz))
         quo=bpy.context.active_object;quo.name=f"Quoin_{{qi}}"
-        quo.scale=(0.25,0.25,fH/2-0.05);bpy.ops.object.transform_apply(scale=True)
+        quo.scale=(0.35,0.35,fH/2-0.05);bpy.ops.object.transform_apply(scale=True)
         quo.data.materials.append(mat_concrete)
 """
 
@@ -392,6 +414,16 @@ world=bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
 bpy.context.scene.world=world;world.use_nodes=True
 bg=world.node_tree.nodes.get("Background")
 if bg:bg.inputs["Color"].default_value=(0.5,0.7,1.0,1.0);bg.inputs["Strength"].default_value=1.2
+
+# Render settings - 4K default
+bpy.context.scene.render.resolution_x = 3840
+bpy.context.scene.render.resolution_y = 2160
+bpy.context.scene.render.resolution_percentage = 100
+bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
+try:
+    bpy.context.scene.eevee.taa_render_samples = 64
+except:
+    pass
 """
 
     return script
@@ -636,6 +668,16 @@ world=bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
 bpy.context.scene.world=world;world.use_nodes=True
 bg=world.node_tree.nodes.get("Background")
 if bg:bg.inputs["Color"].default_value=(0.02,0.02,0.05,1.0);bg.inputs["Strength"].default_value=0.15
+
+# Render settings - 4K default
+bpy.context.scene.render.resolution_x = 3840
+bpy.context.scene.render.resolution_y = 2160
+bpy.context.scene.render.resolution_percentage = 100
+bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
+try:
+    bpy.context.scene.eevee.taa_render_samples = 64
+except:
+    pass
 """
 
     return script

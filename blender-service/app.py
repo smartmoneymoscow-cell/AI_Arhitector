@@ -80,13 +80,27 @@ async def _parse_via_llm_service(prompt: str) -> dict:
 
 
 def _detect_gen_type(params: dict) -> str:
-    obj_type = params.get("object_type", "building")
-    room_type = params.get("room_type", "")
+    """Detect generation type from parsed params.
+    
+    Returns: 'interior', 'landscape', or 'building'
+    """
+    obj_type = (params.get("object_type") or "building").lower()
+    room_type = (params.get("room_type") or "").lower()
+    building_type = (params.get("building_type") or "").lower()
+    
     # Explicit interior/room type
     if obj_type in ("interior", "room"):
         return "interior"
     # If room_type is set, it's an interior request
     if room_type:
+        return "interior"
+    # Landscape detection
+    if obj_type == "landscape" or building_type == "landscape":
+        return "landscape"
+    # Keyword-based detection for interior
+    interior_keywords = ["кухн", "ванн", "спальн", "детск", "гостин", "интерьер", "дизайн"]
+    description = (params.get("building_description") or "").lower()
+    if any(kw in description for kw in interior_keywords):
         return "interior"
     return "building"
 
@@ -381,16 +395,47 @@ async def _generate_building(params: dict):
     }
 
     script = generate_bpy_script(building_params)
+    
+    # Add 4K render before export
     job_id = uuid.uuid4().hex[:8]
+    output_png = os.path.join(settings.OUTPUT_DIR, f"{job_id}_render.png")
     output_file = os.path.join(settings.OUTPUT_DIR, f"{job_id}.glb")
+    
+    render_cmd = f"""
+import bpy
+bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
+bpy.context.scene.render.resolution_x = 3840
+bpy.context.scene.render.resolution_y = 2160
+bpy.context.scene.render.resolution_percentage = 100
+try:
+    bpy.context.scene.eevee.taa_render_samples = 64
+except:
+    pass
+bpy.context.scene.render.image_settings.file_format = 'PNG'
+bpy.context.scene.render.filepath = r'{output_png}'
+bpy.ops.render.render(write_still=True)
+"""
     export_cmd = f"\nimport bpy\nbpy.ops.export_scene.gltf(filepath=r'{output_file}', export_format='GLB')"
 
     try:
-        run_blender(script + export_cmd, output_file)
+        run_blender(script + render_cmd + export_cmd, output_file, timeout=300)
     except TimeoutError as e:
         raise HTTPException(504, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(500, detail={"error": str(e)})
+
+    # Quality check
+    if os.path.exists(output_png):
+        try:
+            from PIL import Image
+            img = Image.open(output_png)
+            w, h = img.size
+            if w < 1920 or h < 1080:
+                logger.warning("Render quality too low: %dx%d", w, h)
+            else:
+                logger.info("Render quality OK: %dx%d", w, h)
+        except Exception as e:
+            logger.warning("Quality check failed: %s", e)
 
     if os.path.exists(output_file):
         return FileResponse(output_file, media_type="model/gltf-binary", filename=f"archai_{job_id}.glb")
