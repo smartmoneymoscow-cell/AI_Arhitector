@@ -10,7 +10,6 @@ Geometry agent handles bpy scripts; CAD agent handles precise CAD models.
 
 import logging
 import time
-import uuid
 
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 

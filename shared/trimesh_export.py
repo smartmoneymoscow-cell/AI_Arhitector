@@ -18,7 +18,6 @@ Usage:
 """
 
 import logging
-import math
 import os
 import uuid
 from typing import Optional
@@ -305,9 +304,6 @@ class TrimeshExporter:
             # Tessellate OCCT shape
             from OCP.BRepMesh import BRepMesh_IncrementalMesh
             from OCP.StlAPI import StlAPI_Writer
-            from OCP.BRep import BRep_Tool
-            from OCP.TopExp import TopExp_Explorer
-            from OCP.TopAbs import TopAbs_FACE
 
             # First export to STL (temp), then load with trimesh
             import tempfile

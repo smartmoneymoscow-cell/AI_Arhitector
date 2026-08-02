@@ -27,7 +27,6 @@ import math
 import os
 import uuid
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger("archai.cad_builder")
 
@@ -37,31 +36,17 @@ logger = logging.getLogger("archai.cad_builder")
 
 OCCT_AVAILABLE = False
 try:
-    from OCP.BRepPrimAPI import (
-        BRepPrimAPI_MakeBox,
-        BRepPrimAPI_MakePrism,
-    )
-    from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut, BRepAlgoAPI_Fuse
-    from OCP.BRepBuilderAPI import (
-        BRepBuilderAPI_MakeFace,
-        BRepBuilderAPI_MakeWire,
-        BRepBuilderAPI_MakeEdge,
-        BRepBuilderAPI_Transform,
-    )
-    from OCP.BRepMesh import BRepMesh_IncrementalMesh
-    from OCP.GC import GC_MakeSegment
-    from OCP.gp import gp_Pnt, gp_Dir, gp_Ax2, gp_Trsf, gp_Vec, gp_Ax1
-    from OCP.TopoDS import TopoDS_Shape, TopoDS_Compound
-    from OCP.BRep import BRep_Tool
-    from OCP.StlAPI import StlAPI_Writer
-    from OCP.STEPControl import STEPControl_Writer, STEPControl_AsIs
-    from OCP.IFSelect import IFSelect_RetDone
-    from OCP.GProp import GProp_GProps
-    from OCP.BRepGProp import BRepGProp
-    from OCP.TopExp import TopExp_Explorer
-    from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_SOLID
-    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeSolid
-    from OCP.TopoDS import TopoDS_Builder
+    from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox  # noqa: F401
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut  # noqa: F401
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform  # noqa: F401
+    from OCP.BRepMesh import BRepMesh_IncrementalMesh  # noqa: F401
+    from OCP.gp import gp_Pnt, gp_Trsf, gp_Vec  # noqa: F401
+    from OCP.TopoDS import TopoDS_Shape, TopoDS_Compound, TopoDS_Builder  # noqa: F401
+    from OCP.StlAPI import StlAPI_Writer  # noqa: F401
+    from OCP.STEPControl import STEPControl_Writer, STEPControl_AsIs  # noqa: F401
+    from OCP.IFSelect import IFSelect_RetDone  # noqa: F401
+    from OCP.GProp import GProp_GProps  # noqa: F401
+    from OCP.BRepGProp import BRepGProp  # noqa: F401
 
     OCCT_AVAILABLE = True
     logger.info("[cad_builder] OpenCascade (OCCT) loaded successfully")
