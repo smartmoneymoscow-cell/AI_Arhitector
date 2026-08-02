@@ -122,6 +122,7 @@ async def request_with_retry(
 # ═══════════════════════════════════════════════════════════════
 
 _redis = None
+_jobs_memory: dict[str, dict] = {}  # In-memory fallback when Redis unavailable
 
 
 def _get_redis():

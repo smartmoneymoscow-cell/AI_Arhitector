@@ -1436,6 +1436,9 @@ function addFurniture(tag,x,yB,z,W,D,fH,grp){
     m.position.set(x+ox,yB+oy,z+oz);m.castShadow=true;grp.add(m);
   };
 
+  // Shared handle color for furniture hardware
+  const handle = 0xaaaaaa;
+
   if(tag==='l'){
     // ── SOFA (3-seat sectional) ──────────────────────────
     const fc=0x4a5568,frame=0x2d3748,leg=0x8b7355,cushC=0x6b7280;
@@ -1475,7 +1478,7 @@ function addFurniture(tag,x,yB,z,W,D,fH,grp){
 
   }else if(tag==='k'){
     // ── KITCHEN ──────────────────────────────────────────
-    const cab=0xf5f5f0,counter=0xe0d8d0,handle=0xaaaaaa,app=0xd0d0d0;
+    const cab=0xf5f5f0,counter=0xe0d8d0,app=0xd0d0d0;
     // Base cabinets along back wall
     bx(W*.7,.86,.58,cab,-W*.05,.43,-D*.35,.88);
     bx(W*.7,.04,.62,counter,-W*.05,.88,-D*.33,.3);
