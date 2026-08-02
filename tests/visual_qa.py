@@ -141,12 +141,13 @@ def _call_mimo_api_direct(screenshot_path: str, question: str) -> str | None:
                     {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}},
                     {"type": "text", "text": question}
                 ]}],
-                "max_tokens": 4096,
+                "max_completion_tokens": 4096,
             },
             timeout=60,
         )
         if r.status_code == 200:
-            return r.json()["choices"][0]["message"]["content"]
+            msg = r.json()["choices"][0]["message"]
+            return msg.get("content") or msg.get("reasoning_content")
     except Exception:
         pass
     return None
