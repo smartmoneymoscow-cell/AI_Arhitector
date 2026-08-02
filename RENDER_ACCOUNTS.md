@@ -26,13 +26,13 @@
 
 ## Таблица аккаунтов
 
-| # | Аккаунт | URL | Ключи | Что работает на аккаунте | План | Статус |
-|---|---------|-----|-------|--------------------------|------|--------|
-| 1 | Gateway | `https://______.onrender.com` | `ARCH_API_KEYS` | Gateway (FastAPI), Frontend (HTML/JS), Оркестратор, Redis кеш, маршрутизация между Blender инстансами | starter | ⬜ |
-| 2 | Blender #1 | `https://______.onrender.com` | — | Blender CLI + Xvfb, EEVEE 4K рендер, превью, экспорт GLB, материалы PBR | starter | ⬜ |
-| 3 | Blender #2 | `https://______.onrender.com` | — | Blender CLI + Xvfb, EEVEE 4K рендер (параллельный), failover для #2 | starter | ⬜ |
-| 4 | Blender #3 | `https://______.onrender.com` | — | Blender CLI + Xvfb, Cycles 16K tiled рендер (4×3 тайла), тяжёлые рендеры | starter | ⬜ |
-| 5 | LLM Service | `https://______.onrender.com` | `OPENROUTER_API_KEY` | Парсинг промтов (каскад 7 LLM), Redis кеш ответов, определение типа генерации | starter | ⬜ |
+| # | Render Аккаунт | URL сервиса | Ключи | Что работает на аккаунте | Render План | Статус |
+|---|----------------|-------------|-------|--------------------------|-------------|--------|
+| 1 | Render #1 — Gateway | `https://______.onrender.com` | `ARCH_API_KEYS` | Gateway (FastAPI), Frontend (HTML/JS), Оркестратор, Redis кеш, маршрутизация между Blender инстансами | Render starter | ⬜ |
+| 2 | Render #2 — Blender #1 | `https://______.onrender.com` | — | Blender CLI + Xvfb, EEVEE 4K рендер, превью, экспорт GLB, материалы PBR | Render starter | ⬜ |
+| 3 | Render #3 — Blender #2 | `https://______.onrender.com` | — | Blender CLI + Xvfb, EEVEE 4K рендер (параллельный), failover для #2 | Render starter | ⬜ |
+| 4 | Render #4 — Blender #3 | `https://______.onrender.com` | — | Blender CLI + Xvfb, Cycles 16K tiled рендер (4×3 тайла), тяжёлые рендеры | Render starter | ⬜ |
+| 5 | Render #5 — LLM Service | `https://______.onrender.com` | `OPENROUTER_API_KEY` | Парсинг промтов (каскад 7 LLM), Redis кеш ответов, определение типа генерации | Render starter | ⬜ |
 
 ## Распределение нагрузки
 
