@@ -32,7 +32,9 @@
 | 2 | Render #2 — Blender #1 | `https://______.onrender.com` |rnd_EMiDG6qebMdjFvtm6PLiX2YLa3r8| Blender CLI + Xvfb, EEVEE 4K рендер, превью, экспорт GLB, материалы PBR | Render starter | ⬜ |
 | 3 | Render #3 — Blender #2 | `https://______.onrender.com` |rnd_aFUmcerGw2P2LlmZCIjGKBCdKycW| Blender CLI + Xvfb, EEVEE 4K рендер (параллельный), failover для #2 | Render starter | ⬜ |
 | 4 | Render #4 — Blender #3 | `https://______.onrender.com` |rnd_0mEDG5PWfVZHp8AEmgiLcOxBob6Y| Blender CLI + Xvfb, Cycles 16K tiled рендер (4×3 тайла), тяжёлые рендеры | Render starter | ⬜ |
-| 5 | Render #5 — LLM Service | `https://______.onrender.com` |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| Парсинг промтов (каскад 7 LLM), Redis кеш ответов, определение типа генерации | Render starter | ⬜ |
+| 5 | Render #5 — LLM Service | `https://______.onrender.com` | рендер ключ: rnd_RFYkXZGjJ02JNAytPIr0gobg2a6l
+
+Опен роутер ключ: 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| Парсинг промтов (каскад 7 LLM), Redis кеш ответов, определение типа генерации | Render starter | ⬜ |
 
 ## Распределение нагрузки
 
