@@ -107,7 +107,8 @@ jobs:
   visual-qa:
     name: Visual QA (AI Screenshot Analysis)
     runs-on: ubuntu-latest
-    if: always()
+    needs: [e2e-browser]
+    if: always() && !cancelled()
     steps:
       - uses: actions/checkout@v4
 
