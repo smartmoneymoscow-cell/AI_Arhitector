@@ -1,56 +1,56 @@
-# Kaggle GPU — Blender 4.0.2 Renderer
+# AI_Arhitector — Kaggle GPU Renderer
 
-## ✅ Статус: РАБОТАЕТ
+## ✅ Pipeline
 
-**GPU:** Tesla P100-PCIE-16GB (Kaggle Free)
-**Blender:** 4.0.2 portable (OptiX)
-**1080p 256 samples:** 25.8 секунд
+```
+Промт → LLM → Asset Loader → Scene Builder → Cycles GPU → Compositor → PNG
+         parse   PBR+HDRI+GLB   geometry+     P100 OptiX   Glare+CB    
+                                       materials
+```
+
+## Архитектура
+
+| Компонент | Файл | Назначение |
+|-----------|------|-----------|
+| **Asset Downloader** | `download_assets.py` | Скачивание PBR + HDRI + GLB с Poly Haven |
+| **Asset Loader** | `asset_loader.py` | PBR материалы, HDRI, импорт GLB в Blender |
+| **Enhanced Render** | `enhanced_render.py` | Полный пайплайн: геометрия + PBR + HDRI + мебель + compositor |
+| **Blender Render** | `blender_render_kaggle.py` | Базовый рендер 4K/8K/16K |
+| **Gateway Endpoint** | `gateway_kaggle_endpoint.py` | API для интеграции с Gateway |
+| **Parallel Dispatcher** | `parallel_dispatcher.py` | Мульти-аккаунт диспетчер |
 
 ## Режимы
 
-| Режим | Разрешение | Samples | Время (оценка) | Тайлы |
-|-------|-----------|---------|----------------|-------|
-| **4K** | 3840×2160 | 256 | ~1.5 мин | 1 |
-| **8K** | 7680×4320 | 256 | ~6 мин | 4 (2×2) |
-| **16K** | 15360×8640 | 2048 | ~18 мин | 12 (4×3) |
+| Режим | Разрешение | Samples | Время |
+|-------|-----------|---------|-------|
+| 4K | 3840×2160 | 256 | ~2 мин |
+| 8K | 7680×4320 | 256 | ~8 мин |
+| 16K | 15360×8640 | 2048 | ~18 мин |
 
 ## Запуск
 
 ```bash
-python3 blender_render_kaggle.py --quality 4k
-python3 blender_render_kaggle.py --quality 8k
-python3 blender_render_kaggle.py --quality 16k
+# 1. Скачать ассеты (один раз)
+python3 download_assets.py --output ./assets
+
+# 2. Загрузить как Kaggle dataset: architect-assets
+
+# 3. Рендер
+python3 enhanced_render.py --quality 4k --scene exterior
+python3 enhanced_render.py --quality 4k --scene interior --room living
+python3 enhanced_render.py --quality 16k --scene exterior
 ```
+
+## Источники ассетов (CC0)
+
+| Источник | Тип | Лицензия |
+|----------|-----|----------|
+| Poly Haven | PBR текстуры, HDRI, модели | CC0 |
+| ambientCG | PBR текстуры | CC0 |
+| Quaternius | 3D модели | CC0 |
 
 ## Kaggle Setup
 
-1. Верифицировать телефон на https://www.kaggle.com/settings/account
-2. Kernel settings: GPU = P100, Internet = On
-3. Запустить `blender_render_kaggle.py`
-
-Аккаунт: `hungerrrr2222`
-
-## Важно
-
-**НЕ использовать apt-get install blender** — ставит Blender 3.0.1 со сломанным color management (чёрные картинки). Скрипт скачивает Blender 4.0.2 portable автоматически.
-
-## Файлы
-
-| Файл | Назначение |
-|------|-----------|
-| `blender_render_kaggle.py` | Основной рендер (4K/8K/16K) |
-| `kaggle_renderer.py` | Gateway модуль |
-| `gateway_kaggle_endpoint.py` | FastAPI endpoint |
-| `parallel_dispatcher.py` | Параллельная диспетчеризация |
-| `test_kaggle_integration.py` | Тесты |
-
-## Gateway интеграция
-
-```python
-# gateway/app.py
-from gateway_kaggle_endpoint import kaggle_router
-app.include_router(kaggle_router)
-
-# POST /api/v1/render/16k/kaggle
-# GET  /api/v1/render/16k/kaggle/{job_id}
-```
+1. Верифицировать телефон на kaggle.com/settings/account
+2. Kernel: GPU = P100, Internet = On
+3. Dataset: `architect-assets` (загруженный)
