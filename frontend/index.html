@@ -2226,75 +2226,9 @@ async function _sendInner(){
   updateContextPrompts(text);
   addMsg('u',text);if(inp)inp.value='';
   // ── INTERIOR PATH ────────────────────────────────────
-  if(INTERIOR_RE.test(text)){
-    addThink(['📖 Читаю: "'+text.slice(0,55)+'"','🛋 Определяю параметры интерьера…']);
-    const ip = parseInteriorParams(text);
-    addThink(['✅ Стиль: '+ip.style+' | Мебель: '+ip.furniture.join(', '),'🖥 Генерирую интерьер…']);
-    await generateWithFallback(text, {object_type: 'interior', style: ip.style, furniture: ip.furniture});
-    return;
-  }
-
-  // ── LANDSCAPE PATH (goes through LLM for premium UX) ──
-  if(LANDSCAPE_RE.test(text)){
-    const thinkIdL = addLiveThinking('Анализирую ландшафт...');
-    appendLiveStep(thinkIdL, '🌳', 'Читаю: "'+text.slice(0,60)+'"');
-    appendLiveStep(thinkIdL, '🧠', 'AI анализирует описание участка...');
-    if(_backendOk){
-      try{
-        const rawL=await callAI(text,
-          'Ты — архитектурный AI-ассистент для ландшафтного дизайна. Отвечай СТРОГО валидным JSON (без markdown). '+
-          'Формат: {"type":"landscape","object_type":"landscape","style":"natural|japanese|english|french|minimalist|null",'+
-          '"width":30,"length":40,'+
-          '"reasoning":[{"icon":"🔍","text":"шаг","confidence":0.9}],'+
-          '"decomposition":[{"name":"Этап","description":"что делаем","service":"сервис"}],'+
-          '"comparison":[{"name":"Вариант","emoji":"🌿","description":"описание","pros":["плюс"],"cons":["минус"],"price":"цена","recommended":false}]'+
-          '} '+
-          'Адаптируй reasoning под ландшафт: рельеф, растения, зонирование, освещение. '+
-          'comparison — стили ландшафта (японский, английский, минималистичный и т.д.). '+
-          'Только JSON.', 400);
-        const jL=JSON.parse(rawL.replace(/```json|```/g,'').trim());
-        if(jL.reasoning && jL.reasoning.length>0){
-          const avg=jL.reasoning.reduce((s,r)=>s+(r.confidence||0.8),0)/jL.reasoning.length;
-          addReasoning(jL.reasoning, avg);
-        }
-        if(jL.decomposition && jL.decomposition.length>0) addDecomposition(jL.decomposition);
-        if(jL.comparison && jL.comparison.length>1) setTimeout(()=>addComparisonCards(jL.comparison),600);
-      }catch(e){console.warn('Landscape LLM failed:',e.message);}
-    }
-    appendLiveStep(thinkIdL, '🖥', 'Генерирую ландшафт...');
-    await generateWithFallback(text, {object_type: 'landscape'});
-    return;
-  }
-
-  // ── CONSTRUCTION PATH (premium UX) ──────────────────
-  if(CONSTRUCT_RE.test(text)){
-    const thinkIdC = addLiveThinking('Анализирую конструкцию...');
-    appendLiveStep(thinkIdC, '🏗', 'Читаю: "'+text.slice(0,60)+'"');
-    if(_backendOk){
-      try{
-        const rawC=await callAI(text,
-          'Ты — архитектурный AI-ассистент для конструктивных решений. Отвечай СТРОГО валидным JSON (без markdown). '+
-          'Формат: {"type":"house","object_type":"building","floors":2,"width":10,"length":12,'+
-          '"reasoning":[{"icon":"🔍","text":"шаг","confidence":0.9}],'+
-          '"decomposition":[{"name":"Этап","description":"что делаем","service":"сервис"}],'+
-          '"comparison":[{"name":"Вариант","emoji":"🏗","description":"описание","pros":["плюс"],"cons":["минус"],"price":"цена","recommended":false}]'+
-          '} '+
-          'Адаптируй reasoning под конструкцию: фундамент, каркас, перекрытия, кровля. '+
-          'comparison — типы конструкций (каркасная, монолитная, модульная и т.д.). '+
-          'Только JSON.', 400);
-        const jC=JSON.parse(rawC.replace(/```json|```/g,'').trim());
-        if(jC.reasoning && jC.reasoning.length>0){
-          const avg=jC.reasoning.reduce((s,r)=>s+(r.confidence||0.8),0)/jC.reasoning.length;
-          addReasoning(jC.reasoning, avg);
-        }
-        if(jC.decomposition && jC.decomposition.length>0) addDecomposition(jC.decomposition);
-        if(jC.comparison && jC.comparison.length>1) setTimeout(()=>addComparisonCards(jC.comparison),600);
-      }catch(e){console.warn('Construction LLM failed:',e.message);}
-    }
-    appendLiveStep(thinkIdC, '🖥', 'Генерирую конструкцию...');
-    await generateWithFallback(text, {object_type: 'building'});
-    return;
-  }
+  // ── UNIFIED PATH: ALL types → one LLM call ──
+  // LLM decides: type, reasoning, decomposition, references, comparison, clarification
+  // Building, interior, landscape, construction, bathhouse, hotel — everything
 
   // ── BUILDING PATH ────────────────────────────────────
   if(BUILD_RE.test(text)||text.length>6){
@@ -2311,10 +2245,12 @@ async function _sendInner(){
         appendLiveStep(thinkId, '🧠', 'AI анализирует описание через каскад LLM...');
         await new Promise(r => setTimeout(r, 200));
         const raw=await callAI(text,
-          'Ты — архитектурный AI-ассистент. Анализируешь запрос пользователя и возвращаешь СТРОГО валидный JSON (без markdown). '+
+          'Ты — архитектурный AI-ассистент. Анализируешь ЗАПРОС ЛЮБОГО ТИПА: дом, баня, отель, офис, гараж, беседка, сарай, теплица, '+
+          'мастерская, склад, детская, спальня, кухня, ландшафт, сад, терраса, бассейн, забор, навес — что угодно. '+
+          'Возвращаешь СТРОГО валидный JSON (без markdown). '+
           'Формат: {'+
-          '"type":"house|office|cottage|villa|hotel|tourism_complex|bathhouse|warehouse|school|apartment|townhouse|interior|room",'+
-          '"object_type":"building|interior|room|landscape",'+
+          '"type":"ЛЮБОЕ_СЛОВО_ОПИСЫВАЮЩЕЕ_ОБЪЕКТ",'+
+          '"object_type":"building|interior|room|landscape",
           '"room_type":"children|bedroom|living|kitchen|bathroom|study|dining|null",'+
           '"style":"classic|modern|minimalist|loft|scandinavian|provence|hitech|japanese|null",'+
           '"floors":2,"width":10,"length":12,"roof_type":"gabled|flat|hip",'+
@@ -2337,6 +2273,9 @@ async function _sendInner(){
           '• clarification — массив уточняющих вопросов. Задавай ЕСЛИ запрос неоднозначен (confidence < 0.7) или критичные параметры не указаны. Не задавай если всё ясно. '+
           '  Каждый вопрос: {field:"имя_поля", text:"вопрос", options:["вар1","вар2"], visual_options:[{id:"A", title:"Название", description:"описание", pros:["+"], cons:["-"], price_range:"цена", recommended:false}]} '+
           '  visual_options — для важных решений (материал, кровля, фундамент). options — для простых (этажность, размер). '+
+          '• references — массив 3-6 референсов для поиска. Каждый: {query:"поисковый запрос", style:"стиль", type:"building|interior|landscape"}. '+
+          '  Запросы на английском для лучшего поиска. Пример: {query:"modern minimalist house exterior", style:"modern", type:"building"} '+
+          '  Для интерьера: {query:"loft kitchen interior design", style:"loft", type:"interior"} '+
           '• Ты решаешь ЧТО показывать — адаптируй под тип задачи. Для интерьера — про стиль/мебель. Для здания — про материалы/кровлю. Для ландшафта — про растения/рельеф. Для отеля — про номера/инфраструктуру. '+
           'Только JSON, ничего больше.',
           500);
@@ -2375,9 +2314,14 @@ async function _sendInner(){
             setTimeout(() => addComparisonCards(j.comparison), 600);
           }
           
+          // ═══ PREMIUM: Reference search + gallery ═══
+          if(j.references && j.references.length > 0) {
+            setTimeout(() => searchAndShowReferences(j.references), 400);
+          }
+          
           // ═══ PREMIUM: Dynamic clarification questions from LLM ═══
           if(j.clarification && j.clarification.length > 0) {
-            setTimeout(() => addClarification(j.clarification, j, 0.5), 900);
+            setTimeout(() => addClarification(j.clarification, j, 0.5), 1200);
           }
         }
       }catch(e){console.warn('LLM parse failed:',e.message);}
@@ -2389,47 +2333,31 @@ async function _sendInner(){
       appendLiveStep(thinkId, '📝', 'LLM недоступен — локальный анализ (regex)');
     }
 
-    // Step 2.5: If LLM detected interior — route to interior path
-    if(parsed.object_type === 'interior' || parsed.object_type === 'room'){
-      const roomType = parsed.room_type || 'living';
-      const style = parsed.style || 'modern';
+    // ═══ UNIFIED ROUTING: LLM decides object_type, we just route ═══
+    const objType = parsed.object_type || 'building';
+    appendLiveStep(thinkId, '🎯', 'Тип: '+objType+' | Генерирую...');
+    
+    // Build params based on LLM response
+    const genParams = {object_type: objType};
+    if(parsed.style) genParams.style = parsed.style;
+    if(parsed.room_type) {
+      genParams.room_type = parsed.room_type;
       const furnitureMap = {children:['bed','desk','wardrobe','bookshelf'],bedroom:['bed','nightstand','wardrobe','dresser'],living:['sofa','tv','coffee_table','bookshelf'],kitchen:['fridge','stove','table','chairs'],bathroom:['bathtub','sink','toilet','mirror'],study:['desk','chair','bookshelf','lamp'],dining:['table','chairs','sideboard','chandelier']};
-      const furniture = furnitureMap[roomType] || furnitureMap.living;
-      const roomNames = {children:'Детская',bedroom:'Спальня',living:'Гостиная',kitchen:'Кухня',bathroom:'Ванная',study:'Кабинет',dining:'Столовая'};
-      appendLiveStep(thinkId, '🏠', 'Тип помещения: '+(roomNames[roomType]||roomType));
-      appendLiveStep(thinkId, '🎨', 'Стиль: '+style);
-      appendLiveStep(thinkId, '🪑', 'Мебель: '+furniture.join(', '));
-      
-      // ═══ PREMIUM: Dynamic reasoning from LLM ═══
-      if(j.reasoning && j.reasoning.length > 0) {
-        const avgConf = j.reasoning.reduce((s,r) => s + (r.confidence||0.8), 0) / j.reasoning.length;
-        addReasoning(j.reasoning, avgConf);
-      }
-      
-      // ═══ PREMIUM: Dynamic decomposition from LLM ═══
-      if(j.decomposition && j.decomposition.length > 0) {
-        addDecomposition(j.decomposition);
-      }
-      
-      appendLiveStep(thinkId, '🖥', 'Генерирую 3D интерьер...');
-      await generateWithFallback(text, {object_type: 'interior', style: style, furniture: furniture});
-      
-      // ═══ PREMIUM: Dynamic comparison from LLM ═══
-      if(j.comparison && j.comparison.length > 1) {
-        setTimeout(() => addComparisonCards(j.comparison), 600);
-      }
-      
-      // ═══ PREMIUM: Dynamic clarification questions from LLM ═══
-      if(j.clarification && j.clarification.length > 0) {
-        setTimeout(() => addClarification(j.clarification, j, 0.5), 900);
-      }
-      return;
+      genParams.furniture = furnitureMap[parsed.room_type] || furnitureMap.living;
     }
-
-    // Step 3: Try Blender server, fallback to local Three.js
-    appendLiveStep(thinkId, '🖥', 'Генерирую 3D модель через Blender...');
-    await new Promise(r => setTimeout(r, 200));
-    await generateWithFallback(text, {object_type: 'building'});
+    
+    await generateWithFallback(text, genParams);
+    
+    // ═══ PREMIUM: All dynamic components from LLM (same for ANY type) ═══
+    if(j.comparison && j.comparison.length > 1) {
+      setTimeout(() => addComparisonCards(j.comparison), 600);
+    }
+    if(j.references && j.references.length > 0) {
+      setTimeout(() => searchAndShowReferences(j.references), 400);
+    }
+    if(j.clarification && j.clarification.length > 0) {
+      setTimeout(() => addClarification(j.clarification, j, 0.5), 1200);
+    }
     return;
   }
   // General chat — try local generation as last resort
@@ -3019,6 +2947,79 @@ function selectReference(el, idx) {
   document.querySelectorAll('.ref-card').forEach(c => c.classList.remove('selected'));
   el.classList.add('selected');
   if (window._refOnSelect && window._refData) window._refOnSelect(window._refData[idx]);
+}
+
+// ═══ PREMIUM: Search references with animated progress ═══
+async function searchAndShowReferences(refs) {
+  const area = document.getElementById('tab-chat'); if (!area) return;
+  
+  // 1. Show searching animation
+  const searchId = 'ref-search-' + Date.now();
+  const searchEl = document.createElement('div'); searchEl.className = 'msg a'; searchEl.id = searchId;
+  searchEl.innerHTML = `
+    <div class="ref-gallery" style="min-width:300px">
+      <div class="ref-title">🔍 <span class="pulse-dot"></span> Ищу референсы...</div>
+      <div style="display:flex;flex-direction:column;gap:6px" class="ref-search-steps">
+        ${refs.map((r, i) => `
+          <div class="ref-search-step" id="rss-${searchId}-${i}" style="display:flex;align-items:center;gap:8px;font-size:11px;color:#9a3412;opacity:0.4;transition:all .3s">
+            <div style="width:16px;height:16px;border-radius:50%;background:#fed7aa;display:flex;align-items:center;justify-content:center;font-size:9px" class="rss-icon">⏳</div>
+            <span>${r.query || r.style || 'Референс ' + (i+1)}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  area.appendChild(searchEl); area.scrollTop = area.scrollHeight;
+  
+  // 2. Search each reference with delay (animated)
+  const allResults = [];
+  for (let i = 0; i < refs.length; i++) {
+    const stepEl = document.getElementById(`rss-${searchId}-${i}`);
+    if (stepEl) { stepEl.style.opacity = '1'; stepEl.querySelector('.rss-icon').textContent = '🔄'; }
+    
+    try {
+      // Call vectordb search
+      const refQuery = refs[i];
+      const queryText = refQuery.query || refQuery.style || '';
+      const resp = await fetch(`/api/v1/vectordb/search_by_prompt`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({prompt: queryText, limit: 3, style_filter: refQuery.style || '', type_filter: refQuery.type || ''})
+      });
+      
+      if (resp.ok) {
+        const data = await resp.json();
+        const results = data.results || [];
+        allResults.push(...results.map(r => ({...r, source_query: queryText})));
+        if (stepEl) {
+          stepEl.querySelector('.rss-icon').textContent = results.length > 0 ? '✅' : '⬜';
+          stepEl.querySelector('span').textContent += results.length > 0 ? ` → ${results.length} найдено` : ' → нет результатов';
+        }
+      } else {
+        if (stepEl) stepEl.querySelector('.rss-icon').textContent = '❌';
+      }
+    } catch(e) {
+      if (stepEl) stepEl.querySelector('.rss-icon').textContent = '❌';
+    }
+    
+    await new Promise(r => setTimeout(r, 400)); // delay for animation
+  }
+  
+  // 3. Show final results as gallery
+  if (allResults.length > 0) {
+    // Remove search animation
+    searchEl.remove();
+    // Show gallery
+    addReferenceGallery(allResults.slice(0, 9), (selected) => {
+      addMsg('a', `🎨 Выбран референс: <b>${selected.prompt || selected.style || ''}</b><br>Стиль будет применён к проекту.`);
+    });
+  } else {
+    // No results — update search box
+    const stepsContainer = searchEl.querySelector('.ref-search-steps');
+    if (stepsContainer) {
+      stepsContainer.innerHTML = '<div style="font-size:11px;color:#9a3412;padding:4px 0">Референсы не найдены в базе. Сгенерированный проект будет уникальным.</div>';
+    }
+  }
 }
 
 // ═══ PREMIUM: Variant Cards with 3D previews ═══
