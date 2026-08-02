@@ -159,8 +159,8 @@ body{display:flex;flex-direction:column}
 <body>
 <div id="sb-overlay" onclick="toggleSB()" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.4);z-index:39"></div>
 <div class="top">
-  <button id="mob-btn" onclick="toggleSB()" style="display:none;width:32px;height:32px;border-radius:8px;border:none;background:transparent;cursor:pointer;font-size:18px;margin-right:8px">☰</button>
-  <button onclick="toggleProjSidebar()" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--bdr);background:var(--bg2);cursor:pointer;font-size:14px;margin-right:8px" title="Проекты">📂</button>
+  <button id="mob-btn" onclick="toggleSB()" style="display:none;width:32px;height:32px;border-radius:8px;border:none;background:transparent;cursor:pointer;font-size:18px;margin-right:8px">≡</button>
+  <button onclick="toggleProjSidebar()" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--bdr);background:var(--bg2);cursor:pointer;font-size:14px;margin-right:8px" title="Проекты"></button>
   <div style="display:flex;align-items:center;gap:10px">
     <div class="logo" style="font-size:15px;font-weight:600">
       <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;vertical-align:middle">A</span>
@@ -176,8 +176,8 @@ body{display:flex;flex-direction:column}
   <!-- PROJECTS SIDEBAR -->
   <div id="proj-sidebar" style="width:0;overflow:hidden;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--bdr);transition:width .2s;display:flex;flex-direction:column">
     <div style="padding:10px 12px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between">
-      <span style="font-size:12px;font-weight:700;color:var(--txt)">📂 Проекты</span>
-      <button onclick="toggleProjSidebar()" style="border:none;background:transparent;cursor:pointer;font-size:14px;color:var(--txt2)">✕</button>
+      <span style="font-size:12px;font-weight:700;color:var(--txt)">Проекты</span>
+      <button onclick="toggleProjSidebar()" style="border:none;background:transparent;cursor:pointer;font-size:14px;color:var(--txt2)">×</button>
     </div>
     <div id="proj-list" style="flex:1;overflow-y:auto;padding:8px">
       <div style="text-align:center;padding:20px 0;color:var(--txt2);font-size:11px">Нет проектов</div>
@@ -208,7 +208,7 @@ body{display:flex;flex-direction:column}
           <div class="pr"><span class="pk">Кровля</span><span class="pv" id="p-roof">—</span></div>
           <div class="pr"><span class="pk">Объектов</span><span class="pv" id="p-mesh">—</span></div>
         </div>
-        <button class="btn" style="width:100%;justify-content:center" onclick="rebuild()">↺ Перегенерировать</button>
+        <button class="btn" style="width:100%;justify-content:center" onclick="rebuild()">↻ Перегенерировать</button>
       </div>
     </div>
     <!-- ROOMS TAB -->
@@ -221,17 +221,17 @@ body{display:flex;flex-direction:column}
     <div class="ci">
       <div class="ibox">
         <input type="file" id="fileIn" accept="image/*,.pdf" style="display:none" onchange="handleFile(this.files[0])">
-        <button class="sbtn" style="background:#475569" onclick="document.getElementById('fileIn').click()" title="Загрузить фото дома или чертёж">📷</button>
+        <button class="sbtn" style="background:#475569" onclick="document.getElementById('fileIn').click()" title="Загрузить фото дома или чертёж">⊙</button>
         <textarea class="ita" id="ci" placeholder="Опишите что хотите построить или спроектировать…" rows="3"
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"
           oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
-        <button class="sbtn" id="mic-btn" onclick="toggleMic()" style="background:#64748b" title="Голосовой ввод">🎤</button>
-        <button class="sbtn" onclick="send()">➤</button>
+        <button class="sbtn" id="mic-btn" onclick="toggleMic()" style="background:#64748b" title="Голосовой ввод">&#9654;</button>
+        <button class="sbtn" onclick="send()">></button>
       </div>
       <div id="filePreview" style="display:none;margin-top:6px;padding:6px;background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;font-size:11px;align-items:center;gap:6px">
         <img id="filePreviewImg" style="width:36px;height:36px;object-fit:cover;border-radius:5px"/>
         <span id="filePreviewName" style="flex:1;color:var(--txt2)"></span>
-        <button class="btn" style="padding:2px 8px" onclick="clearFile()">✕</button>
+        <button class="btn" style="padding:2px 8px" onclick="clearFile()">×</button>
       </div>
     </div>
   </div>
@@ -247,14 +247,14 @@ body{display:flex;flex-direction:column}
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn" onclick="resetCam()">⊙ Центр</button>
-        <button class="btn" id="ann-btn" onclick="togAnn()">📐 Размеры</button>
-        <button class="btn" id="wire-btn" onclick="togWire()">⬡ Каркас</button>
-        <button class="btn" id="sel-btn" onclick="toggleSelect()">✂ Выделить</button>
+        <button class="btn" id="ann-btn" onclick="togAnn()">Размеры</button>
+        <button class="btn" id="wire-btn" onclick="togWire()">◇ Каркас</button>
+        <button class="btn" id="sel-btn" onclick="toggleSelect()">Выделить</button>
       </div>
     </div>
     <div class="cwrap" id="cwrap">
       <div class="empt" id="empt">
-        <div class="empt-icon">🏗</div>
+        <div class="empt-icon" style="font-size:48px;color:#94a3b8">◆</div>
         <div class="empt-title">Опишите здание или интерьер</div>
         <div class="empt-sub">Напишите что хотите построить или спроектировать — 3D появится сразу</div>
       </div>
@@ -268,7 +268,7 @@ body{display:flex;flex-direction:column}
       </div>
       <div class="lbadge" id="lbadge"></div>
       <div class="fnav" id="fnav"></div>
-      <div class="hint" id="hint">🖱 тащи = вращение · колесо = масштаб · дбл.клик = интерьер</div>
+      <div class="hint" id="hint"> тащи = вращение · колесо = масштаб · дбл.клик = интерьер</div>
     </div>
   </div>
 </div>
@@ -321,20 +321,20 @@ function toggleMic() {
 
   recognition.onstart = () => {
     isListening = true;
-    if (btn) { btn.style.background = '#ef4444'; btn.textContent = '⏹'; }
+    if (btn) { btn.style.background = '#ef4444'; btn.textContent = '■'; }
   };
 
   recognition.onend = () => {
     isListening = false;
     recognition = null;
-    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
+    if (btn) { btn.style.background = '#64748b'; btn.textContent = '&#9654;'; }
   };
 
   recognition.onerror = (e) => {
     console.warn('Voice error:', e.error);
     isListening = false;
     recognition = null;
-    if (btn) { btn.style.background = '#64748b'; btn.textContent = '🎤'; }
+    if (btn) { btn.style.background = '#64748b'; btn.textContent = '&#9654;'; }
     if (e.error === 'not-allowed') showNotif('Разрешите доступ к микрофону', 'warn');
   };
 
@@ -911,7 +911,7 @@ function checkLOD(){
   const lb=document.getElementById('lbadge');
   if(radius<th&&ST.lod!=='interior'){
     ST.lod='interior';showIntMode();
-    if(lb){lb.textContent='🏠 Интерьер — комнаты с мебелью';lb.style.display='block';}
+    if(lb){lb.textContent='Интерьер — комнаты с мебелью';lb.style.display='block';}
   }else if(radius>=th&&ST.lod==='interior'){
     ST.lod='exterior';hideIntMode();
     if(lb)lb.style.display='none';
@@ -1719,7 +1719,7 @@ const GSTEPS_INTERIOR=[{l:'Читаю описание'},{l:'Анализиру�
 var GSTEPS=GSTEPS_BUILDING;
 function renderGS(ai){
   const el=document.getElementById('gsteps');if(!el)return;
-  el.innerHTML=GSTEPS.map((s,i)=>`<div class="gs ${i<ai?'done':i===ai?'active':''}">${i<ai?'✅':i===ai?'⟳':'○'} ${s.l}</div>`).join('');
+  el.innerHTML=GSTEPS.map((s,i)=>`<div class="gs ${i<ai?'done':i===ai?'active':''}">${i<ai?'—':i===ai?'›':'○'} ${s.l}</div>`).join('');
 }
 
 // ═══════════════════ UNIFIED GENERATE WITH FALLBACK (Step 1.4) ═══════════════════
@@ -1735,7 +1735,7 @@ async function generateWithFallback(prompt, params) {
     }
     if(_backendOk) {
       try {
-        addThink(['🖥 Запрос к серверу рендеринга…']);
+        addThink(['Запрос к серверу рендеринга…']);
         const ctrl = new AbortController();
         const tid = setTimeout(()=>ctrl.abort(), 90000);
         const r = await fetch(API_BASE + '/api/v1/generate', {
@@ -1758,7 +1758,7 @@ async function generateWithFallback(prompt, params) {
         }
       } catch(e) {
         if(e.name === 'AbortError') {
-          addMsg('a', '⚠️ Сервер не ответил за 90 секунд. Перехожу на локальный рендер…');
+          addMsg('a', 'Сервер не ответил за 90 секунд. Перехожу на локальный рендер…');
         } else {
           console.warn('Server generate failed:', e.message);
         }
@@ -1767,7 +1767,7 @@ async function generateWithFallback(prompt, params) {
   }
 
   // Шаг 2: Fallback на локальный Three.js
-  addThink(['⚠️ Сервер недоступен, рендерю локально в браузере…']);
+  addThink(['Сервер недоступен, рендерю локально в браузере…']);
 
   if(isInterior || isLandscape) {
     // Interior/landscape → локальная генерация через parseLocal + startGen
@@ -1791,7 +1791,7 @@ async function generateWithFallback(prompt, params) {
 }
 
 async function _loadGLBBlob(blob) {
-  addThink(['📦 Модель получана: ' + (blob.size/1024).toFixed(1) + ' KB', '🔄 Загружаю в 3D viewer…']);
+  addThink(['Модель получана: ' + (blob.size/1024).toFixed(1) + ' KB', 'Загружаю в 3D viewer…']);
   const url = URL.createObjectURL(blob);
   const loader = new THREE.GLTFLoader();
 
@@ -1825,8 +1825,8 @@ async function _loadGLBBlob(blob) {
       document.getElementById('c3d').style.display = 'block';
       document.getElementById('empt').style.display='none';
       URL.revokeObjectURL(url);
-      addMsg('a', '✅ <b>Модель сгенерирована</b><br>📦 ' + (blob.size/1024).toFixed(1) + ' KB');
-      showNotif('✅ Модель загружена');
+      addMsg('a', '<b>Модель сгенерирована</b><br>' + (blob.size/1024).toFixed(1) + ' KB');
+      showNotif('Модель загружена');
       resolve(true);
     }, null, (err) => {
       console.warn('GLB load failed:', err);
@@ -1853,8 +1853,8 @@ function _showInteriorImage(blob) {
   if(c3d) c3d.style.display = 'none';
   ST.hasModel = true;
   ST.isInterior = true;
-  addMsg('a', '✅ <b>Интерьер сгенерирован</b>');
-  showNotif('✅ Интерьер готов');
+  addMsg('a', '<b>Интерьер сгенерирован</b>');
+  showNotif('Интерьер готов');
   return true;
 }
 
@@ -1907,7 +1907,7 @@ function startGen(bld){
   GSTEPS = (bld.isInterior || bld.type === 'room') ? GSTEPS_INTERIOR : GSTEPS_BUILDING;
   // Check THREE.js availability
   if(typeof THREE === 'undefined' || typeof buildModel !== 'function') {
-    addMsg('a', '❌ 3D-движок не загружен. Проверьте подключение к интернету (Three.js CDN) и обновите страницу.');
+    addMsg('a', '3D-движок не загружен. Проверьте подключение к интернету (Three.js CDN) и обновите страницу.');
     showNotif('Ошибка 3D-движка','warn');
     return;
   }
@@ -1955,11 +1955,11 @@ function doFinish(bld,ov,gf){
       const c3dEl=document.getElementById('c3d');if(c3dEl)c3dEl.style.display='none';
       // Avoid infinite retry loop if renderer/scene never initialized (e.g. THREE failed to load)
       if(buildError.message.includes('scene is null')||buildError.message.includes('renderer is null')){
-        addMsg('a','❌ 3D-движок не инициализирован: '+buildError.message+'<br>Проверьте подключение к интернету (Three.js CDN) и обновите страницу.');
+        addMsg('a','3D-движок не инициализирован: '+buildError.message+'<br>Проверьте подключение к интернету (Three.js CDN) и обновите страницу.');
         showNotif('Ошибка 3D-движка','warn');
         return;
       }
-      addMsg('a','❌ Ошибка: '+buildError.message+'<br>Повторяю с базовым шаблоном…');
+      addMsg('a','Ошибка: '+buildError.message+'<br>Повторяю с базовым шаблоном…');
       if(!window._retried){
         window._retried=true;
         setTimeout(()=>startGen(JSON.parse(JSON.stringify(TPLS.house))),800);
@@ -1975,20 +1975,20 @@ function doFinish(bld,ov,gf){
     // Show hints/nav
     const hint=document.getElementById('hint');if(hint)hint.style.display='block';
     fillUI(bld,meshCount);buildFloorNav(bld);resetCam();
-    showNotif('✅ '+bld.label+' | '+meshCount+' объектов');
+    showNotif(''+bld.label+' | '+meshCount+' объектов');
     addMsg('a',
-      '✅ <b>'+(bld.label||bld.type||'Здание')+'</b> построено!<br>'+
+      '<b>'+(bld.label||bld.type||'Здание')+'</b> построено!<br>'+
       bld.floors+' эт. | '+bld.W+'×'+bld.L+' м | '+((bld.floors*bld.fH)||0).toFixed(1)+' м<br>'+
-      '📦 <b>'+meshCount+'</b> объектов | <b>'+(bld.rooms||[]).length+'</b> помещений<br><br>'+
-      '🔍 Колесо мыши → приближение → интерьер<br>'+
-      '👆 Дбл.клик / "Внутри" → вид изнутри'
+      '<b>'+meshCount+'</b> объектов | <b>'+(bld.rooms||[]).length+'</b> помещений<br><br>'+
+      'Колесо мыши → приближение → интерьер<br>'+
+      'Дбл.клик / "Внутри" → вид изнутри'
     );
     // ═══ PREMIUM: Show material comparison after build ═══
     setTimeout(()=>{
       addComparisonCards([
-        {name:bld.mat||'Штукатурка', emoji:'🏗', description:'Текущий материал фасада', pros:['Выбран для данного проекта'], cons:[], price:'Текущий вариант', recommended:true},
-        {name:'Кирпич', emoji:'🧱', description:'Классический материал', pros:['Прочность 100+ лет','Экологичный'], cons:['Дороже на 30%','Долгий монтаж'], price:'~4500 ₽/м²'},
-        {name:'Дерево', emoji:'🪵', description:'Экологичный', pros:['Тепло','Красивый вид'], cons:['Усадка 1-2 года','Биозащита'], price:'~3800 ₽/м²'},
+        {name:bld.mat||'Штукатурка', emoji:'»', description:'Текущий материал фасада', pros:['Выбран для данного проекта'], cons:[], price:'Текущий вариант', recommended:true},
+        {name:'Кирпич', emoji:'◆', description:'Классический материал', pros:['Прочность 100+ лет','Экологичный'], cons:['Дороже на 30%','Долгий монтаж'], price:'~4500 ₽/м²'},
+        {name:'Дерево', emoji:'◆', description:'Экологичный', pros:['Тепло','Красивый вид'], cons:['Усадка 1-2 года','Биозащита'], price:'~3800 ₽/м²'},
       ]);
     }, 800);
   },350);
@@ -2014,10 +2014,10 @@ function handleFile(file){
     const name=document.getElementById('filePreviewName');
     if(file.type.startsWith('image/'))img.src=e.target.result;
     else img.src='';
-    name.textContent='📎 '+escHtml(file.name)+' ('+Math.round(file.size/1024)+' KB) — анализирую как '+(file.type.includes('pdf')?'чертёж':'фото')+' здания';
+    name.textContent='» '+escHtml(file.name)+' ('+Math.round(file.size/1024)+' KB) — анализирую как '+(file.type.includes('pdf')?'чертёж':'фото')+' здания';
     prev.style.display='flex';
     const inp=document.getElementById('ci');
-    if(inp && !inp.value.trim())inp.placeholder='Нажмите ➤ чтобы проанализировать изображение и сгенерировать модель';
+    if(inp && !inp.value.trim())inp.placeholder='Нажмите > чтобы проанализировать изображение и сгенерировать модель';
   };
   reader.readAsDataURL(file);
 }
@@ -2092,7 +2092,7 @@ function loadHDRI(preset) {
       scene.background  = envMap;
       texture.dispose();
       pmrem.dispose();
-      showNotif('🌤 HDRI: ' + preset);
+      showNotif('HDRI: ' + preset);
     }, undefined, () => {
       // Fallback: procedural env when offline
       applyProceduralEnv();
@@ -2135,7 +2135,7 @@ function applyStylePreset(key){
     Object.assign(ST,{mat:s.mat,roof:s.roof,fH:s.fH,fc:s.fc,rc:s.rc,tc:s.tc,dc:s.dc,
       winType:s.winType,winFrame:s.winFrame,winColor:s.winColor});
     try{buildModel(ST);}catch(e){}
-    addMsg('a','✅ Стиль <b>'+s.label+'</b> применён. Хотите что-то изменить?');
+    addMsg('a','Стиль <b>'+s.label+'</b> применён. Хотите что-то изменить?');
   } else {
     go(s.prompt);
   }
@@ -2151,7 +2151,7 @@ async function send(){
     if(ov) ov.style.display='none';
     const c3d=document.getElementById('c3d');
     if(c3d) c3d.style.display='none';
-    addMsg('a', '❌ Произошла ошибка: ' + (e.message || e) + '<br>Попробуйте ещё раз или обновите страницу.');
+    addMsg('a', 'Произошла ошибка: ' + (e.message || e) + '<br>Попробуйте ещё раз или обновите страницу.');
     showNotif('Ошибка генерации', 'warn');
   }
 }
@@ -2176,15 +2176,15 @@ async function _sendInner(){
   if(pendingFileB64){
     const fname=pendingFile.name, mtype=pendingFile.type||'image/jpeg';
     const isPdf=mtype.includes('pdf');
-    addMsg('u',(text?text+'<br>':'')+'📎 <i>'+fname+'</i>');
+    addMsg('u',(text?text+'<br>':'')+'<i>'+fname+'</i>');
     if(inp)inp.value='';
     const fb64=pendingFileB64, ftext=text;
     clearFile();
     if(isPdf){
-      addMsg('a','📄 PDF-чертежи: распознавание размеров и стен (PaddleOCR/Florence-2) выполняется на сервере — см. <code>backend/app/agents</code>. В браузерной демке PDF не анализируется, но вы можете описать здание текстом.');
+      addMsg('a','PDF-чертежи: распознавание размеров и стен (PaddleOCR/Florence-2) выполняется на сервере — см. <code>backend/app/agents</code>. В браузерной демке PDF не анализируется, но вы можете описать здание текстом.');
       return;
     }
-    addThink(['🖼 Анализирую изображение (AI Vision)…','📐 Определяю тип, материалы, пропорции, кровлю…']);
+    addThink(['» Анализирую изображение (AI Vision)…','Определяю тип, материалы, пропорции, кровлю…']);
     try{
       const vis=await analyzeImage(fb64,mtype,ftext);
       const parsed=parseLocal(ftext||'');
@@ -2196,10 +2196,10 @@ async function _sendInner(){
       const bld=applyParams(ftext||('здание по фото: '+fname),parsed);
       const conf=vis.confidence!=null?vis.confidence:80;
       addThink([
-        '✅ '+(vis.description||bld.label),
-        '🎯 Достоверность реконструкции: '+conf+'%',
-        '📐 '+bld.W+'×'+bld.L+'м | '+bld.floors+' эт. | '+bld.mat+(bld.fc?(' | '+bld.fc):''),
-        '🚀 Генерирую 3D-модель по фото…'
+        ''+(vis.description||bld.label),
+        'Достоверность реконструкции: '+conf+'%',
+        ''+bld.W+'×'+bld.L+'м | '+bld.floors+' эт. | '+bld.mat+(bld.fc?(' | '+bld.fc):''),
+        'Генерирую 3D-модель по фото…'
       ]);
       setTimeout(()=>startGen(bld),300);
     }catch(e){
@@ -2210,7 +2210,7 @@ async function _sendInner(){
       // dead end: fall back to text-based parsing of whatever they typed
       // plus the filename, and still generate a model.
       console.error('Vision analysis failed:',e);
-      addMsg('a','❌ Анализ фото не удался: '+e.message+'. Попробуйте описать здание текстом или загрузить другое фото.');
+      addMsg('a','Анализ фото не удался: '+e.message+'. Попробуйте описать здание текстом или загрузить другое фото.');
       showNotif('Анализ фото не удался','warn');
     }
     return;
@@ -2234,15 +2234,15 @@ async function _sendInner(){
   if(BUILD_RE.test(text)||text.length>6){
     // ═══ PREMIUM: Live thinking with animated steps ═══
     const thinkId = addLiveThinking('Анализирую запрос...');
-    appendLiveStep(thinkId, '📖', 'Читаю: "'+text.slice(0,60)+'"');
+    appendLiveStep(thinkId, '»', 'Читаю: "'+text.slice(0,60)+'"');
     await new Promise(r => setTimeout(r, 300));
-    appendLiveStep(thinkId, '🔍', 'Извлекаю параметры из описания...');
+    appendLiveStep(thinkId, '»', 'Извлекаю параметры из описания...');
     
     // Step 1: LLM parsing FIRST (understands any natural language)
     let parsed=null;
     if(_backendOk){
       try{
-        appendLiveStep(thinkId, '🧠', 'AI анализирует описание через каскад LLM...');
+        appendLiveStep(thinkId, '»', 'AI анализирует описание через каскад LLM...');
         await new Promise(r => setTimeout(r, 200));
         const raw=await callAI(text,
           'Ты — архитектурный AI-ассистент. Анализируешь ЗАПРОС ЛЮБОГО ТИПА: дом, баня, отель, офис, гараж, беседка, сарай, теплица, '+
@@ -2256,9 +2256,9 @@ async function _sendInner(){
           '"floors":2,"width":10,"length":12,"roof_type":"gabled|flat|hip",'+
           '"facade_material":"brick|wood|glass|plaster|stone","facade_color":null,'+
           '"has_balcony":false,"has_terrace":false,"has_garage":false,'+
-          '"reasoning":[{"icon":"🔍","text":"описание шага","confidence":0.9}],'+
+          '"reasoning":[{"icon":"»","text":"описание шага","confidence":0.9}],'+
           '"decomposition":[{"name":"Этап","description":"что делаем","service":"сервис"}],'+
-          '"comparison":[{"name":"Вариант","emoji":"🏗","description":"описание","pros":["плюс"],"cons":["минус"],"price":"цена","recommended":false}]'+
+          '"comparison":[{"name":"Вариант","emoji":"◆","description":"описание","pros":["плюс"],"cons":["минус"],"price":"цена","recommended":false}]'+
           '} '+
           'Правила: '+
           '• null = не упомянуто. '+
@@ -2296,7 +2296,7 @@ async function _sendInner(){
             has_terrace: !!j.has_terrace,
             has_garage: !!j.has_garage
           };
-          appendLiveStep(thinkId, '✅', 'Определено: '+parsed.type+(parsed.floors?', '+parsed.floors+' этажей':'')+(parsed.width?', '+parsed.width+'×'+parsed.length+'м':''));
+          appendLiveStep(thinkId, '»', 'Определено: '+parsed.type+(parsed.floors?', '+parsed.floors+' этажей':'')+(parsed.width?', '+parsed.width+'×'+parsed.length+'м':''));
           
           // ═══ PREMIUM: Dynamic reasoning from LLM ═══
           if(j.reasoning && j.reasoning.length > 0) {
@@ -2330,12 +2330,12 @@ async function _sendInner(){
     // Step 2: Fallback to regex if LLM unavailable
     if(!parsed){
       parsed=parseLocal(text);
-      appendLiveStep(thinkId, '📝', 'LLM недоступен — локальный анализ (regex)');
+      appendLiveStep(thinkId, '»', 'LLM недоступен — локальный анализ (regex)');
     }
 
     // ═══ UNIFIED ROUTING: LLM decides object_type, we just route ═══
     const objType = parsed.object_type || 'building';
-    appendLiveStep(thinkId, '🎯', 'Тип: '+objType+' | Генерирую...');
+    appendLiveStep(thinkId, '»', 'Тип: '+objType+' | Генерирую...');
     
     // Build params based on LLM response
     const genParams = {object_type: objType};
@@ -2364,8 +2364,8 @@ async function _sendInner(){
   const parsed = parseLocal(text);
   if(parsed && (parsed.type || parsed.width)) {
     const thinkId2 = addLiveThinking('Анализирую...');
-    appendLiveStep(thinkId2, '📝', 'Локальный анализ параметров...');
-    appendLiveStep(thinkId2, '🖥', 'Генерирую 3D модель...');
+    appendLiveStep(thinkId2, '»', 'Локальный анализ параметров...');
+    appendLiveStep(thinkId2, '»', 'Генерирую 3D модель...');
     const bld = applyParams(text, parsed);
     startGen(bld);
     return;
@@ -2403,7 +2403,7 @@ function enterInterior(){
   showActiveFloor();
   const b=ST.bld,flY=ST.curFloor*b.fH+b.fH*.5;
   phi=.42;radius=Math.max(b.W,b.L)*.72;panX=0;panY=flY-1.5;theta=-.2;updCam();
-  const lb=document.getElementById('lbadge');if(lb){lb.textContent='🛋 Интерьер — Этаж '+(ST.curFloor+1);lb.style.display='block';}
+  const lb=document.getElementById('lbadge');if(lb){lb.textContent='Интерьер — Этаж '+(ST.curFloor+1);lb.style.display='block';}
   showNotif('Этаж '+(ST.curFloor+1)+' — вид изнутри');
 }
 
@@ -2820,7 +2820,7 @@ function buildFloorNav(b){
   const fn=document.getElementById('fnav');if(!fn)return;fn.innerHTML='';fn.style.display='flex';
   for(let f=b.floors-1;f>=0;f--){
     const btn=document.createElement('button');btn.className='fnbtn'+(f===0?' on':'');btn.textContent=f+1;
-    const _f=f;btn.onclick=()=>{ST.curFloor=_f;document.querySelectorAll('.fnbtn').forEach(b2=>b2.classList.remove('on'));btn.classList.add('on');if(ST.view==='int')enterInterior();if(ST.view==='plan')draw2D('plan');const lb=document.getElementById('lbadge');if(lb&&ST.lod==='interior')lb.textContent='🛋 Этаж '+(_f+1);};
+    const _f=f;btn.onclick=()=>{ST.curFloor=_f;document.querySelectorAll('.fnbtn').forEach(b2=>b2.classList.remove('on'));btn.classList.add('on');if(ST.view==='int')enterInterior();if(ST.view==='plan')draw2D('plan');const lb=document.getElementById('lbadge');if(lb&&ST.lod==='interior')lb.textContent='Этаж '+(_f+1);};
     fn.appendChild(btn);
   }
 }
@@ -2852,7 +2852,7 @@ function showExp(){if(!ST.hasModel){showNotif('Сначала создайте �
 function showNotif(text,type){
   const el=document.getElementById('notif');if(!el)return;
   el.style.borderLeftColor=type==='warn'?'var(--warn)':'var(--ok)';
-  el.innerHTML=(type==='warn'?'⚠️ ':'✅ ')+text;
+  el.innerHTML=(type==='warn'?'':'')+text;
   el.style.display='flex';clearTimeout(el._t);el._t=setTimeout(()=>el.style.display='none',2800);
 }
 function addMsg(role,html){
@@ -2866,8 +2866,8 @@ function addMsg(role,html){
 function addThink(steps){
   const area=document.getElementById('tab-chat');if(!area)return;
   const d=document.createElement('div');d.className='msg a';
-  const rows=steps.map(s=>`<div class="think-row"><div class="tc">✓</div>${s}</div>`).join('');
-  d.innerHTML=`<div class="think"><div style="font-weight:700;margin-bottom:6px;font-size:11px">🧠 Мышление Architect</div>${rows}</div>`;
+  const rows=steps.map(s=>`<div class="think-row"><div class="tc">—</div>${s}</div>`).join('');
+  d.innerHTML=`<div class="think"><div style="font-weight:700;margin-bottom:6px;font-size:11px">Мышление</div>${rows}</div>`;
   area.appendChild(d);area.scrollTop=area.scrollHeight;
 }
 
@@ -2879,14 +2879,14 @@ function addReasoning(steps, confidence) {
   const confLabel = confidence > 0.8 ? 'Высокая' : confidence > 0.5 ? 'Средняя' : 'Низкая';
   const rows = steps.map((s, i) => `
     <div class="reasoning-step">
-      <div class="rs-icon">${s.icon || '🔍'}</div>
+      <div class="rs-icon">${s.icon || '»'}</div>
       <div class="rs-text">${s.text}</div>
       ${s.confidence ? `<div class="rs-confidence" style="color:${confColor}">${Math.round(s.confidence * 100)}%</div>` : ''}
     </div>
   `).join('');
   d.innerHTML = `
     <div class="reasoning-card">
-      <div class="reasoning-title">🧠 Ход рассуждений <span class="pulse-dot"></span></div>
+      <div class="reasoning-title">Ход рассуждений <span class="pulse-dot"></span></div>
       ${rows}
       <div style="margin-top:8px;padding-top:8px;border-top:1px solid #c4b5fd;font-size:10px;color:#6d28d9;display:flex;justify-content:space-between">
         <span>Уверенность: <b style="color:${confColor}">${confLabel} (${Math.round(confidence * 100)}%)</b></span>
@@ -2913,7 +2913,7 @@ function addDecomposition(tasks) {
   `).join('');
   d.innerHTML = `
     <div class="decomp-tree">
-      <div class="decomp-title">📋 Декомпозиция задачи</div>
+      <div class="decomp-title">Декомпозиция задачи</div>
       ${items}
       <div style="margin-top:8px;font-size:10px;color:#16a34a">Всего этапов: ${tasks.length} • Параллельное выполнение где возможно</div>
     </div>
@@ -2934,7 +2934,7 @@ function addReferenceGallery(references, onSelect) {
   `).join('');
   d.innerHTML = `
     <div class="ref-gallery">
-      <div class="ref-title">🎨 Найденные референсы</div>
+      <div class="ref-title">Найденные референсы</div>
       <div class="ref-grid">${cards}</div>
       <div style="margin-top:8px;font-size:10px;color:#9a3412">Нажмите на референс чтобы применить стиль • ${references.length} найдено</div>
     </div>
@@ -2958,11 +2958,11 @@ async function searchAndShowReferences(refs) {
   const searchEl = document.createElement('div'); searchEl.className = 'msg a'; searchEl.id = searchId;
   searchEl.innerHTML = `
     <div class="ref-gallery" style="min-width:300px">
-      <div class="ref-title">🔍 <span class="pulse-dot"></span> Ищу референсы...</div>
+      <div class="ref-title"><span class="pulse-dot"></span> Поиск референсов...</div>
       <div style="display:flex;flex-direction:column;gap:6px" class="ref-search-steps">
         ${refs.map((r, i) => `
           <div class="ref-search-step" id="rss-${searchId}-${i}" style="display:flex;align-items:center;gap:8px;font-size:11px;color:#9a3412;opacity:0.4;transition:all .3s">
-            <div style="width:16px;height:16px;border-radius:50%;background:#fed7aa;display:flex;align-items:center;justify-content:center;font-size:9px" class="rss-icon">⏳</div>
+            <div style="width:16px;height:16px;border-radius:50%;background:#fed7aa;display:flex;align-items:center;justify-content:center;font-size:9px" class="rss-icon">·</div>
             <span>${r.query || r.style || 'Референс ' + (i+1)}</span>
           </div>
         `).join('')}
@@ -2975,7 +2975,7 @@ async function searchAndShowReferences(refs) {
   const allResults = [];
   for (let i = 0; i < refs.length; i++) {
     const stepEl = document.getElementById(`rss-${searchId}-${i}`);
-    if (stepEl) { stepEl.style.opacity = '1'; stepEl.querySelector('.rss-icon').textContent = '🔄'; }
+    if (stepEl) { stepEl.style.opacity = '1'; stepEl.querySelector('.rss-icon').textContent = '»'; }
     
     try {
       // Call vectordb search
@@ -2992,14 +2992,14 @@ async function searchAndShowReferences(refs) {
         const results = data.results || [];
         allResults.push(...results.map(r => ({...r, source_query: queryText})));
         if (stepEl) {
-          stepEl.querySelector('.rss-icon').textContent = results.length > 0 ? '✅' : '⬜';
+          stepEl.querySelector('.rss-icon').textContent = results.length > 0 ? '»' : '○';
           stepEl.querySelector('span').textContent += results.length > 0 ? ` → ${results.length} найдено` : ' → нет результатов';
         }
       } else {
-        if (stepEl) stepEl.querySelector('.rss-icon').textContent = '❌';
+        if (stepEl) stepEl.querySelector('.rss-icon').textContent = '×';
       }
     } catch(e) {
-      if (stepEl) stepEl.querySelector('.rss-icon').textContent = '❌';
+      if (stepEl) stepEl.querySelector('.rss-icon').textContent = '×';
     }
     
     await new Promise(r => setTimeout(r, 400)); // delay for animation
@@ -3011,7 +3011,7 @@ async function searchAndShowReferences(refs) {
     searchEl.remove();
     // Show gallery
     addReferenceGallery(allResults.slice(0, 9), (selected) => {
-      addMsg('a', `🎨 Выбран референс: <b>${selected.prompt || selected.style || ''}</b><br>Стиль будет применён к проекту.`);
+      addMsg('a', `Выбран референс: <b>${selected.prompt || selected.style || ''}</b><br>Стиль будет применён к проекту.`);
     });
   } else {
     // No results — update search box
@@ -3026,12 +3026,12 @@ async function searchAndShowReferences(refs) {
 function addVariantCards(variants, onSelect) {
   const area = document.getElementById('tab-chat'); if (!area) return;
   const d = document.createElement('div'); d.className = 'msg a';
-  const emojis = { modern: '🏢', classic: '🏛', minimalist: '⬜', loft: '🏭', scandinavian: '🌲', provence: '🌾', hitech: '⚡', japanese: '🎋' };
+  const emojis = { modern: '◆', classic: '◆', minimalist: '◆', loft: '◆', scandinavian: '◆', provence: '◆', hitech: '◆', japanese: '◆' };
   const cards = variants.map((v, i) => `
     <div class="variant-card" onclick="selectVariant(this, ${i})" data-idx="${i}">
       <div class="vc-preview">
-        <span>${emojis[v.style] || '🏗'}</span>
-        ${v.recommended ? '<div class="vc-badge">⭐ Рекомендуем</div>' : ''}
+        <span>${emojis[v.style] || '»'}</span>
+        ${v.recommended ? '<div class="vc-badge">Рекомендуем</div>' : ''}
         ${v.preview_url ? `<img src="${v.preview_url}" style="width:100%;height:100%;object-fit:cover" onerror="this.remove()">` : ''}
       </div>
       <div class="vc-info">
@@ -3042,7 +3042,7 @@ function addVariantCards(variants, onSelect) {
     </div>
   `).join('');
   d.innerHTML = `
-    <div style="font-weight:700;font-size:12px;color:#374151;margin-bottom:8px;display:flex;align-items:center;gap:6px">🎨 Выберите вариант:</div>
+    <div style="font-weight:700;font-size:12px;color:#374151;margin-bottom:8px;display:flex;align-items:center;gap:6px">Выберите вариант:</div>
     <div class="variant-cards">${cards}</div>
   `;
   area.appendChild(d); area.scrollTop = area.scrollHeight;
@@ -3063,19 +3063,19 @@ function addComparisonCards(options) {
     <div class="compare-card ${opt.recommended ? 'recommended' : ''}">
       <div class="cc-header">
         <div class="cc-title">${opt.name}</div>
-        ${opt.recommended ? '<div class="cc-rec">⭐ Рекомендуем</div>' : ''}
+        ${opt.recommended ? '<div class="cc-rec">Рекомендуем</div>' : ''}
       </div>
-      <div class="cc-image">${opt.emoji || '🏗'}</div>
+      <div class="cc-image">${opt.emoji || '»'}</div>
       <div class="cc-body">
         ${opt.description || ''}
-        ${opt.pros ? `<div class="cc-pros">✅ ${opt.pros.join(' • ')}</div>` : ''}
-        ${opt.cons ? `<div class="cc-cons">❌ ${opt.cons.join(' • ')}</div>` : ''}
+        ${opt.pros ? `<div class="cc-pros">${opt.pros.join(' • ')}</div>` : ''}
+        ${opt.cons ? `<div class="cc-cons">${opt.cons.join(' • ')}</div>` : ''}
         ${opt.price ? `<div class="cc-price">${opt.price}</div>` : ''}
       </div>
     </div>
   `).join('');
   d.innerHTML = `
-    <div style="font-weight:700;font-size:12px;color:#374151;margin-bottom:8px;display:flex;align-items:center;gap:6px">⚖️ Сравнение вариантов:</div>
+    <div style="font-weight:700;font-size:12px;color:#374151;margin-bottom:8px;display:flex;align-items:center;gap:6px">Сравнение вариантов:</div>
     <div class="compare-cards">${cards}</div>
   `;
   area.appendChild(d); area.scrollTop = area.scrollHeight;
@@ -3088,7 +3088,7 @@ function addLiveThinking(initialText) {
   d.id = 'live-thinking-' + Date.now();
   d.innerHTML = `
     <div class="reasoning-card">
-      <div class="reasoning-title">🧠 <span class="pulse-dot"></span> ${initialText}</div>
+      <div class="reasoning-title"><span class="pulse-dot"></span> ${initialText}</div>
       <div class="live-steps"></div>
     </div>
   `;
@@ -3116,7 +3116,7 @@ function addClarification(questions, partialParams, confidence) {
 
   let html = `<div class="mmeta"><div class="av">A</div>Architect <span style="font-size:9px;opacity:.6">Уточнение</span></div>`;
   html += `<div class="bub" style="max-width:380px">`;
-  html += `<div style="font-weight:600;margin-bottom:8px">🤔 Уточните параметры:</div>`;
+  html += `<div style="font-weight:600;margin-bottom:8px"> Уточните параметры:</div>`;
 
   questions.forEach((q, qi) => {
     html += `<div style="margin-bottom:10px">`;
@@ -3131,7 +3131,7 @@ function addClarification(questions, partialParams, confidence) {
         html += `<div style="font-weight:600;font-size:11px">${vo.id}. ${vo.title}</div>`;
         html += `<div style="font-size:10px;color:#64748b">${vo.description}</div>`;
         if (vo.price_range) html += `<div style="font-size:10px;color:#059669;margin-top:2px">${vo.price_range}</div>`;
-        if (vo.recommended) html += `<div style="font-size:9px;color:#6366f1;margin-top:2px">⭐ Рекомендуем</div>`;
+        if (vo.recommended) html += `<div style="font-size:9px;color:#6366f1;margin-top:2px">Рекомендуем</div>`;
         html += `</button>`;
       });
       html += `</div>`;
@@ -3173,7 +3173,7 @@ function addVariants(variants, baseParams) {
 
   let html = `<div class="mmeta"><div class="av">A</div>Architect <span style="font-size:9px;opacity:.6">Варианты</span></div>`;
   html += `<div class="bub" style="max-width:400px">`;
-  html += `<div style="font-weight:600;margin-bottom:8px">🎨 Выберите вариант:</div>`;
+  html += `<div style="font-weight:600;margin-bottom:8px">Выберите вариант:</div>`;
   html += `<div style="display:flex;gap:8px;flex-wrap:wrap">`;
 
   variants.forEach(v => {
@@ -3201,79 +3201,79 @@ function updateContextPrompts(text) {
   // Interior context
   if (t.includes('ванн') || t.includes('джакуз')) {
     prompts = [
-      { label: '🚿 С душевой кабиной', text: text + ' с душевой кабиной' },
-      { label: '🛁 Угловая ванна', text: text.replace('джакузи', 'угловая ванна') },
-      { label: '🪞 Зеркальный потолок', text: text + ' с зеркальным потолком' },
-      { label: '🌡 Тёплый пол', text: text + ' с тёплым полом' },
+      { label: 'С душевой кабиной', text: text + ' с душевой кабиной' },
+      { label: 'Угловая ванна', text: text.replace('джакузи', 'угловая ванна') },
+      { label: 'Зеркальный потолок', text: text + ' с зеркальным потолком' },
+      { label: 'Тёплый пол', text: text + ' с тёплым полом' },
     ];
   } else if (t.includes('кухн')) {
     prompts = [
-      { label: '🏝 С островом', text: text + ' с кухонным островом' },
-      { label: '🍳 Г-образная', text: text + ' Г-образная планировка' },
-      { label: '🪟 Панорамное остекление', text: text + ' с панорамными окнами' },
-      { label: '🍷 Барная стойка', text: text + ' с барной стойкой' },
+      { label: 'С островом', text: text + ' с кухонным островом' },
+      { label: 'Г-образная', text: text + ' Г-образная планировка' },
+      { label: 'Панорамное остекление', text: text + ' с панорамными окнами' },
+      { label: 'Барная стойка', text: text + ' с барной стойкой' },
     ];
   } else if (t.includes('детск')) {
     prompts = [
-      { label: '🧸 Игровая зона', text: text + ' с игровой зоной' },
-      { label: '📚 Учебный уголок', text: text + ' с учебным уголком' },
-      { label: '🏰 Двухъярусная кровать', text: text + ' с двухъярусной кроватью' },
-      { label: '🎨 Доска для рисования', text: text + ' с доской для рисования' },
+      { label: 'Игровая зона', text: text + ' с игровой зоной' },
+      { label: 'Учебный уголок', text: text + ' с учебным уголком' },
+      { label: 'Двухъярусная кровать', text: text + ' с двухъярусной кроватью' },
+      { label: 'Доска для рисования', text: text + ' с доской для рисования' },
     ];
   } else if (t.includes('спальн')) {
     prompts = [
-      { label: '🛏 Кровать king-size', text: text + ' с кроватью king-size' },
-      { label: '👗 Гардеробная', text: text + ' с гардеробной' },
-      { label: '🪟 Панорамное окно', text: text + ' с панорамным окном' },
-      { label: '💡 LED-подсветка', text: text + ' с LED-подсветкой' },
+      { label: 'Кровать king-size', text: text + ' с кроватью king-size' },
+      { label: 'Гардеробная', text: text + ' с гардеробной' },
+      { label: 'Панорамное окно', text: text + ' с панорамным окном' },
+      { label: 'LED-подсветка', text: text + ' с LED-подсветкой' },
     ];
   } else if (t.includes('гостин')) {
     prompts = [
-      { label: '🔥 Камин', text: text + ' с камином' },
-      { label: '📺 ТВ-зона', text: text + ' с ТВ-зоной' },
-      { label: '🪑 Зона отдыха', text: text + ' с зоной отдыха' },
-      { label: '📚 Библиотека', text: text + ' с библиотекой' },
+      { label: 'Камин', text: text + ' с камином' },
+      { label: 'ТВ-зона', text: text + ' с ТВ-зоной' },
+      { label: 'Зона отдыха', text: text + ' с зоной отдыха' },
+      { label: 'Библиотека', text: text + ' с библиотекой' },
     ];
   }
   // Building context
   else if (t.includes('дом') || t.includes('коттедж')) {
     prompts = [
-      { label: '🚗 С гаражом', text: text + ' с гаражом' },
-      { label: '🏖 С террасой', text: text + ' с террасой' },
-      { label: '🏊 С бассейном', text: text + ' с бассейном' },
-      { label: '🪵 Из бруса', text: text.replace(/кирпич|бетон|пеноблок/g, '') + ' из бруса' },
+      { label: 'С гаражом', text: text + ' с гаражом' },
+      { label: 'С террасой', text: text + ' с террасой' },
+      { label: 'С бассейном', text: text + ' с бассейном' },
+      { label: 'Из бруса', text: text.replace(/кирпич|бетон|пеноблок/g, '') + ' из бруса' },
     ];
   } else if (t.includes('отель') || t.includes('гостиниц')) {
     prompts = [
-      { label: '🏊 С бассейном', text: text + ' с бассейном' },
-      { label: '🍽 Ресторан', text: text + ' с рестораном' },
-      { label: '🅿 Парковка', text: text + ' с подземной парковкой' },
-      { label: '🌿 Панорамный ресторан', text: text + ' с панорамным рестораном на крыше' },
+      { label: 'С бассейном', text: text + ' с бассейном' },
+      { label: 'Ресторан', text: text + ' с рестораном' },
+      { label: 'Парковка', text: text + ' с подземной парковкой' },
+      { label: 'Панорамный ресторан', text: text + ' с панорамным рестораном на крыше' },
     ];
   } else if (t.includes('таунхаус')) {
     prompts = [
-      { label: '🏠 С двориком', text: text + ' с внутренним двориком' },
-      { label: '🚗 С парковкой', text: text + ' с парковкой' },
-      { label: '🌿 С садом', text: text + ' с садом' },
-      { label: '🏠 Пентхаус', text: text.replace('таунхаус', 'пентхаус') },
+      { label: 'С двориком', text: text + ' с внутренним двориком' },
+      { label: 'С парковкой', text: text + ' с парковкой' },
+      { label: 'С садом', text: text + ' с садом' },
+      { label: 'Пентхаус', text: text.replace('таунхаус', 'пентхаус') },
     ];
   }
   // Landscape context
   else if (t.includes('ландшафт') || t.includes('сад') || t.includes('участок')) {
     prompts = [
-      { label: '🏊 С бассейном', text: text + ' с бассейном' },
-      { label: '🌸 Розарий', text: text + ' с розарием' },
-      { label: '♨ Зона барбекю', text: text + ' с зоной барбекю' },
-      { label: '🧘 Зен-сад', text: text + ' в японском стиле' },
+      { label: 'С бассейном', text: text + ' с бассейном' },
+      { label: 'Розарий', text: text + ' с розарием' },
+      { label: 'Зона барбекю', text: text + ' с зоной барбекю' },
+      { label: 'Зен-сад', text: text + ' в японском стиле' },
     ];
   }
   // Office context
   else if (t.includes('офис')) {
     prompts = [
-      { label: '🏢 Open space', text: text + ' с open space' },
-      { label: '☕ Зона отдыха', text: text + ' с зоной отдыха' },
-      { label: '🅿 Парковка', text: text + ' с подземной парковкой' },
-      { label: '🌿 Зелёная терраса', text: text + ' с зелёной террасой' },
+      { label: 'Open space', text: text + ' с open space' },
+      { label: 'Зона отдыха', text: text + ' с зоной отдыха' },
+      { label: 'Парковка', text: text + ' с подземной парковкой' },
+      { label: 'Зелёная терраса', text: text + ' с зелёной террасой' },
     ];
   }
 
@@ -3334,12 +3334,12 @@ function animateConstruction(scene, buildingGroup, params) {
       // Done — show all remaining
       buildingGroup.children.forEach(child => { child.visible = child.userData._origVisible !== false; });
       if (ov) ov.style.display = 'none';
-      showNotif('🏗 Строительство завершено!', 'ok');
+      showNotif('Строительство завершено!', 'ok');
       return;
     }
 
     const phase = phases[idx];
-    if (gtxt) gtxt.textContent = `🏗 ${phase.name}...`;
+    if (gtxt) gtxt.textContent = `» ${phase.name}...`;
     if (gsub) gsub.textContent = `Этап ${idx + 1} из ${totalPhases}`;
     if (gf) gf.style.width = `${((idx + 1) / totalPhases) * 100}%`;
 
@@ -3347,7 +3347,7 @@ function animateConstruction(scene, buildingGroup, params) {
     if (gsteps) {
       gsteps.innerHTML = phases.map((p, i) => {
         const cls = i < idx ? 'done' : i === idx ? 'active' : '';
-        const icon = i < idx ? '✓' : i === idx ? '●' : '○';
+        const icon = i < idx ? '—' : i === idx ? '●' : '○';
         return `<div class="gs ${cls}">${icon} ${p.name}</div>`;
       }).join('');
     }
@@ -3553,7 +3553,7 @@ if (cwrap) {
 
     // Show prompt input for selected area
     if (selectRect.w > 0.05 && selectRect.h > 0.05) {
-      addMsg('a', `✂ Область выделена (${Math.round(selectRect.w * 100)}%×${Math.round(selectRect.h * 100)}%). Опишите что изменить:`);
+      addMsg('a', `Область выделена (${Math.round(selectRect.w * 100)}%×${Math.round(selectRect.h * 100)}%). Опишите что изменить:`);
       const inp = document.getElementById('ci');
       if (inp) inp.placeholder = 'Опишите изменение для выделенной области…';
     } else {
