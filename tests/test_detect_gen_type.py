@@ -10,21 +10,25 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 def _detect_gen_type(params: dict) -> str:
-    """Copy of blender-service/app.py logic for testing."""
-    obj_type = (params.get("object_type") or "building").lower()
-    room_type = (params.get("room_type") or "").lower()
-    building_type = (params.get("building_type") or "").lower()
+    """Copy of blender-service/app.py logic for testing.
+    
+    LLM is the source of truth. No keyword matching.
+    """
+    obj_type = (params.get("object_type") or "").strip().lower()
+    room_type = (params.get("room_type") or "").strip().lower()
+    building_type = (params.get("building_type") or "").strip().lower()
 
+    # LLM is the source of truth
     if obj_type in ("interior", "room"):
         return "interior"
+    if obj_type == "landscape":
+        return "landscape"
+    if obj_type == "building":
+        return "building"
     if room_type:
         return "interior"
-    if obj_type == "landscape" or building_type == "landscape":
+    if building_type == "landscape":
         return "landscape"
-    interior_keywords = ["кухн", "ванн", "спальн", "детск", "гостин", "интерьер", "дизайн"]
-    description = (params.get("building_description") or "").lower()
-    if any(kw in description for kw in interior_keywords):
-        return "interior"
     return "building"
 
 
@@ -52,17 +56,18 @@ class TestDetectGenType:
     def test_building_explicit(self):
         assert _detect_gen_type({"object_type": "building"}) == "building"
 
-    def test_interior_from_description_kitchen(self):
-        assert _detect_gen_type({"building_description": "Дизайн кухни в стиле хайтек"}) == "interior"
+    def test_building_description_without_object_type(self):
+        """If LLM didn't set object_type, description alone doesn't determine type."""
+        # This is a fallback case — LLM should always set object_type
+        assert _detect_gen_type({"building_description": "Дизайн кухни"}) == "building"
 
-    def test_interior_from_description_children(self):
-        assert _detect_gen_type({"building_description": "Детская комната для мальчика"}) == "interior"
+    def test_interior_from_description_with_object_type(self):
+        """If LLM set object_type=interior, trust it."""
+        assert _detect_gen_type({"object_type": "interior", "building_description": "Дизайн кухни"}) == "interior"
 
-    def test_interior_from_description_bathroom(self):
-        assert _detect_gen_type({"building_description": "Ванная с джакузи"}) == "interior"
-
-    def test_building_from_description_house(self):
-        assert _detect_gen_type({"building_description": "Двухэтажный кирпичный дом"}) == "building"
+    def test_building_from_description_with_object_type(self):
+        """If LLM set object_type=building, trust it even with interior keywords."""
+        assert _detect_gen_type({"object_type": "building", "building_description": "Кухня ресторан"}) == "building"
 
     def test_hotel_is_building(self):
         assert _detect_gen_type({"object_type": "building", "building_type": "hotel"}) == "building"

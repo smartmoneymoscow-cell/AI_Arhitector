@@ -80,28 +80,34 @@ async def _parse_via_llm_service(prompt: str) -> dict:
 
 
 def _detect_gen_type(params: dict) -> str:
-    """Detect generation type from parsed params.
+    """Detect generation type from LLM-parsed params.
+    
+    LLM is the source of truth for object_type.
+    Only falls back if LLM didn't provide object_type.
     
     Returns: 'interior', 'landscape', or 'building'
     """
-    obj_type = (params.get("object_type") or "building").lower()
-    room_type = (params.get("room_type") or "").lower()
-    building_type = (params.get("building_type") or "").lower()
+    obj_type = (params.get("object_type") or "").strip().lower()
+    room_type = (params.get("room_type") or "").strip().lower()
+    building_type = (params.get("building_type") or "").strip().lower()
     
-    # Explicit interior/room type
+    # LLM is the source of truth — trust its object_type
     if obj_type in ("interior", "room"):
         return "interior"
-    # If room_type is set, it's an interior request
+    if obj_type == "landscape":
+        return "landscape"
+    if obj_type == "building":
+        return "building"
+    
+    # If LLM set room_type but not object_type — it's interior
     if room_type:
         return "interior"
-    # Landscape detection
-    if obj_type == "landscape" or building_type == "landscape":
+    
+    # If building_type explicitly says landscape
+    if building_type == "landscape":
         return "landscape"
-    # Keyword-based detection for interior
-    interior_keywords = ["кухн", "ванн", "спальн", "детск", "гостин", "интерьер", "дизайн"]
-    description = (params.get("building_description") or "").lower()
-    if any(kw in description for kw in interior_keywords):
-        return "interior"
+    
+    # Fallback: object_type missing from LLM response — default to building
     return "building"
 
 
