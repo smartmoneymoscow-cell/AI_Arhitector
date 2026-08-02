@@ -297,6 +297,23 @@ class AllModelsFailedError(Exception):
     pass
 
 
+def _validate_and_fix(result: dict | None, text: str) -> dict | None:
+    """Level 1+2: Pydantic validation + auto-retry with fix prompt."""
+    from shared.llm_schemas import ParsedParams, build_fix_prompt, validate_llm_response
+
+    parsed, errors = validate_llm_response(result)
+    if parsed:
+        return parsed.model_dump()
+
+    # Level 2: Auto-retry with fix prompt
+    if result is not None and errors:
+        logger.warning("LLM response validation failed: %s", errors[:3])
+        fix_prompt = build_fix_prompt(text, errors)
+        return fix_prompt  # signal to retry with this prompt
+
+    return None
+
+
 # ═══════════════════════════════════════════════════════════════
 # LLM CALL — with key rotation (L3) + ollama fallback (L4)
 # ═══════════════════════════════════════════════════════════════
@@ -341,6 +358,13 @@ async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) 
             return None
 
         data = r.json()
+        # Cost tracking: extract token usage
+        usage = data.get("usage", {})
+        tokens_in = usage.get("prompt_tokens", 0)
+        tokens_out = usage.get("completion_tokens", 0)
+        if tokens_in or tokens_out:
+            _track_cost(model, tokens_in, tokens_out)
+            logger.info("LLM %s tokens: %d in / %d out", model, tokens_in, tokens_out)
         content = data["choices"][0]["message"]["content"]
         return _extract_json(content)
 
@@ -481,7 +505,7 @@ async def parse_prompt_async(text: str) -> dict:
             return result
         raise AllModelsFailedError("No API keys configured and Ollama unavailable")
 
-    # LLM cascade with key rotation (L3)
+    # LLM cascade with key rotation (L3) + Pydantic validation
     for model_config in LLM_CASCADE:
         model = model_config["model"]
         timeout = model_config["timeout"]
@@ -490,11 +514,26 @@ async def parse_prompt_async(text: str) -> dict:
             logger.info("Trying LLM: %s (key %d/%d)", model, key_idx + 1, len(api_keys))
             result = await _call_openrouter(model, text, timeout, api_key)
 
-            if result and _validate_result(result):
-                _l1_set(text, result)
-                _l2_set(text, result)
-                logger.info("LLM %s parsed successfully: %s", model, result.get("building_type"))
-                return result
+            if result:
+                # Level 1: Pydantic validation
+                validated = _validate_and_fix(result, text)
+                if isinstance(validated, dict):
+                    _l1_set(text, validated)
+                    _l2_set(text, validated)
+                    logger.info("LLM %s parsed successfully: %s", model, validated.get("building_type"))
+                    return validated
+
+                # Level 2: Retry with fix prompt (one attempt)
+                if isinstance(validated, str) and model_config["tier"] <= 2:
+                    logger.info("Retrying %s with fix prompt", model)
+                    fix_result = await _call_openrouter(model, validated, timeout, api_key)
+                    if fix_result:
+                        fix_validated = _validate_and_fix(fix_result, text)
+                        if isinstance(fix_validated, dict):
+                            _l1_set(text, fix_validated)
+                            _l2_set(text, fix_validated)
+                            logger.info("LLM %s fixed and parsed: %s", model, fix_validated.get("building_type"))
+                            return fix_validated
 
             if result is not None:
                 # Got response but invalid — try next model, not next key
@@ -503,13 +542,57 @@ async def parse_prompt_async(text: str) -> dict:
     # L4: All OpenRouter models failed → try Ollama
     logger.warning("All OpenRouter models failed, trying Ollama fallback")
     result = await _call_ollama(text)
-    if result and _validate_result(result):
-        _l1_set(text, result)
-        _l2_set(text, result)
-        logger.info("Ollama fallback succeeded: %s", result.get("building_type"))
-        return result
+    if result:
+        validated = _validate_and_fix(result, text)
+        if isinstance(validated, dict):
+            _l1_set(text, validated)
+            _l2_set(text, validated)
+            logger.info("Ollama fallback succeeded: %s", validated.get("building_type"))
+            return validated
 
     raise AllModelsFailedError(f"All {len(LLM_CASCADE)} LLM models (+ Ollama) failed for prompt: {text[:100]}...")
+
+
+# ═══════════════════════════════════════════════════════════════
+# COST TRACKING — per model and aggregate
+# ═══════════════════════════════════════════════════════════════
+
+import threading as _threading
+_cost_lock = _threading.Lock()
+_cost_stats: dict[str, dict] = {}  # {model: {calls, tokens_in, tokens_out, cost_usd}}
+
+# Approximate costs per 1M tokens (input/output) — update as needed
+_MODEL_COSTS = {
+    "google/gemini-2.5-pro":         {"input": 1.25, "output": 10.0},
+    "anthropic/claude-sonnet-4":     {"input": 3.0,  "output": 15.0},
+    "google/gemini-2.5-flash":       {"input": 0.075, "output": 0.3},
+    "openai/gpt-4o-mini":           {"input": 0.15, "output": 0.6},
+    "meta-llama/llama-4-maverick:free": {"input": 0, "output": 0},
+    "qwen/qwen3-235b-a22b:free":    {"input": 0, "output": 0},
+    "deepseek/deepseek-chat-v3-0324:free": {"input": 0, "output": 0},
+}
+
+def _track_cost(model: str, tokens_in: int, tokens_out: int) -> None:
+    """Track cost of an LLM call."""
+    costs = _MODEL_COSTS.get(model, {"input": 0, "output": 0})
+    cost = (tokens_in * costs["input"] + tokens_out * costs["output"]) / 1_000_000
+    with _cost_lock:
+        stats = _cost_stats.setdefault(model, {"calls": 0, "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0})
+        stats["calls"] += 1
+        stats["tokens_in"] += tokens_in
+        stats["tokens_out"] += tokens_out
+        stats["cost_usd"] = round(stats["cost_usd"] + cost, 6)
+
+def get_cost_stats() -> dict:
+    """Return cost tracking statistics."""
+    with _cost_lock:
+        total_calls = sum(s["calls"] for s in _cost_stats.values())
+        total_cost = sum(s["cost_usd"] for s in _cost_stats.values())
+        return {
+            "per_model": dict(_cost_stats),
+            "total_calls": total_calls,
+            "total_cost_usd": round(total_cost, 4),
+        }
 
 
 def get_cache_stats() -> dict:
@@ -526,6 +609,7 @@ def get_cache_stats() -> dict:
         "api_keys_configured": len(_get_api_keys()),
         "ollama_configured": bool(OLLAMA_URL),
         "llm_cascade": [{"model": m["model"], "tier": m["tier"]} for m in LLM_CASCADE],
+        "cost_tracking": get_cost_stats(),
     }
 
 

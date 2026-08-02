@@ -138,6 +138,6 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(os.environ.get("PORT", 8081))
-    print(f"LLM Service starting on port {port}")
-    print(f"Cascade: {[m['model'] for m in LLM_CASCADE]}")
+    logger.info("LLM Service starting on port %d", port)
+    logger.info("Cascade: %s", [m['model'] for m in LLM_CASCADE])
     uvicorn.run(app, host="0.0.0.0", port=port)

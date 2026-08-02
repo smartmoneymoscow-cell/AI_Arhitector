@@ -286,35 +286,35 @@ class Orchestrator:
             progress_step = 15
             progress_increment = 15 / max(len(pre_agents), 1)
 
-            for agent_name in pre_agents:
-                streamer.emit(agent_name, "running", progress=int(progress_step), message=f"Running {agent_name}...")
-                agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
-                result = self._run_agent(
-                    agent_name,
-                    {"name": agent_name, "agent": agent_name, "params": agent_params},
-                    timeout=60,
-                )
+            # Run pre-agents in PARALLEL (they are independent)
+            if pre_agents:
+                import concurrent.futures
+                streamer.emit("pre_pipeline", "running", progress=15,
+                              message=f"Running {len(pre_agents)} agents in parallel...")
 
-                if result.status == TaskStatus.DONE and result.data:
-                    pre_pipeline_results[agent_name] = result.data
-                    if result.fallback:
-                        job["fallback_agents"].append(agent_name)
-                    streamer.emit(
+                def _run_pre_agent(agent_name):
+                    agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
+                    result = self._run_agent(
                         agent_name,
-                        "done",
-                        progress=int(progress_step + progress_increment),
-                        message=f"{agent_name} complete" + (" (fallback)" if result.fallback else ""),
+                        {"name": agent_name, "agent": agent_name, "params": agent_params},
+                        timeout=60,
                     )
-                else:
-                    streamer.emit(
-                        agent_name,
-                        "warning",
-                        progress=int(progress_step),
-                        message=f"{agent_name} skipped: {result.error or 'no data'}",
-                    )
-                    job["fallback_agents"].append(agent_name)
+                    return agent_name, result
 
-                progress_step += progress_increment
+                with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(pre_agents), 4)) as executor:
+                    futures = {executor.submit(_run_pre_agent, a): a for a in pre_agents}
+                    for future in concurrent.futures.as_completed(futures):
+                        agent_name, result = future.result()
+                        if result.status == TaskStatus.DONE and result.data:
+                            pre_pipeline_results[agent_name] = result.data
+                            if result.fallback:
+                                job["fallback_agents"].append(agent_name)
+                        else:
+                            job["fallback_agents"].append(agent_name)
+                            logger.warning("Pre-agent %s skipped: %s", agent_name, result.error)
+
+                streamer.emit("pre_pipeline", "done", progress=30,
+                              message=f"{len(pre_pipeline_results)}/{len(pre_agents)} agents complete")
 
             # ═══ Step 3+4: Geometry + Texture (PARALLEL, geometry CRITICAL) ═══
             streamer.emit("geometry", "running", progress=35, message="Generating 3D geometry...")
@@ -386,34 +386,39 @@ class Orchestrator:
                     job["fallback_agents"].append("texture")
             streamer.emit("texture", "done", progress=55, message="Materials generated")
 
-            # ═══ Mid-pipeline: Non-critical agents ═══
+            # ═══ Mid-pipeline: Non-critical agents (PARALLEL) ═══
             mid_agents = [a for a in agent_sequence if a in ("landscape", "furniture", "lighting", "mep", "structural")]
             mid_results = {}
             progress_step = 55
             progress_increment = 10 / max(len(mid_agents), 1)
 
-            for agent_name in mid_agents:
-                streamer.emit(agent_name, "running", progress=int(progress_step), message=f"Running {agent_name}...")
-                agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
-                result = self._run_agent(
-                    agent_name,
-                    {"name": agent_name, "agent": agent_name, "params": agent_params},
-                    timeout=60,
-                )
-                if result.status == TaskStatus.DONE and result.data:
-                    mid_results[agent_name] = result.data
-                    if result.fallback:
-                        job["fallback_agents"].append(agent_name)
-                else:
-                    job["fallback_agents"].append(agent_name)
+            if mid_agents:
+                import concurrent.futures
+                streamer.emit("mid_pipeline", "running", progress=55,
+                              message=f"Running {len(mid_agents)} agents in parallel...")
 
-                streamer.emit(
-                    agent_name,
-                    "done" if result.status == TaskStatus.DONE else "warning",
-                    progress=int(progress_step + progress_increment),
-                    message=f"{agent_name} " + ("done" if result.status == TaskStatus.DONE else "skipped"),
-                )
-                progress_step += progress_increment
+                def _run_mid_agent(agent_name):
+                    agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
+                    result = self._run_agent(
+                        agent_name,
+                        {"name": agent_name, "agent": agent_name, "params": agent_params},
+                        timeout=60,
+                    )
+                    return agent_name, result
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(mid_agents), 4)) as executor:
+                    futures = {executor.submit(_run_mid_agent, a): a for a in mid_agents}
+                    for future in concurrent.futures.as_completed(futures):
+                        agent_name, result = future.result()
+                        if result.status == TaskStatus.DONE and result.data:
+                            mid_results[agent_name] = result.data
+                            if result.fallback:
+                                job["fallback_agents"].append(agent_name)
+                        else:
+                            job["fallback_agents"].append(agent_name)
+
+                streamer.emit("mid_pipeline", "done", progress=65,
+                              message=f"{len(mid_results)}/{len(mid_agents)} agents complete")
 
             # ═══ Render (non-critical, uses Blender service) ═══
             streamer.emit("render", "running", progress=70, message="Rendering...")

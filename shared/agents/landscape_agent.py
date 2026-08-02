@@ -326,6 +326,11 @@ class LandscapeAgent(BaseAgent):
 
     def _generate_bpy_script(self, trees, shrubs, pathways, water_features, params) -> str:
         """Генерация bpy-скрипта для Blender."""
+        import re as _re
+        def _safe_name(s: str) -> str:
+            """Sanitize name for safe use in bpy script string literals."""
+            return _re.sub(r"[^a-zA-Z0-9_]", "_", str(s))
+
         lines = [
             "import bpy",
             "import math",
@@ -341,12 +346,17 @@ class LandscapeAgent(BaseAgent):
 
         # Деревья как низкополигональные объекты
         for i, tree in enumerate(trees[:20]):  # ограничим 20 деревьями
-            lines.append(f"# Tree: {tree['name']}")
+            safe_name = _safe_name(tree.get('name', 'tree'))
+            spread = float(tree.get('spread', 2))
+            height = float(tree.get('height', 3))
+            x = float(tree.get('x', 0))
+            y = float(tree.get('y', 0))
+            lines.append(f"# Tree: {safe_name}")
             lines.append(
-                f"bpy.ops.mesh.primitive_cone_add(radius1={tree['spread'] / 2}, depth={tree['height']}, location=({tree['x'] - 15}, {tree['y'] - 15}, {tree['height'] / 2}))"
+                f"bpy.ops.mesh.primitive_cone_add(radius1={spread / 2}, depth={height}, location=({x - 15}, {y - 15}, {height / 2}))"
             )
             lines.append(f"tree_{i} = bpy.context.active_object")
-            lines.append(f"tree_{i}.name = 'Tree_{tree['name']}_{i}'")
+            lines.append(f"tree_{i}.name = 'Tree_{safe_name}_{i}'")
             lines.append("")
 
         return "\n".join(lines)

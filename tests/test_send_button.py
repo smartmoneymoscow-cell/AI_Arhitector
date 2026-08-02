@@ -54,7 +54,7 @@ class TestSendButton:
             "_sendInner() missing — send button will crash!"
 
     def test_send_button_in_html(self):
-        """Send button (➤) must exist."""
+        """Send button must exist with onclick."""
         assert 'onclick="send()"' in self.html, \
             "Send button onclick='send()' missing!"
 
@@ -69,7 +69,7 @@ class TestSendButton:
             "Input field id='ci' missing — can't type prompts!"
 
     def test_quick_prompts_exist(self):
-        """Quick prompt buttons (Дом, Офис, Коттедж) must exist."""
+        """Quick prompt buttons must exist."""
         assert "Дом" in self.html and "Офис" in self.html, \
             "Quick prompt buttons missing!"
 
@@ -98,20 +98,31 @@ class TestSendButton:
         assert "three.js" in self.html.lower() or "three.min.js" in self.html.lower() or "three.module" in self.html.lower() or "cdn.jsdelivr" in self.html, \
             "Three.js CDN not found — 3D won't render!"
 
+    def test_api_key_helper_exists(self):
+        """_apiHeaders() helper must exist for authenticated requests."""
+        assert "function _apiHeaders" in self.html, \
+            "_apiHeaders() missing — API requests won't include X-API-Key!"
+
+    def test_api_key_management_exists(self):
+        """API key management functions must exist."""
+        assert "function _getApiKey" in self.html, \
+            "_getApiKey() missing — can't manage API keys!"
+        assert "function _setApiKey" in self.html, \
+            "_setApiKey() missing — can't store API keys!"
+
+    def test_orchestrator_endpoint_exists(self):
+        """callOrchestrator() must exist for full pipeline."""
+        assert "function callOrchestrator" in self.html or "async function callOrchestrator" in self.html, \
+            "callOrchestrator() missing — full pipeline won't work!"
+
     def test_no_syntax_errors_in_script(self):
         """All <script> blocks must parse without syntax errors."""
-        import ast
-        # Extract inline scripts
         scripts = re.findall(r'<script>(.*?)</script>', self.html, re.DOTALL)
         for i, script in enumerate(scripts):
-            # Skip non-JS (like JSON data)
             if script.strip().startswith('{') or script.strip().startswith('['):
                 continue
-            # Basic check: no obvious syntax errors
-            # Check for unclosed braces
             opens = script.count('{')
             closes = script.count('}')
-            # Allow some tolerance for template literals
             assert abs(opens - closes) < 5, \
                 f"Script block {i} has mismatched braces ({opens} open, {closes} close) — likely syntax error!"
 

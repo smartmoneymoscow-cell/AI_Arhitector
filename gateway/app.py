@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 import uuid
 
 import httpx
@@ -54,6 +55,53 @@ async def global_exception_handler(request, exc):
         content={"error": "internal", "message": str(exc)[:500]},
     )
 
+
+# ═══════════════════════════════════════════════════════════════
+# CIRCUIT BREAKER — auto-recovery with half-open probing
+# ═══════════════════════════════════════════════════════════════
+
+_circuit_state: dict[str, dict] = {}  # {service: {failures, open_until, last_failure}}
+_CIRCUIT_FAIL_THRESHOLD = 5
+_CIRCUIT_OPEN_SECONDS = 60
+_CIRCUIT_HALF_OPEN_AFTER = 30  # seconds before allowing a probe request
+
+def _check_circuit(service: str) -> bool:
+    """Check if circuit is OPEN (service disabled). Returns True if blocked."""
+    state = _circuit_state.get(service)
+    if not state:
+        return False
+    now = time.time()
+    # If open_until has passed → half-open (allow probe)
+    if state.get("open_until", 0) > 0 and now >= state["open_until"]:
+        logger.info("Circuit breaker HALF-OPEN for %s — allowing probe", service)
+        return False  # allow one probe request
+    return state.get("open_until", 0) > now
+
+def _record_failure(service: str) -> None:
+    """Record a failure. Open circuit after threshold."""
+    state = _circuit_state.setdefault(service, {"failures": 0, "open_until": 0, "last_failure": 0})
+    state["failures"] += 1
+    state["last_failure"] = time.time()
+    if state["failures"] >= _CIRCUIT_FAIL_THRESHOLD:
+        state["open_until"] = time.time() + _CIRCUIT_OPEN_SECONDS
+        logger.warning("Circuit breaker OPEN for %s (%d failures, retry in %ds)",
+                        service, state["failures"], _CIRCUIT_OPEN_SECONDS)
+
+def _record_success(service: str) -> None:
+    """Record a success. Reset circuit."""
+    if service in _circuit_state:
+        old_failures = _circuit_state[service].get("failures", 0)
+        if old_failures > 0:
+            logger.info("Circuit breaker CLOSED for %s (recovered after %d failures)", service, old_failures)
+    _circuit_state[service] = {"failures": 0, "open_until": 0, "last_failure": 0}
+
+def _get_circuit_stats() -> dict:
+    """Return circuit breaker state for health/debug endpoints."""
+    return {svc: {
+        "failures": s.get("failures", 0),
+        "is_open": _check_circuit(svc),
+        "last_failure_ago": int(time.time() - s.get("last_failure", 0)) if s.get("last_failure") else None,
+    } for svc, s in _circuit_state.items()}
 
 # ═══════════════════════════════════════════════════════════════
 # BLENDER LOAD BALANCER — multiple instances
@@ -245,10 +293,11 @@ async def health():
     return {
         "status": "ok",
         "service": "gateway",
-        "version": "8.1.0",
+        "version": "8.2.0",
         "services": services,
         "redis": redis_status,
         "blender_instances": len(blender_urls),
+        "circuit_breakers": _get_circuit_stats(),
     }
 
 
@@ -452,6 +501,20 @@ async def orchestrator_agents(
     from shared.agents import AGENT_REGISTRY
 
     return {"agents": list(AGENT_REGISTRY.keys())}
+
+
+@app.get("/api/v1/stats")
+async def stats_endpoint(
+    api_key: str = Depends(get_api_key_required),
+):
+    """Return cache, cost, and circuit breaker statistics."""
+    from shared.parser import get_cache_stats, get_cost_stats
+
+    return {
+        "cache": get_cache_stats(),
+        "cost": get_cost_stats(),
+        "circuit_breakers": _get_circuit_stats(),
+    }
 
 
 # ═══════════════════════════════════════════════════════════════

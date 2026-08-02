@@ -359,12 +359,35 @@ const API_BASE = (()=>{
 })();
 let _backendOk = null; // null = not checked yet
 
+// ═══ API KEY MANAGEMENT ═══
+function _getApiKey(){
+  try{ return localStorage.getItem('arch_api_key')||''; }catch(e){ return ''; }
+}
+function _setApiKey(k){
+  try{ localStorage.setItem('arch_api_key',k); }catch(e){}
+}
+function _ensureApiKey(){
+  const k=_getApiKey();
+  if(!k){
+    const entered=prompt('Введите API ключ для подключения к серверу:');
+    if(entered&&entered.trim()){_setApiKey(entered.trim());return entered.trim();}
+    return '';
+  }
+  return k;
+}
+function _apiHeaders(extra){
+  const h={'Content-Type':'application/json'};
+  const k=_getApiKey();
+  if(k)h['X-API-Key']=k;
+  return Object.assign(h,extra||{});
+}
+
 async function checkBackend(){
   if(!API_BASE){_backendOk=false;return;}
   try{
     const ctrl=new AbortController();
     const tid=setTimeout(()=>ctrl.abort(),5000);
-    const r=await fetch(API_BASE+'/api/v1/health',{signal:ctrl.signal});
+    const r=await fetch(API_BASE+'/api/v1/health',{signal:ctrl.signal,headers:_apiHeaders()});
     clearTimeout(tid);
     _backendOk=r.ok;
   }catch(e){
@@ -375,14 +398,14 @@ async function checkBackend(){
 }
 
 async function callAI(msg,sys,maxTok){
-  // ── Backend proxy only (key stays server-side) ──────
+  // ── Backend proxy (Claude/Anthropic format for premium features) ──────
   if(API_BASE && _backendOk===null) await checkBackend();
   if(API_BASE && _backendOk){
     const ctrl=new AbortController();
-    setTimeout(()=>ctrl.abort(),30000);
-    const r=await fetch(API_BASE+'/api/v1/proxy/claude',{
+    const tid=setTimeout(()=>ctrl.abort(),30000);
+    const r=await fetch(API_BASE+'/api/v1/chat',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:_apiHeaders(),
       signal:ctrl.signal,
       body:JSON.stringify({
         model:'auto',
@@ -391,10 +414,66 @@ async function callAI(msg,sys,maxTok){
         messages:[{role:'user',content:[{type:'text',text:msg}]}]
       })
     });
-    if(r.ok) return (await r.json()).content?.[0]?.text||'';
-    throw new Error('Сервис временно недоступен. Попробуйте позже.');
+    clearTimeout(tid);
+    if(r.ok){
+      const data=await r.json();
+      // Gateway /api/v1/chat returns {choices:[{message:{content:"..."}}]} or {content:[{text:"..."}]}
+      const content=data?.choices?.[0]?.message?.content || data?.content?.[0]?.text || JSON.stringify(data);
+      return content;
+    }
+    if(r.status===401||r.status===403){
+      _setApiKey('');
+      throw new Error('Неверный API ключ. Обновите страницу и введите ключ заново.');
+    }
+    throw new Error('Сервис временно недоступен (HTTP '+r.status+'). Попробуйте позже.');
   }
   throw new Error('Сервис временно недоступен. Попробуйте позже.');
+}
+
+// ═══ PARSE: structured parsing via gateway ═══
+async function callParse(text){
+  if(!_backendOk) throw new Error('Backend unavailable');
+  const ctrl=new AbortController();
+  const tid=setTimeout(()=>ctrl.abort(),60000);
+  const r=await fetch(API_BASE+'/api/v1/parse',{
+    method:'POST',
+    headers:_apiHeaders(),
+    signal:ctrl.signal,
+    body:JSON.stringify({text:text})
+  });
+  clearTimeout(tid);
+  if(r.ok) return await r.json();
+  if(r.status===401||r.status===403){
+    _setApiKey('');
+    throw new Error('Неверный API ключ.');
+  }
+  throw new Error('Parse error: HTTP '+r.status);
+}
+
+// ═══ ORCHESTRATOR: full pipeline via gateway ═══
+async function callOrchestrator(prompt,opts){
+  if(!_backendOk) throw new Error('Backend unavailable');
+  const ctrl=new AbortController();
+  const tid=setTimeout(()=>ctrl.abort(),300000); // 5 min for full pipeline
+  const r=await fetch(API_BASE+'/api/v1/orchestrator/execute',{
+    method:'POST',
+    headers:_apiHeaders(),
+    signal:ctrl.signal,
+    body:JSON.stringify({
+      prompt:prompt,
+      quality:opts?.quality||'standard',
+      export_formats:opts?.export_formats||['glb'],
+      skip_clarification:opts?.skip_clarification||false,
+      pipeline_profile:opts?.pipeline_profile||'standard'
+    })
+  });
+  clearTimeout(tid);
+  if(r.ok) return await r.json();
+  if(r.status===401||r.status===403){
+    _setApiKey('');
+    throw new Error('Неверный API ключ.');
+  }
+  throw new Error('Orchestrator error: HTTP '+r.status);
 }
 
 // ═══════════════════ LOCAL PARSER ════════════════════════════
@@ -1740,7 +1819,7 @@ async function generateWithFallback(prompt, params) {
         const tid = setTimeout(()=>ctrl.abort(), 90000);
         const r = await fetch(API_BASE + '/api/v1/generate', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
+          headers: _apiHeaders(),
           signal: ctrl.signal,
           body: JSON.stringify({prompt: prompt, ...params})
         });
@@ -2039,9 +2118,9 @@ async function analyzeImage(b64,mediaType,userText){
     try{
       const ctrl=new AbortController();
       setTimeout(()=>ctrl.abort(),30000);
-      const r=await fetch(API_BASE+'/api/v1/proxy/claude',{
+      const r=await fetch(API_BASE+'/api/v1/chat',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:_apiHeaders(),
       signal:ctrl.signal,
       body:JSON.stringify({
         model:'auto',max_tokens:500,
@@ -2981,7 +3060,7 @@ async function searchAndShowReferences(refs) {
       const queryText = refQuery.query || refQuery.style || '';
       const resp = await fetch(`/api/v1/vectordb/search_by_prompt`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: _apiHeaders(),
         body: JSON.stringify({prompt: queryText, limit: 3, style_filter: refQuery.style || '', type_filter: refQuery.type || ''})
       });
       

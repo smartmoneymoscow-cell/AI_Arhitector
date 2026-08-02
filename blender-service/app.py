@@ -609,6 +609,6 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(os.environ.get("PORT", 8082))
-    print(f"Blender Service starting on port {port}")
-    print(f"Blender: {settings.BLENDER_PATH}")
+    logger.info("Blender Service starting on port %d", port)
+    logger.info("Blender: %s", settings.BLENDER_PATH)
     uvicorn.run(app, host="0.0.0.0", port=port)
