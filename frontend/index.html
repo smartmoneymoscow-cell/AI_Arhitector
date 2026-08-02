@@ -1043,6 +1043,117 @@ function resetCamera(){showNotif(t('notifCam'));}
 function toggleDimensions(){document.getElementById('dimBtn').classList.toggle('active');}
 function toggleWireframe(){document.getElementById('wireBtn').classList.toggle('active');}
 
+// ═══════════════════ API KEY MANAGEMENT ═══════════════════
+function _getApiKey(){try{return localStorage.getItem('arch_api_key')||'';}catch(e){return '';}}
+function _setApiKey(k){try{localStorage.setItem('arch_api_key',k);}catch(e){}}
+function _apiHeaders(extra){
+  const h={'Content-Type':'application/json'};
+  const k=_getApiKey();
+  if(k)h['X-API-Key']=k;
+  return Object.assign(h,extra||{});
+}
+let _backendOk=null;
+async function checkBackend(){
+  try{
+    const r=await fetch('/api/v1/health',{signal:AbortSignal.timeout(5000),headers:_apiHeaders()});
+    _backendOk=r.ok;
+  }catch(e){_backendOk=false;}
+}
+
+// ═══════════════════ API CALLS ═══════════════════
+async function callAI(msg,sys,maxTok){
+  if(_backendOk===null) await checkBackend();
+  if(!_backendOk) throw new Error('Backend unavailable');
+  const r=await fetch('/api/v1/chat',{
+    method:'POST',headers:_apiHeaders(),
+    signal:AbortSignal.timeout(60000),
+    body:JSON.stringify({model:'auto',max_tokens:maxTok||500,system:sys||'Отвечай по-русски.',messages:[{role:'user',content:[{type:'text',text:msg}]}]})
+  });
+  if(!r.ok){
+    if(r.status===401||r.status===403){_setApiKey('');throw new Error('Неверный API ключ');}
+    throw new Error('HTTP '+r.status);
+  }
+  const d=await r.json();
+  return d?.choices?.[0]?.message?.content||d?.content?.[0]?.text||JSON.stringify(d);
+}
+async function callParse(text){
+  if(!_backendOk) throw new Error('Backend unavailable');
+  const r=await fetch('/api/v1/parse',{
+    method:'POST',headers:_apiHeaders(),
+    signal:AbortSignal.timeout(60000),
+    body:JSON.stringify({text:text})
+  });
+  if(!r.ok) throw new Error('Parse HTTP '+r.status);
+  return await r.json();
+}
+async function callOrchestrator(prompt,opts){
+  if(!_backendOk) throw new Error('Backend unavailable');
+  const r=await fetch('/api/v1/orchestrator/execute',{
+    method:'POST',headers:_apiHeaders(),
+    signal:AbortSignal.timeout(300000),
+    body:JSON.stringify({prompt:prompt,quality:opts?.quality||'standard',export_formats:opts?.export_formats||['glb'],skip_clarification:opts?.skip_clarification||false,pipeline_profile:opts?.pipeline_profile||'standard'})
+  });
+  if(!r.ok) throw new Error('Orchestrator HTTP '+r.status);
+  return await r.json();
+}
+
+// ═══════════════════ SEND MESSAGE (REAL API) ═══════════════════
+const _origSendMessage = sendMessage;
+sendMessage = async function() {
+  const inp=document.getElementById('msgInput'), text=inp.value.trim();
+  if(!text) return;
+  hideWelcome(); addMessage('user',text); inp.value=''; autoResize(inp);
+
+  if(_backendOk===null) await checkBackend();
+  if(_backendOk) {
+    showTyping();
+    try {
+      // Parse prompt via LLM
+      const parsed = await callParse(text);
+      hideTyping();
+
+      // Show AI response with parsed params
+      const type = parsed.object_type || parsed.building_type || 'building';
+      const floors = parsed.floors || 2;
+      const size = (parsed.width_m||10)+'×'+(parsed.length_m||12)+'м';
+      const style = parsed.style || 'modern';
+      const confidence = Math.round((parsed.confidence||0.5)*100);
+
+      let response = `<b>${t('aiAnalysis')}</b><br>`;
+      response += `Тип: ${type}, ${floors} эт., ${size}<br>`;
+      response += `Стиль: ${style}, уверенность: ${confidence}%`;
+      if(parsed.reasoning) response += `<br><i>${parsed.reasoning}</i>`;
+      addMessage('assistant', response);
+
+      // Show generation overlay
+      showGenOverlay();
+
+      // Try orchestrator for full generation
+      try {
+        const result = await callOrchestrator(text);
+        if(result.status === 'done') {
+          showNotif('✅ Генерация завершена!');
+        } else if(result.status === 'clarification_needed') {
+          const questions = result.clarification?.questions || [];
+          if(questions.length) {
+            let qText = 'Уточните:<br>';
+            questions.forEach(q => { qText += `• ${q.text}<br>`; });
+            addMessage('assistant', qText);
+          }
+        }
+      } catch(genErr) {
+        console.warn('Orchestrator failed:', genErr.message);
+      }
+    } catch(e) {
+      hideTyping();
+      addMessage('assistant', 'Ошибка: ' + e.message);
+    }
+  } else {
+    // Fallback: fake response
+    setTimeout(()=>{ hideTyping(); addMessage('assistant',t('aiResponse')); showGenOverlay(); },1500);
+  }
+}
+
 // ═══════════════════ UTILS ═══════════════════
 function newProject(){showNotif(t('notifNew'));}
 function shareProject(){showNotif(t('notifLink'));}
@@ -1050,6 +1161,7 @@ function showNotif(text){const n=document.getElementById('notif');n.textContent=
 
 // ═══════════════════ INIT ═══════════════════
 applyLang();
+checkBackend();
 </script>
 </body>
 </html>
