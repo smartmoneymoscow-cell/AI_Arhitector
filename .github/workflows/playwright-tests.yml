@@ -28,8 +28,10 @@ jobs:
 
       - name: Start local frontend server
         run: |
-          npx -y serve frontend -l 8080 &
-          sleep 3
+          cd frontend
+          python3 -m http.server 8080 &
+          sleep 2
+          curl -s http://localhost:8080/ | head -5
 
       - name: Run send button tests
         env:
