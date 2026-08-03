@@ -7,7 +7,7 @@ redis>=5.0.0
 shapely>=2.0.0
 networkx>=3.0
 # Image processing
-Pillow>=10.0.0
+Pillow>=12.3.0
 # BIM — тяжёлый, ставим отдельно
 # ifcopenshell часто не ставится через pip на slim образах
 # Раскомментировать если нужен IFC:
