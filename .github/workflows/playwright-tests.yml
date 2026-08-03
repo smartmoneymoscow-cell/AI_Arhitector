@@ -17,25 +17,31 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: Install dependencies
         run: |
           pip install pytest playwright pytest-playwright
           playwright install chromium --with-deps
 
-      - name: Start local frontend server
+      - name: Wait for deploy
         run: |
-          cd frontend
-          python3 -m http.server 8080 &
-          sleep 2
-          curl -s http://localhost:8080/ | head -5
+          URL="https://architect-gateway.onrender.com"
+          for i in $(seq 1 20); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || true)
+            if [ "$CODE" = "200" ]; then
+              # Check if new code is deployed (sendBtn id present)
+              if curl -s "$URL" | grep -q 'id="sendBtn"'; then
+                echo "New code deployed"
+                exit 0
+              fi
+              echo "Old code still live, waiting... ($i/20)"
+            fi
+            sleep 15
+          done
+          echo "Using whatever is deployed"
 
       - name: Run send button tests
         env:
-          GATEWAY_URL: http://localhost:8080
+          GATEWAY_URL: https://architect-gateway.onrender.com
         run: |
           python -m pytest tests/test_e2e_playwright.py -v --tb=short
 
