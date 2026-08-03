@@ -1,0 +1,38 @@
+name: Playwright E2E (Post-Release)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  send-button-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install pytest playwright pytest-playwright
+          playwright install chromium --with-deps
+
+      - name: Run send button tests
+        env:
+          GATEWAY_URL: https://architect-gateway.onrender.com
+          ARCH_API_KEYS: ${{ secrets.ARCH_API_KEYS }}
+        run: |
+          python -m pytest tests/test_e2e_playwright.py -v --tb=short
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 14
