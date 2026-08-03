@@ -61,7 +61,7 @@ async function runTest(tc, browser) {
 
     // 4. Send
     console.log('  3️⃣  Sending...');
-    await page.click('button.sbtn:last-of-type');
+    await page.click('#sendBtn');
     await page.waitForTimeout(500);
     await page.screenshot({ path: path.join(SCREENSHOTS_DIR, `${tc.name}_03_sending.png`) });
 
