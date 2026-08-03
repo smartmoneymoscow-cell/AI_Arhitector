@@ -226,7 +226,7 @@ body{display:flex;flex-direction:column}
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"
           oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
         <button class="sbtn" id="mic-btn" onclick="toggleMic()" style="background:#64748b" title="Голосовой ввод">&#9654;</button>
-        <button class="sbtn" onclick="send()">></button>
+        <button class="sbtn" id="sendBtn" onclick="send()">></button>
       </div>
       <div id="filePreview" style="display:none;margin-top:6px;padding:6px;background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;font-size:11px;align-items:center;gap:6px">
         <img id="filePreviewImg" style="width:36px;height:36px;object-fit:cover;border-radius:5px"/>
@@ -2251,8 +2251,10 @@ function applyStylePreset(key){
   }
 }
 async function send(){
+  const btn=document.getElementById('sendBtn');
+  if(btn)btn.disabled=true;
   try {
-  await _sendInner();
+    await _sendInner();
   } catch(e) {
     console.error('send() unhandled error:', e);
     ST.generating = false;
@@ -2263,20 +2265,22 @@ async function send(){
     if(c3d) c3d.style.display='none';
     addMsg('a', 'Произошла ошибка: ' + (e.message || e) + '<br>Попробуйте ещё раз или обновите страницу.');
     showNotif('Ошибка генерации', 'warn');
+  } finally {
+    if(btn)btn.disabled=false;
   }
 }
 async function _sendInner(){
   const inp=document.getElementById('ci');
   const text=(inp&&inp.value||'').trim();
   if(ST.generating){
-    // Auto-reset if stuck for >60 seconds
-    if(ST._genStart && (Date.now()-ST._genStart > 60000)){
-      console.warn('Generating stuck for >60s, auto-resetting');
+    // Auto-reset if stuck for >30 seconds (reduced from 60 for better UX)
+    if(ST._genStart && (Date.now()-ST._genStart > 30000)){
+      console.warn('Generating stuck for >30s, auto-resetting');
       ST.generating=false;
       const ov=document.getElementById('genov');
       if(ov) ov.style.display='none';
     } else {
-      showNotif('Генерация идёт…','warn');
+      showNotif('Генерация идёт… подождите','warn');
       return;
     }
   }

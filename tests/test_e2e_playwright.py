@@ -56,9 +56,10 @@ class TestPageLoad:
         expect(inp).to_be_visible()
 
     def test_send_button_exists(self, page):
-        """Send button is visible."""
-        btn = page.locator("button.sbtn")
+        """Send button is visible and clickable."""
+        btn = page.locator("#sendBtn")
         expect(btn).to_be_visible()
+        expect(btn).to_be_enabled()
 
     def test_quick_prompts_visible(self, page):
         """Quick prompt buttons appear after interaction."""
@@ -78,7 +79,7 @@ class TestSendButton:
         inp = page.locator("#ci")
         inp.fill("двухэтажный кирпичный дом 10x12")
 
-        btn = page.locator("button.sbtn")
+        btn = page.locator("#sendBtn")
         btn.click()
 
         # Wait for at least one API request
@@ -113,7 +114,7 @@ class TestSendButton:
         inp = page.locator("#ci")
         inp.fill("тестовое сообщение")
 
-        btn = page.locator("button.sbtn")
+        btn = page.locator("#sendBtn")
         btn.click()
 
         # User message should appear
@@ -128,7 +129,7 @@ class TestSendButton:
 
         inp = page.locator("#ci")
         inp.fill("")
-        btn = page.locator("button.sbtn")
+        btn = page.locator("#sendBtn")
         btn.click()
 
         page.wait_for_timeout(2000)
@@ -177,7 +178,7 @@ class TestAPIKey:
 
         inp = page.locator("#ci")
         inp.fill("дом")
-        page.locator("button.sbtn").click()
+        page.locator("#sendBtn").click()
 
         page.wait_for_timeout(3000)
 
@@ -185,6 +186,61 @@ class TestAPIKey:
         if api_requests:
             key_header = api_requests[0].headers.get("x-api-key") or api_requests[0].headers.get("X-API-Key")
             assert key_header, "X-API-Key header missing from API request!"
+
+
+class TestSendButtonResilience:
+    """Test send button works after failures (regression: button stops responding)."""
+
+    def test_send_works_after_stuck_generation(self, page):
+        """Send button works even if ST.generating was stuck true."""
+        # Simulate stuck state: set ST.generating=true and ST._genStart to old time
+        page.evaluate("""
+            ST.generating = true;
+            ST._genStart = Date.now() - 60000;  // 60s ago
+        """)
+
+        inp = page.locator("#ci")
+        inp.fill("деревянный коттедж 12x15")
+
+        btn = page.locator("#sendBtn")
+        btn.click()
+
+        page.wait_for_timeout(2000)
+
+        # Should auto-reset and show user message
+        chat = page.locator("#tab-chat")
+        expect(chat).to_contain_text("деревянный")
+
+    def test_send_button_not_disabled_after_click(self, page):
+        """Send button re-enables after send completes or fails."""
+        inp = page.locator("#ci")
+        inp.fill("офис 5 этажей")
+
+        btn = page.locator("#sendBtn")
+        btn.click()
+        page.wait_for_timeout(3000)
+
+        # Button should be enabled again
+        expect(btn).to_be_enabled()
+
+    def test_double_click_does_not_break_state(self, page):
+        """Rapid double-click doesn't corrupt ST.generating state."""
+        inp = page.locator("#ci")
+        inp.fill("баня с бассейном")
+
+        btn = page.locator("#sendBtn")
+        btn.click()
+        btn.click()  # double click
+
+        page.wait_for_timeout(3000)
+
+        # Should still be able to send again
+        inp.fill("сауна")
+        btn.click()
+        page.wait_for_timeout(1000)
+
+        chat = page.locator("#tab-chat")
+        expect(chat).to_contain_text("сауна")
 
 
 class TestBackendHealth:
