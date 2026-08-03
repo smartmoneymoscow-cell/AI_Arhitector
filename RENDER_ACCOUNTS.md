@@ -24,10 +24,10 @@
 
 | # | Render Аккаунт | URL сервиса | Render API Key | Что работает | План | Статус |
 |---|----------------|-------------|----------------|--------------|------|--------|
-| 1 | Render #1 — Blender #1 | `https://ai-arch-blender3d.onrender.com` | rnd_JN…LwTE | Blender CLI, EEVEE 4K, превью, GLB | starter | ✅ |
+| 1 | Render #1 — Blender #1 | `https://ai-arch-blender3d.onrender.com` | rnd_JN65Ycm8hWZuMPHITQlPHseQLwTE | Blender CLI, EEVEE 4K, превью, GLB | starter | ✅ |
 | 2 | Render #2 — (пусто) | — | rnd_EM…a3r8 | Не задеплоен. Деплой Blender #2 | — | ⬜ |
 | 3 | Render #3 — (пусто) | — | rnd_aF…KycW | Не задеплоен. Деплой Blender #3 | — | ⬜ |
-| 4 | Render #4 — Полный стек | `https://architect-gateway.onrender.com` | rnd_0m…ob6Y | Gateway + Blender + LLM (всё в одном) | starter | ✅ |
+| 4 | Render #4 — Полный стек | `https://architect-gateway.onrender.com` | rnd_b1YxdxWfSXzLUFVu2onBnmJHzQ4S | Gateway + Blender + LLM (всё в одном) | starter | ✅ |
 | 5 | Render #5 — (пусто) | — | rnd_RF…2a6l | Не задеплоен. Деплой LLM сюда. OpenRouter: sk-or-…0f9e | — | ⬜ |
 
 ## Живые URL (подтверждены health check)

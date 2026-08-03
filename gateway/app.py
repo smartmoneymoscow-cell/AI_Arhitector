@@ -778,3 +778,25 @@ async def delete_context(
     store = get_context_store(redis_url=settings.REDIS_URL)
     store.delete(session_id)
     return {"deleted": session_id}
+
+
+# ═══════════════════════════════════════════════════════════════
+# FRONTEND SERVING — serve index.html for all non-API routes
+# ═══════════════════════════════════════════════════════════════
+import os
+from fastapi.responses import FileResponse
+
+FRONTEND_DIR = os.environ.get("FRONTEND_DIR", "") or os.path.join(os.path.dirname(__file__), "..", "frontend")
+if not os.path.isdir(FRONTEND_DIR):
+    FRONTEND_DIR = os.path.join("/", "app", "frontend")
+
+@app.get("/")
+async def serve_index():
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+
+@app.get("/{path:path}")
+async def serve_frontend(path: str):
+    file_path = os.path.join(FRONTEND_DIR, path)
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
