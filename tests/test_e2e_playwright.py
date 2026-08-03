@@ -38,10 +38,12 @@ def browser():
 def page(browser):
     ctx = browser.new_context()
     page = ctx.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("dialog", lambda d: d.dismiss())
     page.goto(GATEWAY_URL)
-    page.evaluate(f"localStorage.setItem('arch_api_key', '{API_KEY}')")
-    page.reload()
     page.wait_for_load_state("networkidle")
+    page._errors = errors
     yield page
     ctx.close()
 
@@ -64,13 +66,28 @@ class TestSendButton:
 
     def test_send_shows_user_message(self, page):
         """Clicking send with text shows user message in chat."""
+        console_msgs = []
+        page.on("console", lambda m: console_msgs.append(f"{m.type}: {m.text}"))
+
         inp = page.locator("#ci")
         inp.fill("двухэтажный кирпичный дом 10x12")
 
         btn = get_send_btn(page)
         btn.click()
 
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(3000)
+
+        # Debug output
+        chat_text = page.locator("#tab-chat").inner_text()
+        js_errors = getattr(page, '_errors', [])
+        if "двухэтажный" not in chat_text:
+            pytest.fail(
+                f"Message not in chat.\n"
+                f"Chat text: {chat_text[:200]}\n"
+                f"JS errors: {js_errors[:5]}\n"
+                f"Console: {console_msgs[:10]}"
+            )
+
         chat = page.locator("#tab-chat")
         expect(chat).to_contain_text("двухэтажный")
         expect(inp).to_have_value("")
