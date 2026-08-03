@@ -5,14 +5,14 @@
 
 import OpenAI from 'openai'
 
-/** LLM API key (required) */
-export const AI_API_KEY = process.env.AI_API_KEY ?? ''
+/** LLM API key — falls back to OPENROUTER_API_KEY used by the backend */
+export const AI_API_KEY = process.env.AI_API_KEY ?? process.env.OPENROUTER_API_KEY ?? ''
 
-/** LLM API base URL — supports OpenAI, compatible proxies, etc. */
-export const AI_BASE_URL = process.env.AI_BASE_URL ?? 'https://api.openai.com/v1'
+/** LLM API base URL — defaults to OpenRouter (same as backend) */
+export const AI_BASE_URL = process.env.AI_BASE_URL ?? 'https://openrouter.ai/api/v1'
 
 /** Primary model for chat (tool-use capable) */
-export const AI_CHAT_MODEL = process.env.AI_CHAT_MODEL ?? 'gpt-4o'
+export const AI_CHAT_MODEL = process.env.AI_CHAT_MODEL ?? 'anthropic/claude-sonnet-4'
 
 /** Lightweight model for summarization */
 export const AI_SUMMARIZE_MODEL = process.env.AI_SUMMARIZE_MODEL ?? 'gpt-4o-mini'
