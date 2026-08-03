@@ -17,15 +17,23 @@ jobs:
           python-version: "3.11"
           cache: pip
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Install dependencies
         run: |
           pip install pytest playwright pytest-playwright
           playwright install chromium --with-deps
 
+      - name: Start local frontend server
+        run: |
+          npx -y serve frontend -l 8080 &
+          sleep 3
+
       - name: Run send button tests
         env:
-          GATEWAY_URL: https://architect-gateway.onrender.com
-          ARCH_API_KEYS: ${{ secrets.ARCH_API_KEYS }}
+          GATEWAY_URL: http://localhost:8080
         run: |
           python -m pytest tests/test_e2e_playwright.py -v --tb=short
 

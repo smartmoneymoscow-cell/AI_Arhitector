@@ -38,9 +38,12 @@ def browser():
 def page(browser):
     ctx = browser.new_context()
     page = ctx.new_page()
+    # Auto-dismiss any prompt() dialogs (API key prompt)
+    page.on("dialog", lambda d: d.dismiss())
     page.goto(GATEWAY_URL)
-    page.evaluate(f"localStorage.setItem('arch_api_key', '{API_KEY}')")
-    page.reload()
+    if API_KEY and API_KEY != "test-key":
+        page.evaluate(f"localStorage.setItem('arch_api_key', '{API_KEY}')")
+        page.reload()
     page.wait_for_load_state("networkidle")
     yield page
     ctx.close()
