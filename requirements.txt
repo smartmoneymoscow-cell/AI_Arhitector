@@ -20,7 +20,7 @@ networkx==3.3
 redis==5.1.0
 
 # ═══ Image processing ═══
-Pillow==10.4.0
+Pillow==12.3.0
 
 # ═══ BIM (optional — C++ build) ═══
 # ifcopenshell==0.8.0  # Uncomment when CI supports C++ builds
