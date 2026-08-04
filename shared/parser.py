@@ -153,13 +153,13 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 # ═══════════════════════════════════════════════════════════════
 
 LLM_CASCADE = [
-    {"model": "google/gemini-2.5-pro", "tier": 1, "timeout": 35},
-    {"model": "anthropic/claude-sonnet-4", "tier": 1, "timeout": 35},
-    {"model": "google/gemini-2.5-flash", "tier": 2, "timeout": 25},
-    {"model": "openai/gpt-4o-mini", "tier": 2, "timeout": 25},
-    {"model": "meta-llama/llama-4-maverick:free", "tier": 3, "timeout": 40},
-    {"model": "qwen/qwen3-235b-a22b:free", "tier": 3, "timeout": 40},
-    {"model": "deepseek/deepseek-chat-v3-0324:free", "tier": 3, "timeout": 40},
+    {"model": "google/gemini-2.5-flash", "tier": 1, "timeout": 25},
+    {"model": "openai/gpt-4o-mini", "tier": 1, "timeout": 25},
+    {"model": "google/gemini-2.0-flash-001", "tier": 2, "timeout": 25},
+    {"model": "meta-llama/llama-3.3-70b-instruct:free", "tier": 2, "timeout": 30},
+    {"model": "mistralai/mistral-small-3.2-24b:free", "tier": 3, "timeout": 30},
+    {"model": "nvidia/nemotron-3-nano-30b-a3b:free", "tier": 3, "timeout": 30},
+    {"model": "deepseek/deepseek-r1-0528:free", "tier": 3, "timeout": 30},
 ]
 
 
@@ -349,7 +349,7 @@ async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) 
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
-        "max_tokens": 2048,
+        "max_tokens": 500,
         "temperature": 0.1,
     }
 
