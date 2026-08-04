@@ -13,6 +13,7 @@ Fixes:
   L9  — Agent isolation (in orchestrator, not here)
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -551,8 +552,8 @@ async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) 
         return None
 
 
-async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
-    """Call Google Gemini API directly — БЕСПЛАТНО (free tier)."""
+async def _call_gemini(prompt: str, timeout: int = 30, max_retries: int = 3) -> dict | None:
+    """Call Google Gemini API directly — БЕСПЛАТНО (free tier, 15 RPM)."""
     api_key = os.environ.get("GOOGLE_API_KEY", "")
     if not api_key:
         return None
@@ -573,24 +574,34 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
         }
     }
 
-    try:
-        async with httpx.AsyncClient() as client:
-            r = await client.post(url, json=payload, timeout=timeout)
+    for attempt in range(max_retries):
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(url, json=payload, timeout=timeout)
 
-        if r.status_code != 200:
-            logger.warning("Gemini returned %d: %s", r.status_code, r.text[:200])
+            if r.status_code == 429:
+                wait = min(2 ** attempt * 5, 60)  # 5s, 10s, 20s
+                logger.warning("Gemini rate-limited, waiting %ds (attempt %d/%d)", wait, attempt + 1, max_retries)
+                await asyncio.sleep(wait)
+                continue
+
+            if r.status_code != 200:
+                logger.warning("Gemini returned %d: %s", r.status_code, r.text[:200])
+                return None
+
+            data = r.json()
+            content = data["candidates"][0]["content"]["parts"][0]["text"]
+            return _extract_json(content)
+
+        except httpx.TimeoutException:
+            logger.warning("Gemini timeout (%ds)", timeout)
+            return None
+        except Exception as e:
+            logger.warning("Gemini error: %s", e)
             return None
 
-        data = r.json()
-        content = data["candidates"][0]["content"]["parts"][0]["text"]
-        return _extract_json(content)
-
-    except httpx.TimeoutException:
-        logger.warning("Gemini timeout (%ds)", timeout)
-        return None
-    except Exception as e:
-        logger.warning("Gemini error: %s", e)
-        return None
+    logger.warning("Gemini: all %d retries exhausted (rate limit)", max_retries)
+    return None
 
 
 async def _call_ollama(prompt: str) -> dict | None:
