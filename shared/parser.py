@@ -552,13 +552,30 @@ async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) 
         return None
 
 
-async def _call_gemini(prompt: str, timeout: int = 30, max_retries: int = 3) -> dict | None:
-    """Call Google Gemini API directly — БЕСПЛАТНО (free tier, 15 RPM)."""
-    api_key = os.environ.get("GOOGLE_API_KEY", "")
-    if not api_key:
-        return None
+def _get_google_keys() -> list[str]:
+    """Get all Google API keys (primary + fallbacks)."""
+    keys = []
+    primary = os.environ.get("GOOGLE_API_KEY", "")
+    if primary:
+        keys.append(primary)
+    fallback = os.environ.get("GOOGLE_FALLBACK_KEYS", "")
+    if fallback:
+        for k in fallback.split(","):
+            k = k.strip()
+            if k and k not in keys:
+                keys.append(k)
+    return keys
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+
+_GEMINI_KEY_IDX = 0
+
+
+async def _call_gemini(prompt: str, timeout: int = 30, max_retries: int = 3) -> dict | None:
+    """Call Google Gemini API — БЕСПЛАТНО (free tier, 15 RPM per key, ротация ключей)."""
+    global _GEMINI_KEY_IDX
+    keys = _get_google_keys()
+    if not keys:
+        return None
 
     payload = {
         "system_instruction": {
@@ -575,19 +592,23 @@ async def _call_gemini(prompt: str, timeout: int = 30, max_retries: int = 3) -> 
     }
 
     for attempt in range(max_retries):
+        key = keys[_GEMINI_KEY_IDX % len(keys)]
+        _GEMINI_KEY_IDX = (_GEMINI_KEY_IDX + 1) % len(keys)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
+
         try:
             async with httpx.AsyncClient() as client:
                 r = await client.post(url, json=payload, timeout=timeout)
 
             if r.status_code == 429:
-                wait = min(2 ** attempt * 5, 60)  # 5s, 10s, 20s
-                logger.warning("Gemini rate-limited, waiting %ds (attempt %d/%d)", wait, attempt + 1, max_retries)
+                wait = min(2 ** attempt * 3, 30)
+                logger.warning("Gemini rate-limited (key %d/%d), waiting %ds", attempt + 1, len(keys), wait)
                 await asyncio.sleep(wait)
                 continue
 
             if r.status_code != 200:
                 logger.warning("Gemini returned %d: %s", r.status_code, r.text[:200])
-                return None
+                continue
 
             data = r.json()
             content = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -595,12 +616,12 @@ async def _call_gemini(prompt: str, timeout: int = 30, max_retries: int = 3) -> 
 
         except httpx.TimeoutException:
             logger.warning("Gemini timeout (%ds)", timeout)
-            return None
+            continue
         except Exception as e:
             logger.warning("Gemini error: %s", e)
-            return None
+            continue
 
-    logger.warning("Gemini: all %d retries exhausted (rate limit)", max_retries)
+    logger.warning("Gemini: all %d attempts exhausted", max_retries)
     return None
 
 
