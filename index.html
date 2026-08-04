@@ -1039,63 +1039,91 @@ async function callAI(msg,sys,maxTok){
   if(API_BASE && _backendOk===null) await checkBackend();
   if(API_BASE && _backendOk){
     _ensureApiKey();
-    const ctrl=new AbortController();
-    const tid=setTimeout(()=>ctrl.abort(),60000);
-    // Use /api/v1/parse — structured parsing via LLM cascade (reads keys correctly)
-    const r=await fetch(API_BASE+'/api/v1/parse',{
-      method:'POST',
-      headers:_apiHeaders(),
-      signal:ctrl.signal,
-      body:JSON.stringify({text:msg})
-    });
-    clearTimeout(tid);
-    if(r.ok){
-      const data=await r.json();
-      // Convert parse result to expected JSON format
-      return JSON.stringify({
-        type: data.building_type||data.type||'house',
-        object_type: data.object_type||'building',
-        floors: data.floors||2,
-        width: data.width_m||data.width||10,
-        length: data.length_m||data.length||12,
-        roof_type: data.roof_type||'gabled',
-        facade_material: data.material||data.facade_material||'plaster',
-        style: data.style||null,
-        reasoning: ['Параметры извлечены через AI парсинг']
-      });
+    // Retry logic — 2 attempts
+    for(let attempt=0; attempt<2; attempt++){
+      try{
+        const ctrl=new AbortController();
+        const tid=setTimeout(()=>ctrl.abort(),60000);
+        const r=await fetch(API_BASE+'/api/v1/parse',{
+          method:'POST',
+          headers:_apiHeaders(),
+          signal:ctrl.signal,
+          body:JSON.stringify({text:msg})
+        });
+        clearTimeout(tid);
+        if(r.ok){
+          const data=await r.json();
+          if(data.error) throw new Error(data.message||'Parse error');
+          return JSON.stringify({
+            type: data.building_type||data.type||'house',
+            object_type: data.object_type||'building',
+            floors: data.floors||2,
+            width: data.width_m||data.width||10,
+            length: data.length_m||data.length||12,
+            roof_type: data.roof_type||'gabled',
+            facade_material: data.material||data.facade_material||'plaster',
+            style: data.style||null,
+            reasoning: ['Параметры извлечены через AI парсинг']
+          });
+        }
+        if(r.status===401||r.status===403){
+          _setApiKey('');
+          throw new Error(currentLang==='en'?'Invalid API key.':'Неверный API ключ.');
+        }
+        throw new Error('HTTP '+r.status);
+      }catch(e){
+        if(attempt===0){
+          console.warn('callAI attempt 1 failed:', e.message, '- retrying...');
+          await new Promise(r=>setTimeout(r,2000));
+          continue;
+        }
+        throw e;
+      }
     }
-    if(r.status===401||r.status===403){
-      _setApiKey('');
-      throw new Error(currentLang==='en'?'Invalid API key.':'Неверный API ключ.');
-    }
-    throw new Error('HTTP '+r.status);
   }
   throw new Error(currentLang==='en'?'Service unavailable':'Сервис временно недоступен');
 }
 
-// ═══════════════════ LOCAL PARSER (regex fallback) ═══════════════════
+// ═══════════════════ LOCAL PARSER (regex fallback — RU + EN) ═══════════════════
 function parseLocal(text){
   const t=text.toLowerCase(); const p={};
-  const wn={'одно':1,'двух':2,'двуэт':2,'трёх':3,'трех':3,'четыр':4,'пяти':5,'шести':6};
-  for(const[w,n] of Object.entries(wn)){if(t.includes(w+'эт')||t.includes(w+'уровн'))p.floors=n;}
-  const fm=t.match(/(\d+)\s*(?:этаж|floor)/); if(fm)p.floors=parseInt(fm[1]);
+  // Floors — Russian word numbers + digits + English
+  const wn={'одно':1,'двух':2,'двуэт':2,'трёх':3,'трех':3,'четыр':4,'пяти':5,'шести':6,'семи':7,'восьми':8,'десяти':10,
+    'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,'eight':8,'nine':9,'ten':10};
+  for(const[w,n] of Object.entries(wn)){if(t.includes(w+'эт')||t.includes(w+'уровн')||t.includes(w+'floor')||t.includes(w+'storey'))p.floors=n;}
+  const fm=t.match(/(\d+)\s*(?:этаж|floor|storey|stories)/); if(fm)p.floors=parseInt(fm[1]);
+  // Dimensions
   const dm=t.match(/(\d+)\s*[×xх]\s*(\d+)/); if(dm){p.width=parseInt(dm[1]);p.length=parseInt(dm[2]);}
+  const sm=t.match(/(\d+)\s*(?:м|m)\s*[×xх]\s*(\d+)\s*(?:м|m)/); if(sm){p.width=parseInt(sm[1]);p.length=parseInt(sm[2]);}
+  // Roof
   if(/плоск|flat/.test(t))p.roof_type='flat';
   else if(/вальм|hip/.test(t))p.roof_type='hip';
-  else if(/двускат|скатн/.test(t))p.roof_type='gabled';
+  else if(/двускат|скатн|gabled/.test(t))p.roof_type='gabled';
+  // Material
   if(/кирпич|brick/.test(t))p.facade_material='brick';
-  else if(/дерев|брус|wood/.test(t))p.facade_material='wood';
+  else if(/дерев|брус|wood|timber|log/.test(t))p.facade_material='wood';
   else if(/стекл|glass/.test(t))p.facade_material='glass';
-  else if(/штукат|plaster/.test(t))p.facade_material='plaster';
+  else if(/штукат|plaster|stucco/.test(t))p.facade_material='plaster';
   else if(/камен|stone/.test(t))p.facade_material='stone';
+  else if(/металл|steel|metal/.test(t))p.facade_material='steel';
+  else if(/бетон|concrete/.test(t))p.facade_material='concrete';
+  // Type
   if(/офис|office/.test(t))p.type='office';
   else if(/коттедж|cottage/.test(t))p.type='cottage';
-  else if(/отель|гостиниц|hotel/.test(t))p.type='hotel';
-  else if(/баня|саун/.test(t))p.type='bathhouse';
+  else if(/таунхаус|townhouse/.test(t))p.type='townhouse';
+  else if(/отель|гостиниц|hotel|motel/.test(t))p.type='hotel';
+  else if(/баня|саун|bathhouse|sauna/.test(t))p.type='bathhouse';
+  else if(/склад|warehouse/.test(t))p.type='warehouse';
+  else if(/гараж|garage/.test(t))p.type='garage';
+  else if(/ресторан|restaurant/.test(t))p.type='restaurant';
+  else if(/школ|school/.test(t))p.type='school';
+  else if(/больниц|hospital|clinic/.test(t))p.type='hospital';
   else p.type='house';
-  p.has_balcony=/балкон/.test(t);
-  p.has_garage=/гараж/.test(t);
-  p.has_terrace=/террас/.test(t);
+  // Features
+  p.has_balcony=/балкон|balcony/.test(t);
+  p.has_garage=/гараж|garage/.test(t);
+  p.has_terrace=/террас|terrace|patio/.test(t);
+  p.has_pool=/бассейн|pool/.test(t);
   return p;
 }
 

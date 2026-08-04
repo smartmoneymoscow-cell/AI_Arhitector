@@ -426,43 +426,55 @@ async function checkBackend(){
 }
 
 async function callAI(msg,sys,maxTok){
-  // ── Backend proxy — use /api/v1/parse (reliable) instead of /api/v1/chat (unreliable) ──────
+  // ── Backend proxy — use /api/v1/parse (reliable) with retry ──────
   if(API_BASE && _backendOk===null) await checkBackend();
   if(API_BASE && _backendOk){
-    const ctrl=new AbortController();
-    const tid=setTimeout(()=>ctrl.abort(),60000);
-    const r=await fetch(API_BASE+'/api/v1/parse',{
-      method:'POST',
-      headers:_apiHeaders(),
-      signal:ctrl.signal,
-      body:JSON.stringify({text:msg})
-    });
-    clearTimeout(tid);
-    if(r.ok){
-      const data=await r.json();
-      // Convert parse result to JSON string for downstream parsing
-      return JSON.stringify({
-        type: data.building_type||data.type||'house',
-        object_type: data.object_type||'building',
-        room_type: data.room_type||null,
-        style: data.style||null,
-        floors: data.floors||2,
-        width: data.width_m||data.width||10,
-        length: data.length_m||data.length||12,
-        roof_type: data.roof_type||'gabled',
-        facade_material: data.material||data.facade_material||'plaster',
-        facade_color: data.facade_color||null,
-        has_balcony: data.has_balcony||false,
-        has_terrace: data.has_terrace||false,
-        has_garage: data.has_garage||false,
-        reasoning: [{icon:'»',text:'AI парсинг через /api/v1/parse',confidence:0.85}]
-      });
+    // Retry logic — 2 attempts
+    for(let attempt=0; attempt<2; attempt++){
+      try{
+        const ctrl=new AbortController();
+        const tid=setTimeout(()=>ctrl.abort(),60000);
+        const r=await fetch(API_BASE+'/api/v1/parse',{
+          method:'POST',
+          headers:_apiHeaders(),
+          signal:ctrl.signal,
+          body:JSON.stringify({text:msg})
+        });
+        clearTimeout(tid);
+        if(r.ok){
+          const data=await r.json();
+          if(data.error) throw new Error(data.message||'Parse error');
+          return JSON.stringify({
+            type: data.building_type||data.type||'house',
+            object_type: data.object_type||'building',
+            room_type: data.room_type||null,
+            style: data.style||null,
+            floors: data.floors||2,
+            width: data.width_m||data.width||10,
+            length: data.length_m||data.length||12,
+            roof_type: data.roof_type||'gabled',
+            facade_material: data.material||data.facade_material||'plaster',
+            facade_color: data.facade_color||null,
+            has_balcony: data.has_balcony||false,
+            has_terrace: data.has_terrace||false,
+            has_garage: data.has_garage||false,
+            reasoning: [{icon:'»',text:'AI парсинг через /api/v1/parse',confidence:0.85}]
+          });
+        }
+        if(r.status===401||r.status===403){
+          _setApiKey('');
+          throw new Error('Неверный API ключ. Обновите страницу и введите ключ заново.');
+        }
+        throw new Error('HTTP '+r.status);
+      }catch(e){
+        if(attempt===0){
+          console.warn('callAI attempt 1 failed:', e.message, '- retrying...');
+          await new Promise(r=>setTimeout(r,2000));
+          continue;
+        }
+        throw e;
+      }
     }
-    if(r.status===401||r.status===403){
-      _setApiKey('');
-      throw new Error('Неверный API ключ. Обновите страницу и введите ключ заново.');
-    }
-    throw new Error('Сервис временно недоступен (HTTP '+r.status+'). Попробуйте позже.');
   }
   throw new Error('Сервис временно недоступен. Попробуйте позже.');
 }
