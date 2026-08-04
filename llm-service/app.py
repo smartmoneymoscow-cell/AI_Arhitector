@@ -55,18 +55,13 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    cache = get_cache_stats()
+    # Fast health check — don't wait for Redis
     return HealthResponse(
         status="ok",
         service="llm-service",
         version="7.1.0",
         model=settings.LLM_MODEL,
-        services={
-            "redis": "connected" if cache["redis_connected"] else "disconnected",
-            "l1_cache": f"{cache['l1_entries']}/{cache['l1_max']}",
-            "l2_cache": str(cache["l2_redis_entries"]),
-            "cascade_models": str(len(cache["llm_cascade"])),
-        },
+        services={},
     )
 
 

@@ -269,46 +269,18 @@ def _get_job(job_id: str) -> dict | None:
 @app.get("/health")
 @app.get("/api/v1/health")
 async def health():
-    services = {}
-    # LLM service
-    llm_url = settings.LLM_SERVICE_URL
-    if llm_url:
-        try:
-            async with httpx.AsyncClient() as client:
-                r = await client.get(f"{llm_url}/health", timeout=15.0)
-                services["llm"] = "ok" if r.status_code == 200 else "error"
-        except Exception:
-            services["llm"] = "unreachable"
-    else:
-        services["llm"] = "not_configured"
-
-    # Blender instances (all)
-    blender_urls = _get_blender_urls()
-    for i, url in enumerate(blender_urls):
-        name = "blender" if i == 0 else f"blender_{i + 1}"
-        try:
-            async with httpx.AsyncClient() as client:
-                r = await client.get(f"{url}/health", timeout=15.0)
-                services[name] = "ok" if r.status_code == 200 else "error"
-        except Exception:
-            services[name] = "unreachable"
-
-    redis_status = "not_configured"
-    r = _get_redis()
-    if r:
-        try:
-            r.ping()
-            redis_status = "ok"
-        except Exception:
-            redis_status = "unreachable"
-
+    # Fast health check — respond immediately, don't wait for downstream services
+    # Downstream status is checked lazily via circuit breakers
     return {
         "status": "ok",
         "service": "gateway",
         "version": "8.2.0",
-        "services": services,
-        "redis": redis_status,
-        "blender_instances": len(blender_urls),
+        "services": {
+            "llm": "configured" if settings.LLM_SERVICE_URL else "not_configured",
+            "blender": "configured" if settings.BLENDER_SERVICE_URL else "not_configured",
+        },
+        "redis": "not_configured",
+        "blender_instances": len(_get_blender_urls()),
         "circuit_breakers": _get_circuit_stats(),
     }
 
