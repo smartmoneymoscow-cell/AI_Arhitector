@@ -26,7 +26,7 @@ jobs:
       - name: Trigger Render deploy
         if: steps.check.outputs.skip != 'true'
         run: |
-          curl -s -X POST \
+          curl -sS -X POST \
             "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
             -H "Content-Type: application/json" \
@@ -34,26 +34,38 @@ jobs:
 
       - name: Wait for live
         if: steps.check.outputs.skip != 'true'
+        shell: bash
         run: |
-          # Wait for Render to process the deploy
-          sleep 120
-          # Check if site responds
-          for i in $(seq 1 10); do
+          set -euo pipefail
+          for i in $(seq 1 12); do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.PRODUCTION_URL }}/api/v1/health" || true)
             if [ "$CODE" = "200" ]; then
               echo "✅ Site is responding (attempt $i)"
               exit 0
             fi
-            echo "  [$i/10] Status: $CODE"
+            echo "  [$i/12] Status: $CODE"
             sleep 15
           done
-          echo "⚠️ Site not responding, but deploy may still be in progress"
-          exit 0
+          echo "⚠️ Site not responding after readiness window"
+          exit 1
 
       # ═══ HEALTH CHECKS — ALL SERVICES ═══
       - name: Wait for cold start
         if: steps.check.outputs.skip != 'true'
-        run: sleep 60
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 8); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://architect-gateway.onrender.com/health" || true)
+            if [ "$CODE" = "200" ]; then
+              echo "Gateway warmed up"
+              exit 0
+            fi
+            echo "Gateway cold start retry $i/8"
+            sleep 10
+          done
+          echo "Gateway still not reachable"
+          exit 1
 
       - name: Health check — Gateway
         if: steps.check.outputs.skip != 'true'

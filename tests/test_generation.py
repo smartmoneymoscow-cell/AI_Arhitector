@@ -179,9 +179,10 @@ class TestPromptParsing:
 class TestAllModelsFailed:
     """Тесты поведения при недоступности всех моделей."""
 
+    @patch("shared.parser._l1_get", return_value=None)
     @patch("shared.parser._call_openrouter", return_value=None)
     @patch("shared.parser._l2_get", return_value=None)
-    def test_raises_when_all_models_fail(self, mock_redis, mock_llm):
+    def test_raises_when_all_models_fail(self, mock_redis, mock_llm, mock_l1):
         with pytest.raises(AllModelsFailedError):
             parse_prompt("двухэтажный дом")
 
