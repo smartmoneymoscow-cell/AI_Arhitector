@@ -257,6 +257,9 @@ async def discover_free_models(api_key: str) -> list[dict]:
         # Sort by priority, then by name
         free_models.sort(key=lambda x: (x["tier"], x["model"]))
 
+        # Limit to top 15 models to avoid cascade timeout
+        free_models = free_models[:15]
+
         with _DISCOVER_LOCK:
             _DISCOVERED_MODELS = free_models
             _DISCOVER_TS = time.time()
