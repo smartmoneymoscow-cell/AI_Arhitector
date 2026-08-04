@@ -29,6 +29,10 @@ services:
         value: "arch-prod-key-2024"
       - key: CORS_ORIGINS
         value: "https://smartmoneymoscow-cell.github.io"
+      - key: KAGGLE_RENDERER_URL
+        value: ""
+      - key: KAGGLE_API_KEY
+        sync: false
       - key: PYTHONUNBUFFERED
         value: "1"
 

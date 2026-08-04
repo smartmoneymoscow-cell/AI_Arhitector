@@ -118,7 +118,7 @@ def _get_circuit_stats() -> dict:
 
 
 def _get_blender_urls() -> list[str]:
-    """Get all Blender service URLs (primary + secondary instances)."""
+    """Get all Blender service URLs (primary + secondary + Kaggle)."""
     urls = []
     primary = settings.BLENDER_SERVICE_URL
     if primary:
@@ -128,6 +128,11 @@ def _get_blender_urls() -> list[str]:
         url = os.environ.get(f"BLENDER_SERVICE_URL_{i}", "")
         if url and url not in urls:
             urls.append(url)
+    # Kaggle GPU renderer (last priority — fallback)
+    kaggle_url = os.environ.get("KAGGLE_RENDERER_URL", "")
+    if kaggle_url and kaggle_url not in urls:
+        urls.append(kaggle_url)
+        logger.info("Kaggle GPU renderer registered: %s", kaggle_url)
     return urls
 
 
@@ -750,6 +755,85 @@ async def delete_context(
     store = get_context_store(redis_url=settings.REDIS_URL)
     store.delete(session_id)
     return {"deleted": session_id}
+
+
+# ═══════════════════════════════════════════════════════════════
+# KAGGLE POLLING — for notebooks without ngrok
+# ═══════════════════════════════════════════════════════════════
+
+_kaggle_queue: list[dict] = []  # pending render tasks
+_kaggle_results: dict[str, dict] = {}  # completed results by task_id
+
+
+@app.post("/api/v1/kaggle/enqueue")
+async def kaggle_enqueue(
+    req: dict,
+    api_key: str = Depends(get_api_key_required),
+):
+    """Add a render task to Kaggle queue."""
+    task_id = uuid.uuid4().hex[:8]
+    task = {
+        "id": task_id,
+        "prompt": req.get("prompt", ""),
+        "params": req.get("params", {}),
+        "status": "pending",
+        "created_at": time.time(),
+    }
+    _kaggle_queue.append(task)
+    logger.info("Kaggle task enqueued: %s", task_id)
+    return {"task_id": task_id, "status": "pending"}
+
+
+@app.get("/api/v1/kaggle/pending")
+async def kaggle_pending():
+    """Poll endpoint: Kaggle notebook calls this to get next task."""
+    if not _kaggle_queue:
+        return {}  # no tasks
+    task = _kaggle_queue.pop(0)
+    task["status"] = "processing"
+    return task
+
+
+@app.post("/api/v1/kaggle/result")
+async def kaggle_result(req: dict):
+    """Kaggle notebook posts result here."""
+    task_id = req.get("task_id", "")
+    if not task_id:
+        raise HTTPException(400, "Missing task_id")
+    _kaggle_results[task_id] = {
+        "task_id": task_id,
+        "status": "completed",
+        "result": req.get("result"),
+        "completed_at": time.time(),
+    }
+    logger.info("Kaggle result received: %s", task_id)
+    return {"status": "ok"}
+
+
+@app.get("/api/v1/kaggle/status/{task_id}")
+async def kaggle_status(task_id: str):
+    """Check Kaggle task status."""
+    result = _kaggle_results.get(task_id)
+    if result:
+        return result
+    # Check if still in queue
+    for task in _kaggle_queue:
+        if task["id"] == task_id:
+            return {"task_id": task_id, "status": "pending"}
+    return {"task_id": task_id, "status": "not_found"}
+
+
+@app.get("/api/v1/kaggle/health")
+async def kaggle_health():
+    """Kaggle integration status."""
+    kaggle_url = os.environ.get("KAGGLE_RENDERER_URL", "")
+    return {
+        "kaggle_configured": bool(kaggle_url),
+        "kaggle_url": kaggle_url or "not_configured",
+        "pending_tasks": len(_kaggle_queue),
+        "completed_results": len(_kaggle_results),
+        "blender_urls": _get_blender_urls(),
+    }
 
 
 # ═══════════════════════════════════════════════════════════════

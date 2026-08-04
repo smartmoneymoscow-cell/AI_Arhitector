@@ -1910,21 +1910,21 @@ async function generateWithFallback(prompt, params) {
   addThink(['Сервер недоступен, рендерю локально в браузере…']);
 
   if(isInterior || isLandscape) {
-    // Interior/landscape → локальная генерация через parseLocal + startGen
-    const parsed = parseLocal(prompt);
+    // Interior/landscape → локальная генерация через LLM params
+    const parsed = params && params.type ? params : {type:'room'};
     parsed.isInterior = isInterior;
     if(isInterior) {
       const ip = parseInteriorParams(prompt);
-      parsed.style = ip.style;
-      parsed.furniture = ip.furniture;
+      parsed.style = parsed.style || ip.style;
+      parsed.furniture = parsed.furniture || ip.furniture;
     }
     const bld = applyParams(prompt, parsed);
     startGen(bld);
     return true;
   }
 
-  // Building → локальная генерация
-  const parsed = parseLocal(prompt);
+  // Building → локальная генерация через LLM params
+  const parsed = params && params.type ? params : {type:'house'};
   const bld = applyParams(prompt, parsed);
   startGen(bld);
   return true;
@@ -2331,7 +2331,7 @@ async function _sendInner(){
     addThink(['» Анализирую изображение (AI Vision)…','Определяю тип, материалы, пропорции, кровлю…']);
     try{
       const vis=await analyzeImage(fb64,mtype,ftext);
-      const parsed=parseLocal(ftext||'');
+      const parsed={type:'house',floors:2,width:10,length:12,roof_type:'gabled',facade_material:'plaster'};
       ['type','floors','width','length','roof_type','facade_material','facade_color','has_balcony','has_terrace','has_garage'].forEach(k=>{
         if(vis[k]!=null)parsed[k]=vis[k];
       });
@@ -2480,10 +2480,12 @@ async function _sendInner(){
       }catch(e){console.warn('LLM parse failed:',e.message);}
     }
     
-    // Step 2: Fallback to regex if LLM unavailable
+    // Step 2: If LLM unavailable — show error, NO regex fallback
     if(!parsed){
-      parsed=parseLocal(text);
-      appendLiveStep(thinkId, '»', 'LLM недоступен — локальный анализ (regex)');
+      appendLiveStep(thinkId, '✗', 'LLM недоступен. Попробуйте позже.');
+      addMsg('a', '⚠️ <b>LLM-сервис недоступен.</b><br>Не удалось проанализировать запрос через ИИ. Серверы перегружены или на обслуживании.<br><br>Попробуйте:<br>• Повторить запрос через несколько минут<br>• Обновить страницу (F5)<br>• Проверить статус сервисов');
+      showNotif('LLM недоступен', 'warn');
+      return;
     }
 
     // ═══ UNIFIED ROUTING: LLM decides object_type, we just route ═══
@@ -2530,17 +2532,8 @@ async function _sendInner(){
     }
     return;
   }
-  // General chat — try local generation as last resort
-  const parsed = parseLocal(text);
-  if(parsed && (parsed.type || parsed.width)) {
-    const thinkId2 = addLiveThinking('Анализирую...');
-    appendLiveStep(thinkId2, '»', 'Локальный анализ параметров...');
-    appendLiveStep(thinkId2, '»', 'Генерирую 3D модель...');
-    const bld = applyParams(text, parsed);
-    startGen(bld);
-    return;
-  }
-  addMsg('a','Опишите здание или интерьер — сразу сгенерирую 3D модель.');
+  // General chat — no regex fallback, ask user to describe more clearly
+  addMsg('a', '🤔 Не удалось распознать запрос. Опишите здание или интерьер подробнее, например:<br>• «Двухэтажный коттедж 12×15 из кирпича»<br>• «Детская комната в скандинавском стиле»<br>• «Офис 5 этажей с панорамными окнами>');
 }
 
 // ═══════════════════ CLIENT COMPLIANCE CHECK ═════════════════════
