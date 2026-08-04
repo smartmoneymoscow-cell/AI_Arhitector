@@ -47,6 +47,8 @@ services:
     envVars:
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
       - key: REDIS_URL
         value: redis://red-xxx:6379
       - key: PORT

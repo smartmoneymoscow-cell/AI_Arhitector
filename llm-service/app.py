@@ -60,12 +60,13 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     # Fast health check — don't wait for Redis
+    gemini_configured = bool(os.environ.get("GOOGLE_API_KEY", ""))
     return HealthResponse(
         status="ok",
         service="llm-service",
-        version="7.1.0",
+        version="8.0.0",
         model=settings.LLM_MODEL,
-        services={},
+        services={"gemini": "configured" if gemini_configured else "not_configured"},
     )
 
 

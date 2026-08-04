@@ -153,13 +153,15 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 # ═══════════════════════════════════════════════════════════════
 
 LLM_CASCADE = [
-    {"model": "google/gemini-2.5-flash", "tier": 1, "timeout": 25},
-    {"model": "openai/gpt-4o-mini", "tier": 1, "timeout": 25},
-    {"model": "google/gemini-2.0-flash-001", "tier": 2, "timeout": 25},
-    {"model": "meta-llama/llama-3.3-70b-instruct:free", "tier": 2, "timeout": 30},
-    {"model": "mistralai/mistral-small-3.2-24b:free", "tier": 3, "timeout": 30},
-    {"model": "nvidia/nemotron-3-nano-30b-a3b:free", "tier": 3, "timeout": 30},
-    {"model": "deepseek/deepseek-r1-0528:free", "tier": 3, "timeout": 30},
+    {"model": "meta-llama/llama-3.3-70b-instruct:free", "tier": 1, "timeout": 30},
+    {"model": "mistralai/mistral-small-3.2-24b:free", "tier": 1, "timeout": 30},
+    {"model": "google/gemma-4-26b-a4b-it:free", "tier": 1, "timeout": 30},
+    {"model": "google/gemma-4-31b-it:free", "tier": 2, "timeout": 30},
+    {"model": "nvidia/nemotron-3-nano-30b-a3b:free", "tier": 2, "timeout": 30},
+    {"model": "deepseek/deepseek-r1-0528:free", "tier": 2, "timeout": 30},
+    {"model": "inclusionai/ling-3.0-flash:free", "tier": 3, "timeout": 30},
+    {"model": "nvidia/nemotron-3-ultra-550b-a55b:free", "tier": 3, "timeout": 30},
+    {"model": "nvidia/nemotron-3-super-120b-a12b:free", "tier": 3, "timeout": 30},
 ]
 
 
@@ -549,6 +551,48 @@ async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) 
         return None
 
 
+async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
+    """Call Google Gemini API directly — БЕСПЛАТНО (free tier)."""
+    api_key = os.environ.get("GOOGLE_API_KEY", "")
+    if not api_key:
+        return None
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+
+    payload = {
+        "system_instruction": {
+            "parts": [{"text": SYSTEM_PROMPT}]
+        },
+        "contents": [
+            {"parts": [{"text": prompt}]}
+        ],
+        "generationConfig": {
+            "temperature": 0.1,
+            "maxOutputTokens": 500,
+            "responseMimeType": "application/json"
+        }
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(url, json=payload, timeout=timeout)
+
+        if r.status_code != 200:
+            logger.warning("Gemini returned %d: %s", r.status_code, r.text[:200])
+            return None
+
+        data = r.json()
+        content = data["candidates"][0]["content"]["parts"][0]["text"]
+        return _extract_json(content)
+
+    except httpx.TimeoutException:
+        logger.warning("Gemini timeout (%ds)", timeout)
+        return None
+    except Exception as e:
+        logger.warning("Gemini error: %s", e)
+        return None
+
+
 async def _call_ollama(prompt: str) -> dict | None:
     """L4: Call local Ollama model as last resort."""
     if not OLLAMA_URL:
@@ -665,6 +709,17 @@ async def parse_prompt_async(text: str) -> dict:
     if cached:
         _l1_set(text, cached)
         return cached
+
+    # ═══ 0. Google Gemini — БЕСПЛАТНО, без OpenRouter ═══
+    logger.info("Trying Google Gemini (free tier)...")
+    gemini_result = await _call_gemini(text)
+    if gemini_result:
+        validated = _validate_and_fix(gemini_result, text)
+        if isinstance(validated, dict):
+            _l1_set(text, validated)
+            _l2_set(text, validated)
+            logger.info("Gemini parsed successfully: %s", validated.get("building_type"))
+            return validated
 
     # L3: Get all available keys
     api_keys = _get_api_keys()

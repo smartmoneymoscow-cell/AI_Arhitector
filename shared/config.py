@@ -11,6 +11,7 @@ class Settings:
     """Глобальные настройки, читаемые из env."""
 
     # OpenRouter
+    GOOGLE_API_KEY: str = os.environ.get("GOOGLE_API_KEY", "")
     OPENROUTER_API_KEY: str = os.environ.get("OPENROUTER_API_KEY", "")
     OPENROUTER_BASE: str = "https://openrouter.ai/api/v1"
     LLM_MODEL: str = os.environ.get("LLM_MODEL", "google/gemini-2.5-flash")
