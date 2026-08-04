@@ -164,6 +164,149 @@ LLM_CASCADE = [
 
 
 # ═══════════════════════════════════════════════════════════════
+# AUTO-DISCOVER FREE MODELS FROM OPENROUTER
+# Queries OpenRouter API for available free models,
+# rebuilds cascade automatically when models change.
+# ═══════════════════════════════════════════════════════════════
+
+_DISCOVERED_MODELS: list[dict] = []
+_DISCOVER_TS: float = 0
+_DISCOVER_TTL: int = 3600  # refresh every 1 hour
+_DISCOVER_LOCK = threading.Lock()
+
+# Models to SKIP (known to be bad for JSON/arch tasks)
+_BLOCKLIST = {
+    "openrouter/auto",
+    "deepseek/deepseek-r1-0528:free",  # thinking model, outputs <think> tags
+    "google/gemma-3-1b-it:free",       # too small
+    "meta-llama/llama-4-maverick:free", # inconsistent JSON
+}
+
+# Preferred free models (boost priority)
+_PREFERRED = {
+    "google/gemini-2.5-flash",         # best free-tier model
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "mistralai/mistral-small-3.2-24b:free",
+    "qwen/qwen3-235b-a22b:free",
+    "deepseek/deepseek-chat-v3-0324:free",
+}
+
+
+async def discover_free_models(api_key: str) -> list[dict]:
+    """Query OpenRouter for available free models."""
+    global _DISCOVERED_MODELS, _DISCOVER_TS
+
+    with _DISCOVER_LOCK:
+        if _DISCOVERED_MODELS and (time.time() - _DISCOVER_TS) < _DISCOVER_TTL:
+            return _DISCOVERED_MODELS
+
+    base_url = os.environ.get("OPENROUTER_BASE", "https://openrouter.ai/api/v1")
+
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                f"{base_url}/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=15,
+            )
+        if r.status_code != 200:
+            logger.warning("OpenRouter /models returned %d", r.status_code)
+            return []
+
+        data = r.json()
+        models = data.get("data", [])
+
+        free_models = []
+        for m in models:
+            mid = m.get("id", "")
+            pricing = m.get("pricing", {})
+            prompt_price = float(pricing.get("prompt", "1") or "1")
+            completion_price = float(pricing.get("completion", "1") or "1")
+
+            # Free = price is 0
+            is_free = prompt_price == 0 and completion_price == 0
+            # Also include very cheap models (< $0.0001 per 1K tokens)
+            is_cheap = prompt_price < 0.0001 and completion_price < 0.0001
+
+            if not (is_free or is_cheap):
+                continue
+            if mid in _BLOCKLIST:
+                continue
+
+            # Filter: must support text generation
+            arch = m.get("architecture", {})
+            modality = arch.get("output_modalities", [])
+            if "text" not in modality and not modality:
+                continue
+
+            # Score: prefer known good models
+            priority = 3
+            if mid in _PREFERRED:
+                priority = 1
+            elif is_free:
+                priority = 2
+
+            free_models.append({
+                "model": mid,
+                "tier": priority,
+                "timeout": 30,
+                "is_free": is_free,
+                "name": m.get("name", ""),
+            })
+
+        # Sort by priority, then by name
+        free_models.sort(key=lambda x: (x["tier"], x["model"]))
+
+        with _DISCOVER_LOCK:
+            _DISCOVERED_MODELS = free_models
+            _DISCOVER_TS = time.time()
+
+        logger.info(
+            "Discovered %d free/cheap models from OpenRouter (was %d in cascade)",
+            len(free_models),
+            len(LLM_CASCADE),
+        )
+        return free_models
+
+    except Exception as e:
+        logger.warning("Free model discovery failed: %s", e)
+        return []
+
+
+def get_active_cascade(api_key: str = "") -> list[dict]:
+    """Return the active cascade: discovered models + hardcoded fallback."""
+    global _DISCOVERED_MODELS, _DISCOVER_TS
+
+    # If we have fresh discovered models, use them
+    with _DISCOVER_LOCK:
+        if _DISCOVERED_MODELS and (time.time() - _DISCOVER_TS) < _DISCOVER_TTL:
+            return _DISCOVERED_MODELS
+
+    # Otherwise return hardcoded cascade
+    return LLM_CASCADE
+
+
+def invalidate_discovery() -> None:
+    """Force re-discovery on next call."""
+    global _DISCOVERED_MODELS, _DISCOVER_TS
+    with _DISCOVER_LOCK:
+        _DISCOVERED_MODELS = []
+        _DISCOVER_TS = 0
+
+
+def get_discovery_stats() -> dict:
+    """Return discovery stats for health endpoint."""
+    with _DISCOVER_LOCK:
+        return {
+            "discovered_count": len(_DISCOVERED_MODELS),
+            "discovered_models": [m["model"] for m in _DISCOVERED_MODELS[:10]],
+            "last_discover_ago": int(time.time() - _DISCOVER_TS) if _DISCOVER_TS else None,
+            "ttl": _DISCOVER_TTL,
+            "hardcoded_fallback": [m["model"] for m in LLM_CASCADE],
+        }
+
+
+# ═══════════════════════════════════════════════════════════════
 # PROMPT SANITIZATION (L1: security)
 # ═══════════════════════════════════════════════════════════════
 
@@ -518,8 +661,19 @@ async def parse_prompt_async(text: str) -> dict:
             return result
         raise AllModelsFailedError("No API keys configured and Ollama unavailable")
 
+    # Auto-discover free models from OpenRouter
+    cascade = get_active_cascade(api_keys[0] if api_keys else "")
+
+    # If cascade is empty or stale, trigger async discovery
+    if api_keys and not _DISCOVERED_MODELS:
+        try:
+            await discover_free_models(api_keys[0])
+            cascade = get_active_cascade(api_keys[0])
+        except Exception as e:
+            logger.warning("Discovery failed, using hardcoded cascade: %s", e)
+
     # LLM cascade with key rotation (L3) + Pydantic validation
-    for model_config in LLM_CASCADE:
+    for model_config in cascade:
         model: str = model_config["model"]  # type: ignore[assignment]
         timeout: int = model_config["timeout"]  # type: ignore[assignment]
         tier: int = model_config["tier"]  # type: ignore[assignment]
@@ -564,7 +718,7 @@ async def parse_prompt_async(text: str) -> dict:
             logger.info("Ollama fallback succeeded: %s", validated.get("building_type"))
             return validated
 
-    raise AllModelsFailedError(f"All {len(LLM_CASCADE)} LLM models (+ Ollama) failed for prompt: {text[:100]}...")
+    raise AllModelsFailedError(f"All {len(cascade)} LLM models (+ Ollama) failed for prompt: {text[:100]}...")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -626,6 +780,7 @@ def get_cache_stats() -> dict:
         "api_keys_configured": len(_get_api_keys()),
         "ollama_configured": bool(OLLAMA_URL),
         "llm_cascade": [{"model": m["model"], "tier": m["tier"]} for m in LLM_CASCADE],
+        "discovery": get_discovery_stats(),
         "cost_tracking": get_cost_stats(),
     }
 

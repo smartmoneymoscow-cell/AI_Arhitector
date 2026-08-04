@@ -31,6 +31,10 @@ from shared.parser import (
     AllModelsFailedError,
     get_cache_stats,
     parse_prompt_async,
+    discover_free_models,
+    get_active_cascade,
+    get_discovery_stats,
+    invalidate_discovery,
 )
 
 setup_logging("llm-service")
@@ -133,6 +137,37 @@ async def parse_prompt_endpoint(req: ParseRequest):
 async def cache_stats():
     """Статистика кеша парсинга."""
     return get_cache_stats()
+
+
+@app.get("/api/v1/models/discover")
+async def models_discover():
+    """Trigger free model discovery and return results."""
+    from shared.config import settings
+    api_key = settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY", "")
+    if not api_key:
+        raise HTTPException(503, "No OPENROUTER_API_KEY configured")
+    models = await discover_free_models(api_key)
+    return {
+        "discovered": len(models),
+        "models": models,
+        "stats": get_discovery_stats(),
+    }
+
+
+@app.post("/api/v1/models/refresh")
+async def models_refresh():
+    """Force refresh of free model cache."""
+    from shared.config import settings
+    invalidate_discovery()
+    api_key = settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY", "")
+    if not api_key:
+        raise HTTPException(503, "No OPENROUTER_API_KEY configured")
+    models = await discover_free_models(api_key)
+    return {
+        "refreshed": True,
+        "discovered": len(models),
+        "models": [m["model"] for m in models[:20]],
+    }
 
 
 if __name__ == "__main__":
