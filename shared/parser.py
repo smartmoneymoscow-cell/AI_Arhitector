@@ -180,6 +180,14 @@ _BLOCKLIST = {
     "deepseek/deepseek-r1-0528:free",  # thinking model, outputs <think> tags
     "google/gemma-3-1b-it:free",       # too small
     "meta-llama/llama-4-maverick:free", # inconsistent JSON
+    "google/lyria-3-clip-preview",     # music model
+    "google/lyria-3-pro-preview",      # music model
+    "nvidia/nemotron-3-nano-30b-a3b:free",  # reasoning model, slow
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",  # reasoning, slow
+    "nvidia/nemotron-3.5-content-safety:free",  # safety model, not text gen
+    "nvidia/nemotron-nano-12b-v2-vl:free",  # vision-language, not ideal for JSON
+    "nvidia/nemotron-nano-9b-v2:free",  # too small
+    "inclusionai/ling-3.0-flash:free",  # unknown quality
 }
 
 # Preferred free models (boost priority)
@@ -237,6 +245,12 @@ async def discover_free_models(api_key: str) -> list[dict]:
             arch = m.get("architecture", {})
             modality = arch.get("output_modalities", [])
             if "text" not in modality and not modality:
+                continue
+
+            # Filter: skip models that are clearly not for text generation
+            mid_lower = mid.lower()
+            skip_keywords = ["lyria", "imagen", "dall-e", "stable-diffusion", "midjourney", "tts", "whisper", "embed", "rerank", "content-safety"]
+            if any(kw in mid_lower for kw in skip_keywords):
                 continue
 
             # Score: prefer known good models
