@@ -73,11 +73,27 @@ class ParsedParams(BaseModel):
             return "house"
         return str(v).strip().lower()
 
-    @field_validator("style", "material", "roof_type", mode="before")
+    @field_validator("style", mode="before")
     @classmethod
-    def validate_string_field(cls, v):
+    def validate_style(cls, v):
         if v is None or (isinstance(v, str) and not v.strip()):
-            return None  # let default handle it
+            return "modern"
+        return str(v).strip().lower()
+
+    @field_validator("material", mode="before")
+    @classmethod
+    def validate_material(cls, v):
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return "plaster"
+        if isinstance(v, list):
+            return ", ".join(str(x) for x in v)
+        return str(v).strip().lower()
+
+    @field_validator("roof_type", mode="before")
+    @classmethod
+    def validate_roof_type(cls, v):
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return "none"
         return str(v).strip().lower()
 
     @field_validator("object_type", mode="before")
