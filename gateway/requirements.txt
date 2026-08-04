@@ -4,7 +4,7 @@ httpx>=0.25.0
 pydantic>=2.5.0
 redis>=5.0.0
 # Geometry (легковесные)
-shapely>=2.0.0
+shapely>=2.1.2
 networkx>=3.0
 # Image processing
 Pillow>=10.0.0
