@@ -5,7 +5,7 @@
 
 services:
   - type: web
-    name: architect
+    name: architect-gateway
     runtime: docker
     dockerfilePath: ./gateway.Dockerfile
     rootDir: .
@@ -19,9 +19,6 @@ services:
         value: https://ai-arch-blender3d.onrender.com
       - key: BLENDER_SERVICE_URL_2
         value: https://architect-blender.onrender.com
-      # Blender #3 — uncomment when deployed on Account 3
-      # - key: BLENDER_SERVICE_URL_3
-      #   value: https://______.onrender.com
       - key: REDIS_URL
         value: redis://red-xxx:6379
       - key: FRONTEND_DIR
@@ -32,6 +29,8 @@ services:
         value: "arch-prod-key-2024"
       - key: CORS_ORIGINS
         value: "https://smartmoneymoscow-cell.github.io"
+      - key: PYTHONUNBUFFERED
+        value: "1"
 
   - type: web
     name: ai-arch-llmproxy

@@ -426,28 +426,37 @@ async function checkBackend(){
 }
 
 async function callAI(msg,sys,maxTok){
-  // ── Backend proxy (Claude/Anthropic format for premium features) ──────
+  // ── Backend proxy — use /api/v1/parse (reliable) instead of /api/v1/chat (unreliable) ──────
   if(API_BASE && _backendOk===null) await checkBackend();
   if(API_BASE && _backendOk){
     const ctrl=new AbortController();
-    const tid=setTimeout(()=>ctrl.abort(),30000);
-    const r=await fetch(API_BASE+'/api/v1/chat',{
+    const tid=setTimeout(()=>ctrl.abort(),60000);
+    const r=await fetch(API_BASE+'/api/v1/parse',{
       method:'POST',
       headers:_apiHeaders(),
       signal:ctrl.signal,
-      body:JSON.stringify({
-        model:'auto',
-        max_tokens:maxTok||400,
-        system:sys||'Отвечай по-русски.',
-        messages:[{role:'user',content:[{type:'text',text:msg}]}]
-      })
+      body:JSON.stringify({text:msg})
     });
     clearTimeout(tid);
     if(r.ok){
       const data=await r.json();
-      // Gateway /api/v1/chat returns {choices:[{message:{content:"..."}}]} or {content:[{text:"..."}]}
-      const content=data?.choices?.[0]?.message?.content || data?.content?.[0]?.text || JSON.stringify(data);
-      return content;
+      // Convert parse result to JSON string for downstream parsing
+      return JSON.stringify({
+        type: data.building_type||data.type||'house',
+        object_type: data.object_type||'building',
+        room_type: data.room_type||null,
+        style: data.style||null,
+        floors: data.floors||2,
+        width: data.width_m||data.width||10,
+        length: data.length_m||data.length||12,
+        roof_type: data.roof_type||'gabled',
+        facade_material: data.material||data.facade_material||'plaster',
+        facade_color: data.facade_color||null,
+        has_balcony: data.has_balcony||false,
+        has_terrace: data.has_terrace||false,
+        has_garage: data.has_garage||false,
+        reasoning: [{icon:'»',text:'AI парсинг через /api/v1/parse',confidence:0.85}]
+      });
     }
     if(r.status===401||r.status===403){
       _setApiKey('');
