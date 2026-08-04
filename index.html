@@ -1040,26 +1040,33 @@ async function callAI(msg,sys,maxTok){
   if(API_BASE && _backendOk){
     _ensureApiKey();
     const ctrl=new AbortController();
-    const tid=setTimeout(()=>ctrl.abort(),30000);
-    const r=await fetch(API_BASE+'/api/v1/chat',{
+    const tid=setTimeout(()=>ctrl.abort(),60000);
+    // Use /api/v1/parse — structured parsing via LLM cascade (reads keys correctly)
+    const r=await fetch(API_BASE+'/api/v1/parse',{
       method:'POST',
       headers:_apiHeaders(),
       signal:ctrl.signal,
-      body:JSON.stringify({
-        model:'auto',
-        max_tokens:maxTok||400,
-        system:sys||'Отвечай по-русски.',
-        messages:[{role:'user',content:[{type:'text',text:msg}]}]
-      })
+      body:JSON.stringify({text:msg})
     });
     clearTimeout(tid);
     if(r.ok){
       const data=await r.json();
-      return data?.choices?.[0]?.message?.content || data?.content?.[0]?.text || JSON.stringify(data);
+      // Convert parse result to expected JSON format
+      return JSON.stringify({
+        type: data.building_type||data.type||'house',
+        object_type: data.object_type||'building',
+        floors: data.floors||2,
+        width: data.width_m||data.width||10,
+        length: data.length_m||data.length||12,
+        roof_type: data.roof_type||'gabled',
+        facade_material: data.material||data.facade_material||'plaster',
+        style: data.style||null,
+        reasoning: ['Параметры извлечены через AI парсинг']
+      });
     }
     if(r.status===401||r.status===403){
       _setApiKey('');
-      throw new Error(currentLang==='en'?'Invalid API key. Refresh and enter key again.':'Неверный API ключ. Обновите страницу и введите ключ заново.');
+      throw new Error(currentLang==='en'?'Invalid API key.':'Неверный API ключ.');
     }
     throw new Error('HTTP '+r.status);
   }
