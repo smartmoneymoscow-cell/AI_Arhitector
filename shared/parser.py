@@ -569,8 +569,7 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
         "generationConfig": {
             "temperature": 0.1,
             "maxOutputTokens": 2048,
-            "responseMimeType": "application/json",
-            "thinkingConfig": {"thinkingBudget": 0}
+            "responseMimeType": "application/json"
         }
     }
 
