@@ -37,13 +37,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          BASE_URL="${{ secrets.PRODUCTION_URL }}"
+          if [ -z "$BASE_URL" ]; then
+            BASE_URL="https://architect-gateway.onrender.com"
+          fi
           for i in $(seq 1 12); do
-            CODE=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.PRODUCTION_URL }}/api/v1/health" || true)
-            if [ "$CODE" = "200" ]; then
-              echo "✅ Site is responding (attempt $i)"
-              exit 0
-            fi
-            echo "  [$i/12] Status: $CODE"
+            for PATH in "/health" "/api/v1/health"; do
+              CODE=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}${PATH}" || true)
+              echo "  [$i/12] ${BASE_URL}${PATH} -> ${CODE}"
+              if [ "$CODE" = "200" ]; then
+                echo "✅ Site is responding (attempt $i)"
+                exit 0
+              fi
+            done
             sleep 15
           done
           echo "⚠️ Site not responding after readiness window"
