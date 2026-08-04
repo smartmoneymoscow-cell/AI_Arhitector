@@ -80,6 +80,12 @@ async def chat_completions(req: ChatRequest):
     }
     if settings.OPENROUTER_API_KEY:
         headers["Authorization"] = f"Bearer {settings.OPENROUTER_API_KEY}"
+    else:
+        # Fallback: read directly from env (settings may not pick up Render env vars)
+        import os
+        _key = os.environ.get("OPENROUTER_API_KEY", "")
+        if _key:
+            headers["Authorization"] = f"Bearer {_key}"
 
     payload = {
         "model": req.model or settings.LLM_MODEL,
