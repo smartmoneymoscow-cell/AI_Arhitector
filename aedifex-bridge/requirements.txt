@@ -1,7 +1,7 @@
 # aedifex-bridge requirements
 fastapi>=0.115.0
 uvicorn>=0.34.0
-httpx>=0.28.0
+httpx>=0.28.1
 pydantic>=2.0
 python-multipart>=0.0.18
 websockets>=14.0
