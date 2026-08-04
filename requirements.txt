@@ -17,7 +17,7 @@ networkx==3.3
 # See: https://github.com/smartmoneymoscow-cell/AI_Arhitector/issues/A10
 
 # ═══ Redis ═══
-redis==5.1.0
+redis==8.1.0
 
 # ═══ Image processing ═══
 Pillow==10.4.0
