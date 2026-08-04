@@ -399,12 +399,9 @@ function _setApiKey(k){
 }
 function _ensureApiKey(){
   const k=_getApiKey();
-  if(!k){
-    const entered=prompt('Введите API ключ для подключения к серверу:');
-    if(entered&&entered.trim()){_setApiKey(entered.trim());return entered.trim();}
-    return '';
-  }
-  return k;
+  if(k) return k;
+  // Don't block — gateway may be in open mode
+  return '';
 }
 function _apiHeaders(extra){
   const h={'Content-Type':'application/json'};

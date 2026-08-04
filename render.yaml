@@ -29,7 +29,7 @@ services:
       - key: PORT
         value: "8080"
       - key: ARCH_API_KEYS
-        sync: false
+        value: "arch-prod-key-2024"
       - key: CORS_ORIGINS
         value: "https://smartmoneymoscow-cell.github.io"
 

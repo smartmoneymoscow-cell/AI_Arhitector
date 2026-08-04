@@ -788,6 +788,7 @@ html,body{background:var(--bg);color:var(--txt)}
 <!-- ═══ SCRIPTS ═══ -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <script>
 'use strict';
 
@@ -995,14 +996,191 @@ function handleFile(f) {
 function clearFile() { document.getElementById('filePreview').style.display='none'; document.getElementById('fileIn').value=''; }
 function attachFile() { document.getElementById('fileIn').click(); }
 
+// ═══════════════════ API INTEGRATION ═══════════════════
+const API_BASE = (()=>{
+  const proto = window.location.protocol;
+  if(proto === 'file:') return null;
+  const stored = localStorage.getItem('archai_backend_url');
+  if(stored) return stored.replace(/\/+$/,'');
+  const origin = window.location.origin;
+  if(origin.includes('github.io') || origin.includes('githubusercontent.com'))
+    return 'https://architect-gateway.onrender.com';
+  return origin;
+})();
+let _backendOk = null;
+function _getApiKey(){ try{ return localStorage.getItem('arch_api_key')||''; }catch(e){ return ''; } }
+function _setApiKey(k){ try{ localStorage.setItem('arch_api_key',k); }catch(e){} }
+function _ensureApiKey(){
+  const k=_getApiKey();
+  if(k) return k;
+  // Don't block — gateway may be in open mode
+  return '';
+}
+function _apiHeaders(extra){
+  const h={'Content-Type':'application/json'};
+  const k=_getApiKey();
+  if(k)h['X-API-Key']=k;
+  return Object.assign(h,extra||{});
+}
+async function checkBackend(){
+  if(!API_BASE){_backendOk=false;return;}
+  try{
+    const ctrl=new AbortController();
+    const tid=setTimeout(()=>ctrl.abort(),5000);
+    const r=await fetch(API_BASE+'/api/v1/health',{signal:ctrl.signal,headers:_apiHeaders()});
+    clearTimeout(tid);
+    _backendOk=r.ok;
+  }catch(e){
+    _backendOk=false;
+  }
+  console.log('Backend:',_backendOk?'available':'unavailable');
+}
+async function callAI(msg,sys,maxTok){
+  if(API_BASE && _backendOk===null) await checkBackend();
+  if(API_BASE && _backendOk){
+    _ensureApiKey();
+    const ctrl=new AbortController();
+    const tid=setTimeout(()=>ctrl.abort(),30000);
+    const r=await fetch(API_BASE+'/api/v1/chat',{
+      method:'POST',
+      headers:_apiHeaders(),
+      signal:ctrl.signal,
+      body:JSON.stringify({
+        model:'auto',
+        max_tokens:maxTok||400,
+        system:sys||'Отвечай по-русски.',
+        messages:[{role:'user',content:[{type:'text',text:msg}]}]
+      })
+    });
+    clearTimeout(tid);
+    if(r.ok){
+      const data=await r.json();
+      return data?.choices?.[0]?.message?.content || data?.content?.[0]?.text || JSON.stringify(data);
+    }
+    if(r.status===401||r.status===403){
+      _setApiKey('');
+      throw new Error(currentLang==='en'?'Invalid API key. Refresh and enter key again.':'Неверный API ключ. Обновите страницу и введите ключ заново.');
+    }
+    throw new Error('HTTP '+r.status);
+  }
+  throw new Error(currentLang==='en'?'Service unavailable':'Сервис временно недоступен');
+}
+
+// ═══════════════════ LOCAL PARSER (regex fallback) ═══════════════════
+function parseLocal(text){
+  const t=text.toLowerCase(); const p={};
+  const wn={'одно':1,'двух':2,'двуэт':2,'трёх':3,'трех':3,'четыр':4,'пяти':5,'шести':6};
+  for(const[w,n] of Object.entries(wn)){if(t.includes(w+'эт')||t.includes(w+'уровн'))p.floors=n;}
+  const fm=t.match(/(\d+)\s*(?:этаж|floor)/); if(fm)p.floors=parseInt(fm[1]);
+  const dm=t.match(/(\d+)\s*[×xх]\s*(\d+)/); if(dm){p.width=parseInt(dm[1]);p.length=parseInt(dm[2]);}
+  if(/плоск|flat/.test(t))p.roof_type='flat';
+  else if(/вальм|hip/.test(t))p.roof_type='hip';
+  else if(/двускат|скатн/.test(t))p.roof_type='gabled';
+  if(/кирпич|brick/.test(t))p.facade_material='brick';
+  else if(/дерев|брус|wood/.test(t))p.facade_material='wood';
+  else if(/стекл|glass/.test(t))p.facade_material='glass';
+  else if(/штукат|plaster/.test(t))p.facade_material='plaster';
+  else if(/камен|stone/.test(t))p.facade_material='stone';
+  if(/офис|office/.test(t))p.type='office';
+  else if(/коттедж|cottage/.test(t))p.type='cottage';
+  else if(/отель|гостиниц|hotel/.test(t))p.type='hotel';
+  else if(/баня|саун/.test(t))p.type='bathhouse';
+  else p.type='house';
+  p.has_balcony=/балкон/.test(t);
+  p.has_garage=/гараж/.test(t);
+  p.has_terrace=/террас/.test(t);
+  return p;
+}
+
 // ═══════════════════ CHAT ═══════════════════
 function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,160)+'px'; }
-function sendMessage() {
+async function sendMessage() {
   const inp=document.getElementById('msgInput'), text=inp.value.trim();
   if(!text) return;
   hideWelcome(); addMessage('user',text); inp.value=''; autoResize(inp);
   showTyping();
-  setTimeout(()=>{ hideTyping(); addMessage('assistant',t('aiResponse')); showGenOverlay(); },1500);
+  try {
+    // Try LLM call
+    const response = await callAI(text,
+      'Ты — архитектурный AI-ассистент. Анализируешь запрос и возвращаешь СТРОГО валидный JSON без markdown. '+
+      'Формат: {"type":"house|office|cottage|hotel","floors":2,"width":10,"length":12,"roof_type":"gabled|flat|hip","facade_material":"brick|wood|glass|plaster","style":null,"reasoning":["шаг1","шаг2"]} '+
+      'Правила: null=не упомянуто. «64 кв метра»→width=8,length=8. Только JSON.',
+      500
+    );
+    hideTyping();
+    // Try to parse JSON from response
+    let parsed = null;
+    try {
+      const cleaned = response.replace(/```json|```/g,'').trim();
+      parsed = JSON.parse(cleaned);
+    } catch(e) {
+      // Not JSON — show as text response
+      addMessage('assistant', response);
+      return;
+    }
+    // Show reasoning if available
+    if(parsed.reasoning && parsed.reasoning.length > 0) {
+      const reasoningHtml = '<div style="background:linear-gradient(135deg,#faf5ff,#eff6ff);border:1px solid #c4b5fd;border-radius:12px;padding:12px 14px;margin-bottom:8px;font-size:12px">'+
+        '<div style="font-weight:700;color:#6d28d9;margin-bottom:6px">🧠 '+(currentLang==='en'?'Analysis':'Анализ запроса')+'</div>'+
+        parsed.reasoning.map(r=>'<div style="padding:3px 0;color:#4c1d95">→ '+esc(typeof r==='string'?r:r.text||JSON.stringify(r))+'</div>').join('')+
+        '</div>';
+      addMessage('assistant', reasoningHtml);
+    }
+    // Build description
+    const typeLabels = {house:'Жилой дом',office:'Офис',cottage:'Коттедж',hotel:'Гостиница',bathhouse:'Баня'};
+    const typeEn = {house:'Residential house',office:'Office',cottage:'Cottage',hotel:'Hotel',bathhouse:'Bathhouse'};
+    const label = currentLang==='en' ? (typeEn[parsed.type]||'Building') : (typeLabels[parsed.type]||'Здание');
+    const floors = parsed.floors||2;
+    const w = parsed.width||10;
+    const l = parsed.length||12;
+    const mat = parsed.facade_material||'';
+    const roof = parsed.roof_type||'';
+    let desc = `🏗 <b>${label}</b> — ${floors} ${currentLang==='en'?'floor(s)':'этаж(ей)'}, ${w}×${l}м`;
+    if(mat) desc += `, ${mat}`;
+    if(roof) desc += `, ${roof} roof`;
+    addMessage('assistant', desc);
+    // Try to generate 3D via backend
+    if(_backendOk) {
+      try {
+        addMessage('assistant', currentLang==='en'?'⏳ Generating 3D model...':'⏳ Генерирую 3D модель...');
+        const genCtrl = new AbortController();
+        const genTid = setTimeout(()=>genCtrl.abort(), 120000);
+        const genR = await fetch(API_BASE+'/api/v1/generate', {
+          method:'POST',
+          headers:_apiHeaders(),
+          signal:genCtrl.signal,
+          body:JSON.stringify({prompt:text, ...parsed})
+        });
+        clearTimeout(genTid);
+        if(genR.ok) {
+          const blob = await genR.blob();
+          if(blob.size > 1000) {
+            // Load GLB into Three.js viewer
+            const url = URL.createObjectURL(blob);
+            loadGLBModel(url);
+            addMessage('assistant', currentLang==='en'?'✅ 3D model ready! See viewer on the right.':'✅ 3D модель готова! Смотрите в правой панели.');
+          } else {
+            addMessage('assistant', currentLang==='en'?'⚠️ Server returned empty model':'⚠️ Сервер вернул пустую модель');
+          }
+        } else {
+          addMessage('assistant', currentLang==='en'?'⚠️ Generation failed (HTTP '+genR.status+'). Try describing differently.':'⚠️ Генерация не удалась (HTTP '+genR.status+'). Попробуйте описать иначе.');
+        }
+      } catch(genErr) {
+        if(genErr.name === 'AbortError') {
+          addMessage('assistant', currentLang==='en'?'⏰ Server timeout. Try simpler description.':'⏰ Сервер не ответил. Попробуйте проще описание.');
+        } else {
+          console.warn('Generate error:', genErr);
+          addMessage('assistant', currentLang==='en'?'⚠️ Generation error: '+genErr.message:'⚠️ Ошибка генерации: '+genErr.message);
+        }
+      }
+    } else {
+      addMessage('assistant', currentLang==='en'?'💡 Backend unavailable. 3D generation requires running server. Start with: docker-compose up':'💡 Бэкенд недоступен. Для 3D-генерации нужен запущенный сервер. Запустите: docker-compose up');
+    }
+  } catch(e) {
+    hideTyping();
+    console.error('Chat error:', e);
+    addMessage('assistant', '❌ '+(e.message || (currentLang==='en'?'Error occurred':'Произошла ошибка')));
+  }
 }
 function go(p) { document.getElementById('msgInput').value=p; sendMessage(); }
 function addMessage(role,text) {
@@ -1048,8 +1226,111 @@ function newProject(){showNotif(t('notifNew'));}
 function shareProject(){showNotif(t('notifLink'));}
 function showNotif(text){const n=document.getElementById('notif');n.textContent=text;n.style.display='flex';setTimeout(()=>{n.style.display='none';},3000);}
 
+// ═══════════════════ THREE.JS 3D VIEWER ═══════════════════
+let scene, camera, renderer, controls;
+function init3D() {
+  const canvas = document.getElementById('c3d');
+  if(!canvas || !window.THREE) return;
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x27272a);
+  camera = new THREE.PerspectiveCamera(50, canvas.clientWidth/canvas.clientHeight, 0.1, 1000);
+  camera.position.set(15, 12, 15);
+  renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  // Lights
+  const amb = new THREE.AmbientLight(0xffffff, 0.6); scene.add(amb);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.8); dir.position.set(10,15,10); scene.add(dir);
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4); scene.add(hemi);
+  // Ground
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(100,100),
+    new THREE.MeshStandardMaterial({color:0x1e1e23})
+  );
+  ground.rotation.x = -Math.PI/2; ground.position.y = -0.01; scene.add(ground);
+  // Grid
+  const grid = new THREE.GridHelper(50, 50, 0x3f3f46, 0x2e2e33);
+  scene.add(grid);
+  // Controls
+  if(THREE.OrbitControls) {
+    controls = new THREE.OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.target.set(0, 3, 0);
+  }
+  // Resize
+  const ro = new ResizeObserver(()=>{
+    const w=canvas.clientWidth, h=canvas.clientHeight;
+    camera.aspect=w/h; camera.updateProjectionMatrix();
+    renderer.setSize(w,h);
+  });
+  ro.observe(canvas.parentElement);
+  // Animate
+  function animate(){
+    requestAnimationFrame(animate);
+    if(controls) controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+}
+function loadGLBModel(url) {
+  if(!scene) init3D();
+  if(!scene || !window.THREE || !THREE.GLTFLoader) {
+    console.warn('Three.js not ready');
+    return;
+  }
+  const loader = new THREE.GLTFLoader();
+  loader.load(url, (gltf) => {
+    // Remove old models
+    const toRemove = [];
+    scene.traverse(child => {
+      if(child.isMesh && child.name !== 'Ground') toRemove.push(child);
+    });
+    toRemove.forEach(obj => {
+      if(obj.geometry) obj.geometry.dispose();
+      if(obj.material) {
+        if(Array.isArray(obj.material)) obj.material.forEach(m=>m.dispose());
+        else obj.material.dispose();
+      }
+      scene.remove(obj);
+    });
+    // Add new model
+    const model = gltf.scene;
+    scene.add(model);
+    // Center camera
+    const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    if(controls) {
+      controls.target.copy(center);
+      controls.update();
+    }
+    camera.position.set(center.x + maxDim*1.5, center.y + maxDim, center.z + maxDim*1.5);
+    camera.lookAt(center);
+    // Show canvas, hide empty state
+    document.getElementById('c3d').style.display='block';
+    const es=document.getElementById('emptyState');
+    if(es) es.style.display='none';
+    showNotif(currentLang==='en'?'3D model ready!':'3D модель готова!');
+  }, (progress) => {
+    console.log('Loading GLB:', Math.round(progress.loaded/progress.total*100)+'%');
+  }, (error) => {
+    console.error('GLB load error:', error);
+    addMessage('assistant', currentLang==='en'?'⚠️ Failed to load 3D model':'⚠️ Не удалось загрузить 3D модель');
+  });
+}
+
 // ═══════════════════ INIT ═══════════════════
 applyLang();
+// Init 3D viewer on load
+if(window.THREE) {
+  try { init3D(); } catch(e) { console.warn('3D init failed:', e); }
+}
+// Check backend on load
+if(API_BASE) { checkBackend().catch(()=>{}); }
 </script>
 </body>
 </html>
