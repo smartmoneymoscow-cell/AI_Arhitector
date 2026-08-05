@@ -1035,11 +1035,10 @@ async function checkBackend(){
   }
   console.log('Backend:',_backendOk?'available':'unavailable');
 }
-async function callAI(msg,sys,maxTok){
+async function callParseAPI(msg){
   if(API_BASE && _backendOk===null) await checkBackend();
   if(API_BASE && _backendOk){
     _ensureApiKey();
-    // Retry logic — 2 attempts
     for(let attempt=0; attempt<2; attempt++){
       try{
         const ctrl=new AbortController();
@@ -1054,17 +1053,7 @@ async function callAI(msg,sys,maxTok){
         if(r.ok){
           const data=await r.json();
           if(data.error) throw new Error(data.message||'Parse error');
-          return JSON.stringify({
-            type: data.building_type||data.type||'house',
-            object_type: data.object_type||'building',
-            floors: data.floors||2,
-            width: data.width_m||data.width||10,
-            length: data.length_m||data.length||12,
-            roof_type: data.roof_type||'gabled',
-            facade_material: data.material||data.facade_material||'plaster',
-            style: data.style||null,
-            reasoning: ['Параметры извлечены через AI парсинг']
-          });
+          return data;
         }
         if(r.status===401||r.status===403){
           _setApiKey('');
@@ -1072,16 +1061,28 @@ async function callAI(msg,sys,maxTok){
         }
         throw new Error('HTTP '+r.status);
       }catch(e){
-        if(attempt===0){
-          console.warn('callAI attempt 1 failed:', e.message, '- retrying...');
-          await new Promise(r=>setTimeout(r,2000));
-          continue;
-        }
+        if(attempt===0){console.warn('parse attempt 1 failed:',e.message); await new Promise(r=>setTimeout(r,2000)); continue;}
         throw e;
       }
     }
   }
   throw new Error(currentLang==='en'?'Service unavailable':'Сервис временно недоступен');
+}
+async function callOrchestratorAPI(prompt,parsed){
+  _ensureApiKey();
+  const ctrl=new AbortController();
+  const tid=setTimeout(()=>ctrl.abort(),300000);
+  try{
+    const r=await fetch(API_BASE+'/api/v1/orchestrator/execute',{
+      method:'POST',
+      headers:_apiHeaders(),
+      signal:ctrl.signal,
+      body:JSON.stringify({prompt:prompt,quality:'standard',pipeline_profile:parsed.object_type==='interior'?'interior':'standard',skip_clarification:false,export_formats:['glb']})
+    });
+    clearTimeout(tid);
+    if(r.ok) return await r.json();
+    throw new Error('HTTP '+r.status);
+  }catch(e){clearTimeout(tid);throw e;}
 }
 
 // ═══════════════════ LOCAL PARSER (regex fallback — RU + EN) ═══════════════════
@@ -1135,87 +1136,223 @@ async function sendMessage() {
   hideWelcome(); addMessage('user',text); inp.value=''; autoResize(inp);
   showTyping();
   try {
-    // Try LLM call
-    const response = await callAI(text,
-      'Ты — архитектурный AI-ассистент. Анализируешь запрос и возвращаешь СТРОГО валидный JSON без markdown. '+
-      'Формат: {"type":"house|office|cottage|hotel","floors":2,"width":10,"length":12,"roof_type":"gabled|flat|hip","facade_material":"brick|wood|glass|plaster","style":null,"reasoning":["шаг1","шаг2"]} '+
-      'Правила: null=не упомянуто. «64 кв метра»→width=8,length=8. Только JSON.',
-      500
-    );
+    // === STEP 1: Parse prompt via LLM ===
+    const parsed = await callParseAPI(text);
     hideTyping();
-    // Try to parse JSON from response
-    let parsed = null;
-    try {
-      const cleaned = response.replace(/```json|```/g,'').trim();
-      parsed = JSON.parse(cleaned);
-    } catch(e) {
-      // Not JSON — show as text response
-      addMessage('assistant', response);
-      return;
-    }
-    // Show reasoning if available
-    if(parsed.reasoning && parsed.reasoning.length > 0) {
-      const reasoningHtml = '<div style="background:linear-gradient(135deg,#faf5ff,#eff6ff);border:1px solid #c4b5fd;border-radius:12px;padding:12px 14px;margin-bottom:8px;font-size:12px">'+
-        '<div style="font-weight:700;color:#6d28d9;margin-bottom:6px">🧠 '+(currentLang==='en'?'Analysis':'Анализ запроса')+'</div>'+
-        parsed.reasoning.map(r=>'<div style="padding:3px 0;color:#4c1d95">→ '+esc(typeof r==='string'?r:r.text||JSON.stringify(r))+'</div>').join('')+
-        '</div>';
+    // === STEP 2: Show reasoning/thinking ===
+    const reasoningSteps = buildReasoning(text, parsed);
+    if(reasoningSteps.length > 0) {
+      const reasoningHtml = '<div class="reasoning-card"><div class="reasoning-title">🧠 '+(currentLang==='en'?'Analysis of your request':'Анализ вашего запроса')+'</div>'+reasoningSteps.map(r=>'<div class="reasoning-step"><div class="rs-icon">◉</div><div class="rs-text">'+esc(r)+'</div></div>').join('')+'</div>';
       addMessage('assistant', reasoningHtml);
     }
-    // Build description
-    const typeLabels = {house:'Жилой дом',office:'Офис',cottage:'Коттедж',hotel:'Гостиница',bathhouse:'Баня'};
-    const typeEn = {house:'Residential house',office:'Office',cottage:'Cottage',hotel:'Hotel',bathhouse:'Bathhouse'};
-    const label = currentLang==='en' ? (typeEn[parsed.type]||'Building') : (typeLabels[parsed.type]||'Здание');
-    const floors = parsed.floors||2;
-    const w = parsed.width||10;
-    const l = parsed.length||12;
-    const mat = parsed.facade_material||'';
-    const roof = parsed.roof_type||'';
-    let desc = `🏗 <b>${label}</b> — ${floors} ${currentLang==='en'?'floor(s)':'этаж(ей)'}, ${w}×${l}м`;
-    if(mat) desc += `, ${mat}`;
-    if(roof) desc += `, ${roof} roof`;
+    // === STEP 3: Correct label ===
+    const label = getLabel(parsed);
+    const w = parsed.width_m||parsed.width||10;
+    const l = parsed.length_m||parsed.length||12;
+    const style = parsed.style||'';
+    let desc = `🏗 <b>${label}</b>`;
+    if(parsed.object_type==='interior') {
+      desc += ` — ${w}×${l}м`;
+      if(style) desc += `, стиль: ${style}`;
+      if(parsed.features && parsed.features.length) desc += `, ${parsed.features.join(', ')}`;
+    } else {
+      const floors = parsed.floors||1;
+      const mat = parsed.material||parsed.facade_material||'';
+      const roof = parsed.roof_type||'';
+      desc += ` — ${floors} ${floors===1?(currentLang==='en'?'floor':'этаж'):(currentLang==='en'?'floors':'этажей')}, ${w}×${l}м`;
+      if(mat) desc += `, ${mat}`;
+      if(roof && roof!=='none') desc += `, ${roof}`;
+    }
     addMessage('assistant', desc);
-    // Try to generate 3D via backend
+    // === STEP 4: Decomposition ===
+    const tasks = buildDecomposition(parsed);
+    if(tasks.length > 0) {
+      const decompHtml = '<div class="decomp-tree"><div class="decomp-title">📋 '+(currentLang==='en'?'Task decomposition':'Декомпозиция задачи')+'</div>'+tasks.map((t,i)=>'<div class="decomp-item"><div class="di-num">'+(i+1)+'</div><div class="di-line">'+esc(t.text)+'</div>'+(t.service?'<div class="di-service">'+esc(t.service)+'</div>':'')+'</div>').join('')+'</div>';
+      addMessage('assistant', decompHtml);
+    }
+    // === STEP 5: Clarifying questions ===
+    const questions = buildClarificationQuestions(text, parsed);
+    if(questions.length > 0) {
+      showClarificationUI(questions, parsed, text);
+      return;
+    }
+    // === STEP 6: References ===
+    const refs = buildReferences(parsed);
+    if(refs.length > 0) {
+      const refHtml = '<div class="ref-gallery"><div class="ref-title">🖼 '+(currentLang==='en'?'References':'Референсы')+'</div><div class="ref-grid">'+refs.map(r=>'<div class="ref-card"><div style="height:90px;background:linear-gradient(135deg,#f1f5f9,#e2e8f0);display:flex;align-items:center;justify-content:center;font-size:28px">'+r.icon+'</div><div class="rc-label">'+esc(r.label)+'</div></div>').join('')+'</div></div>';
+      addMessage('assistant', refHtml);
+    }
+    // === STEP 7: Update chips ===
+    updateQuickActions(parsed);
+    // === STEP 8: 3D generation via orchestrator ===
     if(_backendOk) {
       try {
-        addMessage('assistant', currentLang==='en'?'⏳ Generating 3D model...':'⏳ Генерирую 3D модель...');
-        const genCtrl = new AbortController();
-        const genTid = setTimeout(()=>genCtrl.abort(), 120000);
-        const genR = await fetch(API_BASE+'/api/v1/generate', {
-          method:'POST',
-          headers:_apiHeaders(),
-          signal:genCtrl.signal,
-          body:JSON.stringify({prompt:text, ...parsed})
-        });
-        clearTimeout(genTid);
-        if(genR.ok) {
-          const blob = await genR.blob();
-          if(blob.size > 1000) {
-            // Load GLB into Three.js viewer
-            const url = URL.createObjectURL(blob);
-            loadGLBModel(url);
-            addMessage('assistant', currentLang==='en'?'✅ 3D model ready! See viewer on the right.':'✅ 3D модель готова! Смотрите в правой панели.');
-          } else {
-            addMessage('assistant', currentLang==='en'?'⚠️ Server returned empty model':'⚠️ Сервер вернул пустую модель');
-          }
+        showGenOverlay();
+        const orchResult = await callOrchestratorAPI(text, parsed);
+        if(orchResult.status==='success' && orchResult.exports && orchResult.exports.glb) {
+          loadGLBModel(API_BASE + orchResult.exports.glb);
+          addMessage('assistant', currentLang==='en'?'✅ 3D model ready!':'✅ 3D модель готова!');
         } else {
-          addMessage('assistant', currentLang==='en'?'⚠️ Generation failed (HTTP '+genR.status+'). Try describing differently.':'⚠️ Генерация не удалась (HTTP '+genR.status+'). Попробуйте описать иначе.');
+          addMessage('assistant', currentLang==='en'?'⚠️ Generation incomplete':'⚠️ Генерация не завершена');
         }
-      } catch(genErr) {
-        if(genErr.name === 'AbortError') {
-          addMessage('assistant', currentLang==='en'?'⏰ Server timeout. Try simpler description.':'⏰ Сервер не ответил. Попробуйте проще описание.');
-        } else {
-          console.warn('Generate error:', genErr);
-          addMessage('assistant', currentLang==='en'?'⚠️ Generation error: '+genErr.message:'⚠️ Ошибка генерации: '+genErr.message);
-        }
+      } catch(orchErr) {
+        console.warn('Orchestrator error:', orchErr);
+        try {
+          addMessage('assistant', currentLang==='en'?'⏳ Retrying with simple generation...':'⏳ Повторяю с простой генерацией...');
+          const genCtrl = new AbortController();
+          const genTid = setTimeout(()=>genCtrl.abort(), 120000);
+          const genR = await fetch(API_BASE+'/api/v1/generate', {method:'POST',headers:_apiHeaders(),signal:genCtrl.signal,body:JSON.stringify({prompt:text,...parsed})});
+          clearTimeout(genTid);
+          if(genR.ok) {
+            const blob = await genR.blob();
+            if(blob.size > 1000) { loadGLBModel(URL.createObjectURL(blob)); addMessage('assistant', currentLang==='en'?'✅ 3D model ready!':'✅ 3D модель готова!'); }
+            else { addMessage('assistant', currentLang==='en'?'⚠️ Server returned empty model':'⚠️ Сервер вернул пустую модель'); }
+          } else { addMessage('assistant', '⚠️ HTTP '+genR.status); }
+        } catch(genErr) { addMessage('assistant', currentLang==='en'?'⚠️ 3D generation temporarily unavailable. Parameters saved.':'⚠️ 3D-генерация временно недоступна. Параметры сохранены.'); }
       }
-    } else {
-      addMessage('assistant', currentLang==='en'?'💡 Backend unavailable. 3D generation requires running server. Start with: docker-compose up':'💡 Бэкенд недоступен. Для 3D-генерации нужен запущенный сервер. Запустите: docker-compose up');
-    }
+    } else { addMessage('assistant', currentLang==='en'?'💡 Backend unavailable':'💡 Бэкенд недоступен'); }
   } catch(e) {
     hideTyping();
     console.error('Chat error:', e);
     addMessage('assistant', '❌ '+(e.message || (currentLang==='en'?'Error occurred':'Произошла ошибка')));
   }
+}
+// ═══════════════════ HELPER: Get correct label ═══════════════════
+function getLabel(parsed) {
+  const isInterior = parsed.object_type === 'interior' || parsed.room_type;
+  if(isInterior) {
+    const m = currentLang==='en' ? {bathroom:'Bathroom',children:"Children's room",kitchen:'Kitchen',bedroom:'Bedroom',living:'Living room',office:'Study',hallway:'Hallway',dining:'Dining room'} : {bathroom:'Ванная комната',children:'Детская комната',kitchen:'Кухня',bedroom:'Спальня',living:'Гостиная',office:'Кабинет',hallway:'Прихожая',dining:'Столовая'};
+    return m[parsed.room_type] || (currentLang==='en'?'Interior':'Интерьер');
+  }
+  const m = currentLang==='en' ? {house:'Residential house',office:'Office',cottage:'Cottage',hotel:'Hotel',bathhouse:'Bathhouse',townhouse:'Townhouse',villa:'Villa'} : {house:'Жилой дом',office:'Офис',cottage:'Коттедж',hotel:'Гостиница',bathhouse:'Баня',townhouse:'Таунхаус',villa:'Вилла'};
+  return m[parsed.type]||m[parsed.building_type]||(currentLang==='en'?'Building':'Здание');
+}
+// ═══════════════════ HELPER: Build reasoning ═══════════════════
+function buildReasoning(prompt, parsed) {
+  const steps = [];
+  const isInterior = parsed.object_type === 'interior' || parsed.room_type;
+  if(isInterior) {
+    steps.push(currentLang==='en'?'Detected: interior design request':'Определено: запрос на дизайн интерьера');
+    if(parsed.room_type) { const n={bathroom:'ванная комната',children:'детская',kitchen:'кухня',bedroom:'спальня',living:'гостиная',office:'кабинет'}; steps.push((currentLang==='en'?'Room: ':'Комната: ')+(n[parsed.room_type]||parsed.room_type)); }
+    if(parsed.style) steps.push((currentLang==='en'?'Style: ':'Стиль: ')+parsed.style);
+    if(parsed.width_m&&parsed.length_m) steps.push((currentLang==='en'?'Dimensions: ':'Размеры: ')+parsed.width_m+'×'+parsed.length_m+'м ('+Math.round(parsed.width_m*parsed.length_m)+' м²)');
+    if(parsed.features&&parsed.features.length) steps.push((currentLang==='en'?'Features: ':'Особенности: ')+parsed.features.join(', '));
+    if(parsed.furniture&&parsed.furniture.length) steps.push((currentLang==='en'?'Furniture: ':'Мебель: ')+parsed.furniture.join(', '));
+  } else {
+    steps.push(currentLang==='en'?'Detected: building request':'Определено: запрос на здание');
+    if(parsed.building_type||parsed.type) steps.push((currentLang==='en'?'Type: ':'Тип: ')+(parsed.building_type||parsed.type));
+    if(parsed.floors) steps.push((currentLang==='en'?'Floors: ':'Этажность: ')+parsed.floors);
+    if(parsed.width_m&&parsed.length_m) steps.push((currentLang==='en'?'Dimensions: ':'Размеры: ')+(parsed.width_m||parsed.width)+'×'+(parsed.length_m||parsed.length)+'м');
+    if(parsed.material) steps.push((currentLang==='en'?'Material: ':'Материал: ')+parsed.material);
+    if(parsed.roof_type&&parsed.roof_type!=='none') steps.push((currentLang==='en'?'Roof: ':'Кровля: ')+parsed.roof_type);
+  }
+  return steps;
+}
+// ═══════════════════ HELPER: Decomposition ═══════════════════
+function buildDecomposition(parsed) {
+  const tasks = [];
+  const isInterior = parsed.object_type === 'interior' || parsed.room_type;
+  if(isInterior) {
+    tasks.push({text:currentLang==='en'?'Analyze room layout':'Анализ планировки комнаты',service:'LLM'});
+    tasks.push({text:currentLang==='en'?'Design furniture placement':'Проектирование расстановки мебели',service:'Geometry'});
+    tasks.push({text:currentLang==='en'?'Apply materials and textures':'Применение материалов и текстур',service:'Texture'});
+    tasks.push({text:currentLang==='en'?'Setup interior lighting':'Настройка интерьерного освещения',service:'Lighting'});
+    tasks.push({text:currentLang==='en'?'Render photorealistic image':'Фотореалистичный рендер',service:'Blender'});
+  } else {
+    tasks.push({text:currentLang==='en'?'Parse building parameters':'Парсинг параметров здания',service:'LLM'});
+    tasks.push({text:currentLang==='en'?'Generate geometry':'Генерация геометрии',service:'Geometry'});
+    tasks.push({text:currentLang==='en'?'Apply facade materials':'Применение фасадных материалов',service:'Texture'});
+    tasks.push({text:currentLang==='en'?'Setup exterior lighting':'Настройка внешнего освещения',service:'Lighting'});
+    tasks.push({text:currentLang==='en'?'Render 4K preview':'Рендер 4K превью',service:'Blender'});
+  }
+  return tasks;
+}
+// ═══════════════════ HELPER: Clarifying questions ═══════════════════
+function buildClarificationQuestions(prompt, parsed) {
+  const questions = [];
+  const isInterior = parsed.object_type === 'interior' || parsed.room_type;
+  if(isInterior) {
+    if(!parsed.style) questions.push({field:'style',text:currentLang==='en'?'What style do you prefer?':'Какой стиль вы предпочитаете?',options:currentLang==='en'?['Modern','Classic','Minimalist','Scandinavian','Loft','Hi-Tech']:['Современный','Классика','Минимализм','Скандинавский','Лофт','Хайтек']});
+    questions.push({field:'quality',text:currentLang==='en'?'What quality level?':'Какой уровень качества?',options:currentLang==='en'?['Premium','Standard','Quick']:['Премиум','Стандарт','Быстрый']});
+  } else {
+    if(!parsed.material) questions.push({field:'material',text:currentLang==='en'?'What facade material?':'Какой материал фасада?',options:currentLang==='en'?['Brick','Wood','Glass','Plaster','Stone']:['Кирпич','Дерево','Стекло','Штукатурка','Камень']});
+    if(!parsed.roof_type||parsed.roof_type==='none') questions.push({field:'roof_type',text:currentLang==='en'?'What type of roof?':'Какой тип кровли?',options:currentLang==='en'?['Gabled','Flat','Hip']:['Двускатная','Плоская','Вальмовая']});
+  }
+  return questions.slice(0,3);
+}
+// ═══════════════════ HELPER: Clarification UI ═══════════════════
+let _pendingClarification = null;
+function showClarificationUI(questions, parsed, originalPrompt) {
+  _pendingClarification = {questions, parsed, originalPrompt, answers:{}};
+  let html = '<div style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1px solid #fbbf24;border-radius:14px;padding:14px 16px;margin-bottom:8px;max-width:460px">';
+  html += '<div style="font-weight:700;color:#92400e;margin-bottom:10px">💬 '+(currentLang==='en'?'Clarifying questions':'Уточняющие вопросы')+'</div>';
+  questions.forEach((q,i) => {
+    html += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#78350f;margin-bottom:6px">'+esc(q.text)+'</div><div style="display:flex;flex-wrap:wrap;gap:4px">';
+    q.options.forEach((opt) => {
+      html += '<button onclick="answerClarification('+i+',\''+esc(opt)+'\')" style="padding:6px 12px;border-radius:16px;border:1px solid #d97706;background:#fffbeb;color:#92400e;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='#fbbf24';this.style.color='#fff'" onmouseout="this.style.background='#fffbeb';this.style.color='#92400e'">'+esc(opt)+'</button>';
+    });
+    html += '</div></div>';
+  });
+  html += '<button onclick="skipClarification()" style="padding:6px 14px;border-radius:12px;border:1px solid #d97706;background:transparent;color:#92400e;font-size:11px;cursor:pointer;font-family:inherit;margin-top:4px">'+(currentLang==='en'?'Skip — generate now':'Пропустить — генерировать сейчас')+'</button>';
+  html += '</div>';
+  addMessage('assistant', html);
+}
+function answerClarification(qIdx, optText) {
+  if(!_pendingClarification) return;
+  _pendingClarification.answers[_pendingClarification.questions[qIdx].field] = optText;
+  addMessage('user', optText);
+  if(Object.keys(_pendingClarification.answers).length >= _pendingClarification.questions.length || Object.keys(_pendingClarification.answers).length >= 2) {
+    const merged = {..._pendingClarification.parsed, ..._pendingClarification.answers};
+    const prompt = _pendingClarification.originalPrompt;
+    addMessage('assistant', currentLang==='en'?'✅ Got it! Generating...':'✅ Понял! Генерирую...');
+    _pendingClarification = null;
+    proceedWithGeneration(prompt, merged);
+  }
+}
+function skipClarification() {
+  if(!_pendingClarification) return;
+  addMessage('assistant', currentLang==='en'?'⚡ Generating without clarifications...':'⚡ Генерирую без уточнений...');
+  const p = _pendingClarification.parsed; const pr = _pendingClarification.originalPrompt;
+  _pendingClarification = null;
+  proceedWithGeneration(pr, p);
+}
+async function proceedWithGeneration(prompt, parsed) {
+  if(!_backendOk) { addMessage('assistant', currentLang==='en'?'💡 Backend unavailable':'💡 Бэкенд недоступен'); return; }
+  try {
+    showGenOverlay();
+    const orchResult = await callOrchestratorAPI(prompt, parsed);
+    if(orchResult.status==='success' && orchResult.exports && orchResult.exports.glb) {
+      loadGLBModel(API_BASE + orchResult.exports.glb);
+      addMessage('assistant', currentLang==='en'?'✅ 3D model ready!':'✅ 3D модель готова!');
+    } else { addMessage('assistant', currentLang==='en'?'⚠️ Generation incomplete':'⚠️ Генерация не завершена'); }
+  } catch(e) { console.warn('Gen error:', e); addMessage('assistant', '⚠️ '+e.message); }
+}
+// ═══════════════════ HELPER: References ═══════════════════
+function buildReferences(parsed) {
+  const refs = [];
+  const isInterior = parsed.object_type === 'interior' || parsed.room_type;
+  if(isInterior) {
+    const icons = {bathroom:'🛁',children:'🧸',kitchen:'🍳',bedroom:'🛏',living:'🛋',office:'📚'};
+    const styles = {hightech:['Хайтек интерьер','Умный дом','Минимализм'],classic:['Классический интерьер','Неоклассика'],minimalist:['Минимализм','Японский стиль'],scandinavian:['Скандинавский','Хюгге'],loft:['Лофт','Индустриальный'],modern:['Современный','Контемпорари']};
+    const icon = icons[parsed.room_type]||'🏠';
+    (styles[(parsed.style||'modern').toLowerCase().replace(/[^a-z]/g,'')]||styles.modern).forEach(l=>refs.push({icon,label:l}));
+    if(parsed.features) parsed.features.forEach(f=>{if(/джакузи/i.test(f))refs.push({icon:'💆',label:'Джакузи'});if(/душ/i.test(f))refs.push({icon:'🚿',label:'Душевая'});if(/камин/i.test(f))refs.push({icon:'🔥',label:'Камин'});if(/книж/i.test(f))refs.push({icon:'📚',label:'Библиотека'});if(/сейф/i.test(f))refs.push({icon:'🔐',label:'Сейф'});});
+  } else {
+    refs.push({icon:'🏗',label:'Архитектурный проект'});refs.push({icon:'📐',label:'Планировка'});refs.push({icon:'🎨',label:'Фасад'});
+  }
+  return refs.slice(0,6);
+}
+// ═══════════════════ HELPER: Dynamic chips ═══════════════════
+function updateQuickActions(parsed) {
+  const c = document.querySelector('.empty-actions');
+  if(!c) return;
+  const isInterior = parsed.object_type === 'interior' || parsed.room_type;
+  let chips;
+  if(isInterior) {
+    const rc = {bathroom:[{icon:'🛁',label:'Джакузи'},{icon:'🚿',label:'Душевая'},{icon:'🪞',label:'Зеркало'}],children:[{icon:'🧸',label:'Игровая'},{icon:'🛏',label:'Кроватка'},{icon:'📚',label:'Учебная зона'}],kitchen:[{icon:'🍳',label:'Остров'},{icon:'🧊',label:'Техника'},{icon:'💡',label:'Подсветка'}],bedroom:[{icon:'🛏',label:'Кровать'},{icon:'📺',label:'ТВ зона'},{icon:'👔',label:'Гардероб'}],living:[{icon:'🛋',label:'Диван'},{icon:'🔥',label:'Камин'},{icon:'📺',label:'ТВ зона'}],office:[{icon:'📚',label:'Книжный шкаф'},{icon:'💻',label:'Рабочий стол'},{icon:'🔐',label:'Сейф'}]};
+    chips = rc[parsed.room_type]||[{icon:'🏠',label:'Мебель'},{icon:'💡',label:'Свет'},{icon:'🎨',label:'Цвет'}];
+  } else { chips = [{icon:'🏠',label:'Дом'},{icon:'🏢',label:'Офис'},{icon:'🌲',label:'Коттедж'}]; }
+  c.innerHTML = chips.map(ch=>'<button class="empty-btn" onclick="go(\''+esc(ch.label)+'\')"><span>'+ch.icon+'</span> <span>'+esc(ch.label)+'</span></button>').join('');
 }
 function go(p) { document.getElementById('msgInput').value=p; sendMessage(); }
 function addMessage(role,text) {
