@@ -1,6 +1,15 @@
-# Architect v9.0 — AI Architecture Generator
+# Architect v10.1.0 — AI Architecture Generator
 
 Генерация 3D-моделей зданий и интерьеров по текстовому описанию на русском языке.
+
+## Что нового в v10.1.0
+
+- **Удалён regex fallback** — обработка ТОЛЬКО через LLM
+- **Auto-discovery бесплатных моделей** — автоматический поиск доступных моделей OpenRouter
+- **4-key rotation** — ротация между 4 API ключами с failover
+- **Kaggle GPU renderer** — Flask + Blender + ngrok на GPU T4
+- **Исправлена валидация Pydantic** — интерьерные промты больше не падают
+- **Улучшена обработка ошибок** — детальные сообщения вместо500
 
 ## Архитектура (5 Render аккаунтов)
 
@@ -40,7 +49,24 @@
 | Gateway | `architect-gateway.onrender.com` | ✅ | API, Frontend, оркестрация |
 | Blender #1 | `ai-arch-blender3d.onrender.com` | ✅ | EEVEE 4K рендер, GLB |
 | Blender #2 | `architect-blender.onrender.com` | ✅ | EEVEE 4K, failover |
-| LLM | `architect-llm-1s1j.onrender.com` | ✅ | Парсинг промтов (7 LLM) |
+| LLM | `architect-llm-1s1j.onrender.com` | ✅ | Парсинг промтов (каскад LLM) |
+
+## Multi-Key LLM
+
+4 OpenRouter API ключа с автоматической ротацией:
+- Primary + 3 fallback
+- Auto-discovery бесплатных моделей (обновление каждый час)
+- Circuit breaker при ошибках
+- Автопереключение при 429/401
+
+## Kaggle GPU Renderer
+
+Дополнительный рендер-бэкенд на Kaggle (T4/P100 GPU):
+- `kaggle/blender_gpu_renderer.ipynb` — Flask + Blender
+- Режимы: ngrok (прямой URL) или polling (опрос Gateway)
+- Лимиты: ~30 часов/неделю (T4 free)
+
+См. `kaggle/README.md` для инструкций.
 
 ## Правило генерации 16K
 
