@@ -224,7 +224,7 @@ class Orchestrator:
             streamer.emit("parse", "running", progress=3, message="Parsing prompt...")
             parse_result = self._run_agent(
                 "parser",
-                {"name": "parse", "agent": "parser", "params": {"prompt": dialog_enriched_prompt, "use_llm": True}},
+                {"name": "parse", "agent": "parser", "params": {"prompt": dialog_enriched_prompt, "use_llm": True, "llm_service_url": self.llm_service_url}},
                 timeout=60,
             )
 
