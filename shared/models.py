@@ -13,9 +13,9 @@ class GenerateRequest(BaseModel):
     building_type: str = "house"
     room_type: str | None = None
     floors: int = 2
-    width_m: int = 10
-    length_m: int = 12
-    height_m: int = 3
+    width_m: float = 10
+    length_m: float = 12
+    height_m: float = 3
     style: str = "modern"
     material: str = "plaster"
     roof_type: str = "gabled"
@@ -37,9 +37,9 @@ class ParsedParams(BaseModel):
     building_type: str = "house"
     room_type: str | None = None
     floors: int = 2
-    width_m: int = 10
-    length_m: int = 12
-    height_m: int = 3
+    width_m: float = 10
+    length_m: float = 12
+    height_m: float = 3
     style: str = "modern"
     material: str = "plaster"
     roof_type: str = "gabled"

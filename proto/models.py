@@ -50,8 +50,8 @@ class ParsedParams(BaseModel):
     building_type: str = "house"
     room_type: str | None = None
     floors: int = 2
-    width_m: int = 10
-    length_m: int = 12
+    width_m: float = 10
+    length_m: float = 12
     height_m: float = 3.0
     style: str = "modern"
     material: str = "plaster"
