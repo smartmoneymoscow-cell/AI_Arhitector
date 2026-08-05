@@ -132,6 +132,15 @@ async def parse_prompt_endpoint(req: ParseRequest):
                 "cascade": [m["model"] for m in LLM_CASCADE],
             },
         )
+    except Exception as e:
+        logger.error("Parse unexpected error: %s: %s", type(e).__name__, str(e), exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "parse_error",
+                "message": f"{type(e).__name__}: {str(e)[:500]}",
+            },
+        )
 
 
 @app.get("/api/v1/cache/stats")
