@@ -594,7 +594,7 @@ async def _call_gemini(prompt: str, timeout: int = 30, max_retries: int = 3) -> 
     for attempt in range(max_retries):
         key = keys[_GEMINI_KEY_IDX % len(keys)]
         _GEMINI_KEY_IDX = (_GEMINI_KEY_IDX + 1) % len(keys)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
 
         try:
             async with httpx.AsyncClient() as client:
