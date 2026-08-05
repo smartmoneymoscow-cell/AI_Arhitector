@@ -190,11 +190,16 @@ class AgentRunner:
             logger.error("Unknown agent: %s", agent_name)
             return self._fallback(agent_name, f"Unknown agent: {agent_name}")
 
-        # Try subprocess first, fallback to in-process if multiprocessing fails
-        try:
-            return self._run_subprocess(agent_name, agent_class, task_params, timeout)
-        except (OSError, PermissionError, RuntimeError) as e:
-            logger.warning("Subprocess failed for %s (%s), running in-process", agent_name, e)
+        # v10.3: Skip subprocess on constrained environments (Render free tier)
+        # Multiprocessing on 512MB containers causes hangs — run in-process directly
+        import os
+        if os.environ.get("FORCE_SUBPROCESS", "") == "1":
+            try:
+                return self._run_subprocess(agent_name, agent_class, task_params, timeout)
+            except (OSError, PermissionError, RuntimeError) as e:
+                logger.warning("Subprocess failed for %s (%s), running in-process", agent_name, e)
+                return self._run_in_process(agent_name, agent_class, task_params)
+        else:
             return self._run_in_process(agent_name, agent_class, task_params)
 
     def _run_in_process(self, agent_name: str, agent_class_path: str, task_params: dict) -> IsolatedResult:
