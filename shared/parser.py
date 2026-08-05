@@ -570,7 +570,7 @@ def _get_google_keys() -> list[str]:
 _GEMINI_KEY_IDX = 0
 
 
-async def _call_gemini(prompt: str, timeout: int = 30, max_retries: int = 3) -> dict | None:
+async def _call_gemini(prompt: str, timeout: int = 60, max_retries: int = 3) -> dict | None:
     """Call Google Gemini API — БЕСПЛАТНО (free tier, 15 RPM per key, ротация ключей)."""
     global _GEMINI_KEY_IDX
     keys = _get_google_keys()
