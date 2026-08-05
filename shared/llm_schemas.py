@@ -121,10 +121,10 @@ class ParsedParams(BaseModel):
         try:
             v = float(v)
             if v <= 0 or v > 500:
-                return None  # will use default
+                return 3.0  # use safe default instead of None
             return v
         except (TypeError, ValueError):
-            return None
+            return 3.0  # use safe default instead of None
 
     @field_validator("confidence", mode="before")
     @classmethod
