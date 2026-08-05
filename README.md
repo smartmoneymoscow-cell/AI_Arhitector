@@ -1,6 +1,14 @@
-# Architect v10.1.0 — AI Architecture Generator
+# Architect v10.2.0 — AI Architecture Generator
 
 Генерация 3D-моделей зданий и интерьеров по текстовому описанию на русском языке.
+
+## Что нового в v10.2.0
+
+- **Google Gemini FREE API** — бесплатный LLM через Google AI Studio (8 ключей, ротация)
+- **Каскад только бесплатных моделей** — убраны все платные модели из LLM_CASCADE
+- **Fallback на OpenRouter :free** — если Gemini недоступен, пробуем бесплатные модели OpenRouter
+- **Pydantic валидация** — исправлена обработка null для material/roof_type в интерьерах
+- **Retry с backoff** — при 429 rate limit автоматическое ожидание и смена ключа
 
 ## Что нового в v10.1.0
 
@@ -9,7 +17,7 @@
 - **4-key rotation** — ротация между 4 API ключами с failover
 - **Kaggle GPU renderer** — Flask + Blender + ngrok на GPU T4
 - **Исправлена валидация Pydantic** — интерьерные промты больше не падают
-- **Улучшена обработка ошибок** — детальные сообщения вместо500
+- **Улучшена обработка ошибок** — детальные сообщения вместо 500
 
 ## Архитектура (5 Render аккаунтов)
 
