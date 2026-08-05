@@ -175,6 +175,8 @@ async def execute_script(req: dict):
             "status": "ok",
             "output_path": output_path if output_exists else None,
             "output_size": os.path.getsize(output_path) if output_exists else 0,
+            "stdout": (result.stdout or "")[-2000:],
+            "stderr": (result.stderr or "")[-2000:],
         }
 
     except subprocess.TimeoutExpired:
