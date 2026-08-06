@@ -485,8 +485,17 @@ def generate_interior_script(params: dict) -> str:
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete()
 W={w};L={l};H={h}
-"""
 
+def make_mat(name,color,roughness=0.8,metallic=0.0,emission=0.0):
+    mat=bpy.data.materials.new(name)
+    mat.use_nodes=True
+    bsdf=mat.node_tree.nodes.get("Principled BSDF")
+    if bsdf:
+        bsdf.inputs["Base Color"].default_value=(color[0],color[1],color[2],1.0)
+        bsdf.inputs["Roughness"].default_value=roughness
+        bsdf.inputs["Metallic"].default_value=metallic
+    return mat
+"""
     # === Materials ===
     script += _make_mat_code("wall", sc["wall"], 0.9)
     script += _make_mat_code("floor", sc["floor"], 0.6)
