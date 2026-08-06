@@ -459,10 +459,36 @@ def generate_interior_script(params: dict) -> str:
         "double_bed", "single_bed", "tv", "sofa_bed", "dining_table",
         "kitchen_counter", "kitchen_island", "fridge", "oven", "microwave",
     }
+    # Russian → English furniture mapping
+    _RU_TO_EN = {
+        "кровать": "bed", "двуспальная_кровать": "double_bed", "шкаф": "wardrobe",
+        "письменный_стол": "desk", "стул": "chair", "стол": "table",
+        "диван": "sofa", "комод": "nightstand", "торшер": "chandelier",
+        "люстра": "chandelier", "раковина": "sink", "ванна": "bathtub",
+        "ванная": "bathtub", "джакузи": "jacuzzi", "душ": "shower",
+        "душевая_кабинка": "shower_cabin", "унитаз": "toilet",
+        "зеркало": "mirror", "шкафчик": "cabinet", "смеситель": "faucet",
+        "стиральная_машина": "washing_machine", "сушилка": "dryer",
+        "биде": "bidet", "полотенцесушитель": "towel_rack",
+        "книжный_шкаф": "bookshelf", "сейф": "wardrobe",
+        "телевизор": "tv", "тв": "tv", "ковер": "chair",
+        "игровая_зона": "table", "кроватка": "bed",
+        "кухонный_остров": "kitchen_counter", "барные_стулья": "chair",
+        "холодильник": "fridge", "плита": "stove", "микроволновка": "microwave",
+        "обеденный_стол": "dining_table", "камин": "chandelier",
+    }
     raw_furniture = params.get("furniture", ["sofa", "table", "chandelier"])
-    furniture = [f for f in raw_furniture if f in _VALID_FURNITURE]
-    if not furniture:
-        furniture = ["sofa", "table", "chandelier"]
+    # Map Russian names to English
+    mapped = []
+    for f in raw_furniture:
+        f_lower = f.lower().strip()
+        if f_lower in _VALID_FURNITURE:
+            mapped.append(f_lower)
+        elif f_lower in _RU_TO_EN:
+            en = _RU_TO_EN[f_lower]
+            if en in _VALID_FURNITURE:
+                mapped.append(en)
+    furniture = mapped if mapped else ["sofa", "table", "chandelier"]
 
     style_colors = {
         "modern": {"wall": (0.96, 0.96, 0.96), "floor": (0.77, 0.66, 0.51), "accent": (0.17, 0.24, 0.31)},

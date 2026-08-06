@@ -132,6 +132,7 @@ async def execute_script(req: dict):
     script = req.get("script", "")
     output_path = req.get("output_path", "")
     timeout = req.get("timeout", settings.BLENDER_TIMEOUT)
+    return_file = req.get("return_file", False)  # If True, return file directly
 
     if not script:
         raise HTTPException(400, "No script provided")
@@ -171,6 +172,13 @@ async def execute_script(req: dict):
             )
 
         output_exists = os.path.exists(output_path) if output_path else False
+
+        # Return file directly if requested
+        if return_file and output_exists:
+            ext = os.path.splitext(output_path)[1].lower()
+            media_type = "image/png" if ext == ".png" else "model/gltf-binary" if ext == ".glb" else "application/octet-stream"
+            return FileResponse(output_path, media_type=media_type, filename=os.path.basename(output_path))
+
         return {
             "status": "ok",
             "output_path": output_path if output_exists else None,
@@ -191,6 +199,23 @@ async def execute_script(req: dict):
                 os.remove(script_path)
             except OSError:
                 pass
+
+
+# ═══════════════════════════════════════════════════════════════
+# FILE DOWNLOAD — get rendered files by path
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.get("/api/v1/files/{path:path}")
+async def download_file(path: str):
+    """Download a rendered file by path."""
+    # Security: only allow files from output directory
+    full_path = os.path.join("/", path) if path.startswith("tmp/") else os.path.join(settings.OUTPUT_DIR, path)
+    if not os.path.exists(full_path):
+        raise HTTPException(404, "File not found")
+    ext = os.path.splitext(full_path)[1].lower()
+    media_type = "image/png" if ext == ".png" else "model/gltf-binary" if ext == ".glb" else "application/octet-stream"
+    return FileResponse(full_path, media_type=media_type, filename=os.path.basename(full_path))
 
 
 # ═══════════════════════════════════════════════════════════════
