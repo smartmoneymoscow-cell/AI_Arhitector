@@ -389,14 +389,14 @@ def test_preview_render_config():
 
     # Test 4a: Preview preset
     preview = QUALITY_PRESETS["preview"]
-    assert preview["engine"] == "BLENDER_EEVEE_NEXT"
+    assert preview["engine"] == "CYCLES"
     assert preview["resolution_x"] == 1280
     assert preview["resolution_y"] == 720
     assert preview["samples"] == 64
 
     # Test 4b: Standard preset
     standard = QUALITY_PRESETS["standard"]
-    assert standard["engine"] == "BLENDER_EEVEE_NEXT"
+    assert standard["engine"] == "CYCLES"
     assert standard["resolution_x"] == 3840
     assert standard["resolution_y"] == 2160
     assert standard["samples"] == 128
@@ -425,7 +425,7 @@ def test_preview_render_config():
     # Test 4e: Build render script
     t0 = time.time()
     script = build_render_script(preview, "/tmp/preview.png", {"x": 15, "y": -15, "z": 12, "focal_length": 35})
-    assert "BLENDER_EEVEE_NEXT" in script
+    assert "CYCLES" in script
     assert "1280" in script
     assert "720" in script
     assert "/tmp/preview.png" in script

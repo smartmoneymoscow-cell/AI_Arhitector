@@ -419,7 +419,10 @@ if bg:bg.inputs["Color"].default_value=(0.5,0.7,1.0,1.0);bg.inputs["Strength"].d
 bpy.context.scene.render.resolution_x = 3840
 bpy.context.scene.render.resolution_y = 2160
 bpy.context.scene.render.resolution_percentage = 100
-bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
+bpy.context.scene.render.engine = 'CYCLES'
+bpy.context.scene.cycles.device = 'CPU'
+bpy.context.scene.cycles.samples = 16
+bpy.context.scene.cycles.use_denoising = False
 try:
     bpy.context.scene.eevee.taa_render_samples = 64
 except:
@@ -673,7 +676,10 @@ if bg:bg.inputs["Color"].default_value=(0.02,0.02,0.05,1.0);bg.inputs["Strength"
 bpy.context.scene.render.resolution_x = 3840
 bpy.context.scene.render.resolution_y = 2160
 bpy.context.scene.render.resolution_percentage = 100
-bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
+bpy.context.scene.render.engine = 'CYCLES'
+bpy.context.scene.cycles.device = 'CPU'
+bpy.context.scene.cycles.samples = 16
+bpy.context.scene.cycles.use_denoising = False
 try:
     bpy.context.scene.eevee.taa_render_samples = 64
 except:

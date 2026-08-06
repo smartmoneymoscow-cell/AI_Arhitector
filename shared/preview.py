@@ -68,8 +68,8 @@ def generate_preview(prompt: str, output_dir: str = "", quality: str = "preview"
         )
 
     presets = {
-        "preview": {"engine": "BLENDER_EEVEE_NEXT", "res_x": 1920, "res_y": 1080, "samples": 32, "timeout": 60},
-        "standard": {"engine": "BLENDER_EEVEE_NEXT", "res_x": 3840, "res_y": 2160, "samples": 128, "timeout": 120},
+        "preview": {"engine": "CYCLES", "device": "CPU", "samples": 16, "use_denoising": False, "res_x": 1920, "res_y": 1080, "samples": 32, "timeout": 60},
+        "standard": {"engine": "CYCLES", "device": "CPU", "samples": 16, "use_denoising": False, "res_x": 3840, "res_y": 2160, "samples": 128, "timeout": 120},
     }
     p = presets.get(quality, presets["preview"])
 

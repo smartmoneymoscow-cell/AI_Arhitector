@@ -117,7 +117,10 @@ try:
         render_cmd = (
             "\nimport bpy"
             f"\nbpy.context.scene.render.filepath = r'{output_file}'"
-            "\nbpy.context.scene.render.engine = 'BLENDER_EEVEE'"
+            "\nbpy.context.scene.render.engine = 'CYCLES'
+bpy.context.scene.cycles.device = 'CPU'
+bpy.context.scene.cycles.samples = 16
+bpy.context.scene.cycles.use_denoising = False"
             "\nbpy.context.scene.render.resolution_x = 1920"
             "\nbpy.context.scene.render.resolution_y = 1080"
             "\nbpy.ops.render.render(write_still=True)"

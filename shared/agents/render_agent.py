@@ -15,7 +15,7 @@ from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 # Пресеты качества рендера
 QUALITY_PRESETS = {
     "preview": {
-        "engine": "BLENDER_EEVEE_NEXT",
+        "engine": "CYCLES", "device": "CPU", "samples": 16,
         "resolution_x": 1280,
         "resolution_y": 720,
         "samples": 64,
@@ -23,7 +23,7 @@ QUALITY_PRESETS = {
         "tile_size": 64,
     },
     "standard": {
-        "engine": "BLENDER_EEVEE_NEXT",
+        "engine": "CYCLES", "device": "CPU", "samples": 16,
         "resolution_x": 3840,
         "resolution_y": 2160,
         "samples": 128,
@@ -31,7 +31,7 @@ QUALITY_PRESETS = {
         "tile_size": 128,
     },
     "high": {
-        "engine": "BLENDER_EEVEE_NEXT",
+        "engine": "CYCLES", "device": "CPU", "samples": 16,
         "resolution_x": 7680,
         "resolution_y": 4320,
         "samples": 256,
@@ -39,7 +39,7 @@ QUALITY_PRESETS = {
         "tile_size": 256,
     },
     "ultra": {
-        "engine": "CYCLES",
+        "engine": "CYCLES", "device": "CPU", "samples": 16,
         "resolution_x": 15360,
         "resolution_y": 8640,
         "samples": 1024,
@@ -51,7 +51,7 @@ QUALITY_PRESETS = {
         "use_bloom": True,
     },
     "16k": {
-        "engine": "CYCLES",
+        "engine": "CYCLES", "device": "CPU", "samples": 16,
         "resolution_x": 15360,
         "resolution_y": 8640,
         "samples": 2048,
@@ -82,6 +82,9 @@ import bpy, os
 
 # Render settings
 bpy.context.scene.render.engine = '{engine}'
+bpy.context.scene.cycles.device = 'CPU'
+bpy.context.scene.cycles.samples = 16
+bpy.context.scene.cycles.use_denoising = False
 bpy.context.scene.render.resolution_x = {rx}
 bpy.context.scene.render.resolution_y = {ry}
 bpy.context.scene.render.resolution_percentage = 100

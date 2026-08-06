@@ -238,13 +238,12 @@ async def generate_preview(req: dict):
 
     script += f"""
 import bpy
-bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
+bpy.context.scene.render.engine = 'CYCLES'
+bpy.context.scene.cycles.device = 'CPU'
+bpy.context.scene.cycles.samples = 16
+bpy.context.scene.cycles.use_denoising = False
 bpy.context.scene.render.resolution_x = 1920
 bpy.context.scene.render.resolution_y = 1080
-try:
-    bpy.context.scene.eevee.taa_render_samples = 32
-except:
-    pass
 bpy.context.scene.render.image_settings.file_format = 'PNG'
 bpy.context.scene.render.filepath = r'{output_file}'
 bpy.ops.render.render(write_still=True)
@@ -439,10 +438,10 @@ async def _generate_building(params: dict, quality: str = "16k"):
             )
             logger.info("16K render done: %s", output_png)
         except Exception as e:
-            logger.warning("16K tiled render failed: %s, falling back to EEVEE 4K", e)
-            _render_eevee_4k(script, job_id, output_png)
+            logger.warning("16K tiled render failed: %s, falling back to Cycles CPU", e)
+            _render_cycles_cpu(script, job_id, output_png)
     else:
-        # Fast EEVEE 4K preview
+        # Fast Cycles CPU preview
         output_png = os.path.join(settings.OUTPUT_DIR, f"{job_id}_render.png")
         try:
             run_blender(script + export_cmd, output_file, timeout=300)
@@ -450,7 +449,7 @@ async def _generate_building(params: dict, quality: str = "16k"):
             raise HTTPException(504, detail=str(e))
         except RuntimeError as e:
             raise HTTPException(500, detail={"error": str(e)})
-        _render_eevee_4k(script, job_id, output_png)
+        _render_cycles_cpu(script, job_id, output_png)
 
     # Quality check
     if os.path.exists(output_png):
@@ -469,26 +468,25 @@ async def _generate_building(params: dict, quality: str = "16k"):
     raise HTTPException(500, detail="Export failed")
 
 
-def _render_eevee_4k(script: str, job_id: str, output_png: str):
-    """Fast EEVEE 4K render as fallback."""
+def _render_cycles_cpu(script: str, job_id: str, output_png: str):
+    """Cycles CPU render as fallback (no GPU needed)."""
     render_cmd = f"""
 import bpy
-bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
-bpy.context.scene.render.resolution_x = 3840
-bpy.context.scene.render.resolution_y = 2160
+bpy.context.scene.render.engine = 'CYCLES'
+bpy.context.scene.cycles.device = 'CPU'
+bpy.context.scene.cycles.samples = 32
+bpy.context.scene.cycles.use_denoising = False
+bpy.context.scene.render.resolution_x = 1920
+bpy.context.scene.render.resolution_y = 1080
 bpy.context.scene.render.resolution_percentage = 100
-try:
-    bpy.context.scene.eevee.taa_render_samples = 64
-except:
-    pass
 bpy.context.scene.render.image_settings.file_format = 'PNG'
 bpy.context.scene.render.filepath = r'{output_png}'
 bpy.ops.render.render(write_still=True)
 """
     try:
-        run_blender(script + render_cmd, output_png, timeout=120)
+        run_blender(script + render_cmd, output_png, timeout=180)
     except Exception as e:
-        logger.warning("EEVEE 4K fallback failed: %s", e)
+        logger.warning("Cycles CPU fallback failed: %s", e)
 
 
 async def _generate_interior(params: dict, quality: str = "16k"):
@@ -525,11 +523,14 @@ async def _generate_interior(params: dict, quality: str = "16k"):
             )
             logger.info("Interior 16K render done: %s", output_file)
         except Exception as e:
-            logger.warning("Interior 16K failed: %s, falling back to EEVEE 4K", e)
+            logger.warning("Interior 16K failed: %s, falling back to Cycles CPU", e)
             render_cmd = (
                 "\nimport bpy"
                 f"\nbpy.context.scene.render.filepath = r'{output_file}'"
-                "\nbpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'"
+                "\nbpy.context.scene.render.engine = 'CYCLES'
+bpy.context.scene.cycles.device = 'CPU'
+bpy.context.scene.cycles.samples = 16
+bpy.context.scene.cycles.use_denoising = False"
                 "\nbpy.context.scene.render.resolution_x = 3840"
                 "\nbpy.context.scene.render.resolution_y = 2160"
                 "\nbpy.ops.render.render(write_still=True)"
@@ -544,7 +545,10 @@ async def _generate_interior(params: dict, quality: str = "16k"):
         render_cmd = (
             "\nimport bpy"
             f"\nbpy.context.scene.render.filepath = r'{output_file}'"
-            "\nbpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'"
+            "\nbpy.context.scene.render.engine = 'CYCLES'
+bpy.context.scene.cycles.device = 'CPU'
+bpy.context.scene.cycles.samples = 16
+bpy.context.scene.cycles.use_denoising = False"
             "\nbpy.context.scene.render.resolution_x = 3840"
             "\nbpy.context.scene.render.resolution_y = 2160"
             "\nbpy.ops.render.render(write_still=True)"
@@ -591,7 +595,10 @@ async def _generate_landscape(params: dict, quality: str = "16k"):
     render_cmd = (
         "\nimport bpy"
         f"\nbpy.context.scene.render.filepath = r'{output_file}'"
-        "\nbpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'"
+        "\nbpy.context.scene.render.engine = 'CYCLES'
+bpy.context.scene.cycles.device = 'CPU'
+bpy.context.scene.cycles.samples = 16
+bpy.context.scene.cycles.use_denoising = False"
         "\nbpy.context.scene.render.resolution_x = 3840"
         "\nbpy.context.scene.render.resolution_y = 2160"
         "\nbpy.ops.render.render(write_still=True)"

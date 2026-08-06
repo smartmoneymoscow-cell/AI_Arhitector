@@ -256,7 +256,7 @@ class TestRenderAgent:
         from shared.agents.render_agent import QUALITY_PRESETS
         assert "preview" in QUALITY_PRESETS
         assert QUALITY_PRESETS["preview"]["resolution_x"] == 1280
-        assert QUALITY_PRESETS["preview"]["engine"] == "BLENDER_EEVEE_NEXT"
+        assert QUALITY_PRESETS["preview"]["engine"] == "CYCLES"
 
     def test_ultra_preset_exists(self):
         from shared.agents.render_agent import QUALITY_PRESETS
