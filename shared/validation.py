@@ -199,7 +199,7 @@ DEFAULT_FURNITURE = {
     "nursery": ["crib", "changing_table", "rocking_chair"],
     "kitchen": ["table", "sink", "stove", "refrigerator"],
     "living": ["sofa", "table", "chandelier", "tv_stand"],
-    "bathroom": ["sink", "bathtub", "toilet", "shower"],
+    "bathroom": ["sink", "bathtub", "toilet", "shower", "jacuzzi", "mirror", "cabinet"],
     "study": ["desk", "bookshelf", "chair"],
     "dining": ["table", "chairs"],
     "hallway": ["coat_rack", "shoe_cabinet", "mirror"],

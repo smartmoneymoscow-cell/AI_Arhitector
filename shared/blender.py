@@ -452,18 +452,12 @@ def generate_interior_script(params: dict) -> str:
         style = "modern"
     # Sanitize furniture list — only allow known items
     _VALID_FURNITURE = {
-        "sofa",
-        "table",
-        "bed",
-        "chandelier",
-        "desk",
-        "wardrobe",
-        "nightstand",
-        "bookshelf",
-        "sink",
-        "stove",
-        "bathtub",
-        "chair",
+        "sofa", "table", "bed", "chandelier", "desk", "wardrobe",
+        "nightstand", "bookshelf", "sink", "stove", "bathtub", "chair",
+        "jacuzzi", "shower", "toilet", "mirror", "cabinet", "faucet",
+        "washing_machine", "dryer", "bidet", "towel_rack", "shower_cabin",
+        "double_bed", "single_bed", "tv", "sofa_bed", "dining_table",
+        "kitchen_counter", "kitchen_island", "fridge", "oven", "microwave",
     }
     raw_furniture = params.get("furniture", ["sofa", "table", "chandelier"])
     furniture = [f for f in raw_furniture if f in _VALID_FURNITURE]
@@ -651,6 +645,115 @@ bpy.ops.object.transform_apply(scale=True);chseat.data.materials.append(chair_ma
 bpy.ops.mesh.primitive_cube_add(size=1,location=(L/2-1,0.8,0.7))
 chback=bpy.context.active_object;chback.name="Chair_Back";chback.scale=(0.2,0.03,0.25)
 bpy.ops.object.transform_apply(scale=True);chback.data.materials.append(chair_mat)
+""",
+        "jacuzzi": """
+# Jacuzzi
+jacuzzi_mat=make_mat("Jacuzzi",(0.92,0.92,0.92),0.15,0.1)
+bpy.ops.mesh.primitive_cylinder_add(radius=0.9,depth=0.5,location=(-W/2+1.5,L/2-1.5,0.25))
+jac=bpy.context.active_object;jac.name="Jacuzzi";jac.data.materials.append(jacuzzi_mat)
+# Water
+water_mat=make_mat("Water",(0.2,0.5,0.8),0.1,0.0,0.3)
+bpy.ops.mesh.primitive_cylinder_add(radius=0.85,depth=0.35,location=(-W/2+1.5,L/2-1.5,0.3))
+wat=bpy.context.active_object;wat.name="Water";wat.data.materials.append(water_mat)
+""",
+        "shower": """
+# Shower Cabin
+shower_mat=make_mat("Shower",(0.85,0.85,0.9),0.1,0.2)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(W/2-0.7,L/2-0.7,1))
+sc=bpy.context.active_object;sc.name="Shower";sc.scale=(0.6,0.6,2)
+bpy.ops.object.transform_apply(scale=True);sc.data.materials.append(shower_mat)
+# Shower head
+bpy.ops.mesh.primitive_cylinder_add(radius=0.15,depth=0.05,location=(W/2-0.7,L/2-0.7,1.9))
+head=bpy.context.active_object;head.name="ShowerHead";head.data.materials.append(make_mat("Chrome",(0.8,0.8,0.8),0.1,0.9))
+""",
+        "shower_cabin": """
+# Shower Cabin
+shower_mat=make_mat("ShowerCabin",(0.85,0.85,0.9),0.1,0.2)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(W/2-0.7,L/2-0.7,1))
+sc=bpy.context.active_object;sc.name="ShowerCabin";sc.scale=(0.6,0.6,2)
+bpy.ops.object.transform_apply(scale=True);sc.data.materials.append(shower_mat)
+""",
+        "toilet": """
+# Toilet
+toilet_mat=make_mat("Toilet",(0.95,0.95,0.95),0.2)
+bpy.ops.mesh.primitive_cylinder_add(radius=0.2,depth=0.4,location=(W/2-1,-L/2+0.5,0.2))
+bowl=bpy.context.active_object;bowl.name="ToiletBowl";bowl.data.materials.append(toilet_mat)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(W/2-1,-L/2+0.3,0.5))
+tank=bpy.context.active_object;tank.name="ToiletTank";tank.scale=(0.2,0.08,0.3)
+bpy.ops.object.transform_apply(scale=True);tank.data.materials.append(toilet_mat)
+""",
+        "mirror": """
+# Mirror
+mirror_mat=make_mat("Mirror",(0.9,0.95,1.0),0.05,0.9)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(-W/2+0.05,0,1.2))
+mir=bpy.context.active_object;mir.name="Mirror";mir.scale=(0.02,0.6,0.5)
+bpy.ops.object.transform_apply(scale=True);mir.data.materials.append(mirror_mat)
+""",
+        "cabinet": """
+# Cabinet
+cab_mat=make_mat("Cabinet",(0.5,0.4,0.3),0.7)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(-W/2+0.3,-L/2+0.3,0.45))
+cab=bpy.context.active_object;cab.name="Cabinet";cab.scale=(0.25,0.25,0.45)
+bpy.ops.object.transform_apply(scale=True);cab.data.materials.append(cab_mat)
+""",
+        "faucet": """
+# Faucet
+faucet_mat=make_mat("Faucet",(0.8,0.8,0.8),0.1,0.9)
+bpy.ops.mesh.primitive_cylinder_add(radius=0.02,depth=0.3,location=(-W/2+0.5,0,1.05))
+fau=bpy.context.active_object;fau.name="Faucet";fau.data.materials.append(faucet_mat)
+""",
+        "double_bed": """
+# Double Bed
+bed_mat=make_mat("DoubleBed",(0.94,0.94,0.94),0.9)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,0,0.25))
+matt=bpy.context.active_object;matt.name="Mattress";matt.scale=(0.9,1.1,0.25)
+bpy.ops.object.transform_apply(scale=True);matt.data.materials.append(bed_mat)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,1.05,0.6))
+hb=bpy.context.active_object;hb.name="Headboard";hb.scale=(0.9,0.05,0.6)
+hb.data.materials.append(make_mat("Headboard",(0.24,0.17,0.12),0.7))
+""",
+        "tv": """
+# TV
+tv_mat=make_mat("TV",(0.05,0.05,0.05),0.3,0.1)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2+0.1,1.2))
+tv=bpy.context.active_object;tv.name="TV";tv.scale=(0.8,0.03,0.45)
+bpy.ops.object.transform_apply(scale=True);tv.data.materials.append(tv_mat)
+# TV Stand
+stand_mat=make_mat("TVStand",(0.3,0.3,0.3),0.7)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2+0.3,0.3))
+stand=bpy.context.active_object;stand.name="TVStand";stand.scale=(0.5,0.2,0.3)
+bpy.ops.object.transform_apply(scale=True);stand.data.materials.append(stand_mat)
+""",
+        "sofa_bed": """
+# Sofa Bed
+sofa_mat=make_mat("SofaBed",(0.29,0.29,0.29),0.85)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2+1,0.2))
+seat=bpy.context.active_object;seat.name="SofaBed_Seat";seat.scale=(1.2,0.5,0.2)
+bpy.ops.object.transform_apply(scale=True);seat.data.materials.append(sofa_mat)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2+1.35,0.5))
+back=bpy.context.active_object;back.name="SofaBed_Back";back.scale=(1.2,0.1,0.3)
+bpy.ops.object.transform_apply(scale=True);back.data.materials.append(sofa_mat)
+""",
+        "dining_table": """
+# Dining Table
+table_mat=make_mat("DiningTable",(0.55,0.41,0.08),0.6)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,0,0.75))
+top=bpy.context.active_object;top.name="DiningTable_Top";top.scale=(0.8,0.5,0.04)
+bpy.ops.object.transform_apply(scale=True);top.data.materials.append(table_mat)
+""",
+        "kitchen_counter": """
+# Kitchen Counter
+counter_mat=make_mat("Counter",(0.4,0.4,0.4),0.5)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(-W/2+0.4,0,0.45))
+cnt=bpy.context.active_object;cnt.name="Counter";cnt.scale=(0.35,1.5,0.45)
+bpy.ops.object.transform_apply(scale=True);cnt.data.materials.append(counter_mat)
+""",
+        "fridge": """
+# Fridge
+fridge_mat=make_mat("Fridge",(0.9,0.9,0.9),0.3,0.1)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(W/2-0.4,L/2-0.4,0.9))
+fr=bpy.context.active_object;fr.name="Fridge";fr.scale=(0.35,0.35,0.9)
+bpy.ops.object.transform_apply(scale=True);fr.data.materials.append(fridge_mat)
 """,
     }
 

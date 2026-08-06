@@ -1,0 +1,13 @@
+{
+  "id": "hungerrrr2222/archai-blender-gpu-renderer",
+  "title": "ArchAI Blender GPU Renderer",
+  "code_file": "blender_gpu_renderer.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "model_sources": []
+}
