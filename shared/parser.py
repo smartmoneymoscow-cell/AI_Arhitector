@@ -539,7 +539,7 @@ async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) 
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
-        "max_tokens": 2000,
+        "max_tokens": 800,
         "temperature": 0.1,
     }
 
