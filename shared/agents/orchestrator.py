@@ -552,8 +552,9 @@ class Orchestrator:
                     "name": "export",
                     "agent": "export",
                     "params": {
-                        "geometry_script": geometry_script,
-                        "export_formats": export_formats,
+                        "script": geometry_script,
+                        "format": export_formats[0] if export_formats else "glb",
+                        "blender_service_url": self.blender_service_url,
                         "output_dir": self.output_dir,
                         "job_id": job_id,
                     },
