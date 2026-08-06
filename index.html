@@ -508,10 +508,16 @@ html,body{background:var(--bg);color:var(--txt)}
 /* ═══ RESPONSIVE ═══ */
 @media(max-width:1200px){.projects-panel{width:220px}.chat-panel{width:360px}}
 @media(max-width:1024px){.projects-panel{display:none}.chat-panel{width:340px}}
+@media(min-width:769px) and (max-width:1024px){
+  .chat-panel{position:fixed;left:0;top:52px;bottom:0;z-index:40;width:380px;box-shadow:4px 0 20px rgba(0,0,0,.15)}
+  .main{margin-left:380px}
+  .viewer{height:calc(100vh - 52px)}
+}
 @media(max-width:768px){
   .top{height:52px;padding:0 12px}
   .logo-text{display:none}.account-info{display:none}
   .projects-panel{display:none}
+  .mobile-menu-btn{display:block!important}
   .chat-panel{
     position:fixed;left:0;top:52px;bottom:0;z-index:40;
     transform:translateX(-100%);transition:transform .3s;
@@ -535,6 +541,9 @@ html,body{background:var(--bg);color:var(--txt)}
 <!-- ═══ TOP BAR ═══ -->
 <div class="top">
   <div style="display:flex;align-items:center;gap:8px">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" onclick="openMobile()" style="display:none;background:none;border:none;cursor:pointer;padding:6px;color:var(--txt)">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
     <button class="account-btn" id="accountBtn" onclick="toggleAccount()">
       <div class="account-avatar">A</div>
       <div class="account-info">
@@ -969,6 +978,10 @@ function closeMobile() {
   document.getElementById('chatPanel').classList.remove('open');
   document.getElementById('mobileOverlay').classList.remove('open');
 }
+function openMobile() {
+  document.getElementById('chatPanel').classList.add('open');
+  document.getElementById('mobileOverlay').classList.add('open');
+}
 
 // ═══════════════════ VOICE ═══════════════════
 let recognition = null, isListening = false;
@@ -1170,17 +1183,16 @@ async function sendMessage() {
       const decompHtml = '<div class="decomp-tree"><div class="decomp-title">📋 '+(currentLang==='en'?'Task decomposition':'Декомпозиция задачи')+'</div>'+tasks.map((t,i)=>'<div class="decomp-item"><div class="di-num">'+(i+1)+'</div><div class="di-line">'+esc(t.text)+'</div>'+(t.service?'<div class="di-service">'+esc(t.service)+'</div>':'')+'</div>').join('')+'</div>';
       addMessage('assistant', decompHtml);
     }
-    // === STEP 5: Clarifying questions ===
-    const questions = buildClarificationQuestions(text, parsed);
-    if(questions.length > 0) {
-      showClarificationUI(questions, parsed, text);
-      return;
-    }
-    // === STEP 6: References ===
+    // === STEP 5: References ===
     const refs = buildReferences(parsed);
     if(refs.length > 0) {
       const refHtml = '<div class="ref-gallery"><div class="ref-title">🖼 '+(currentLang==='en'?'References':'Референсы')+'</div><div class="ref-grid">'+refs.map(r=>'<div class="ref-card"><div style="height:90px;background:linear-gradient(135deg,#f1f5f9,#e2e8f0);display:flex;align-items:center;justify-content:center;font-size:28px">'+r.icon+'</div><div class="rc-label">'+esc(r.label)+'</div></div>').join('')+'</div></div>';
       addMessage('assistant', refHtml);
+    }
+    // === STEP 6: Clarifying questions (show but DON'T return — continue to generation) ===
+    const questions = buildClarificationQuestions(text, parsed);
+    if(questions.length > 0) {
+      showClarificationUI(questions, parsed, text);
     }
     // === STEP 7: Update chips ===
     updateQuickActions(parsed);
@@ -1289,7 +1301,7 @@ function showClarificationUI(questions, parsed, originalPrompt) {
   questions.forEach((q,i) => {
     html += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#78350f;margin-bottom:6px">'+esc(q.text)+'</div><div style="display:flex;flex-wrap:wrap;gap:4px">';
     q.options.forEach((opt) => {
-      html += '<button onclick="answerClarification('+i+',\''+esc(opt)+'\')" style="padding:6px 12px;border-radius:16px;border:1px solid #d97706;background:#fffbeb;color:#92400e;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='#fbbf24';this.style.color='#fff'" onmouseout="this.style.background='#fffbeb';this.style.color='#92400e'">'+esc(opt)+'</button>';
+      html += '<button onclick="answerClarification('+i+',\''+esc(opt)+'\')" style="padding:6px 12px;border-radius:16px;border:1px solid #d97706;background:#fffbeb;color:#92400e;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background=\'#fbbf24\';this.style.color=\'#fff\'" onmouseout="this.style.background=\'#fffbeb\';this.style.color=\'#92400e\'">'+esc(opt)+'</button>';
     });
     html += '</div></div>';
   });
@@ -1359,10 +1371,14 @@ function addMessage(role,text) {
   const chat=document.getElementById('chatMessages'), div=document.createElement('div');
   div.className=`msg ${role}`;
   const time=new Date().toLocaleTimeString(currentLang==='en'?'en-US':'ru-RU',{hour:'2-digit',minute:'2-digit'});
+  const isHtml = role!=='user' && (text.startsWith('<') || text.includes('<div') || text.includes('<button') || text.includes('<b>') || text.includes('<span') || text.includes('<img'));
+  const content = isHtml ? text : esc(text);
   div.innerHTML = role==='user'
-    ? `<div class="msg-meta"><span>${time}</span></div><div class="bubble">${esc(text)}</div>`
-    : `<div class="msg-meta"><div class="msg-avatar ai">A</div><span>Architect AI</span><span>${time}</span></div><div class="bubble">${esc(text)}</div>`;
-  chat.appendChild(div); chat.scrollTop=chat.scrollHeight;
+    ? `<div class="msg-meta"><span>${time}</span></div><div class="bubble">${content}</div>`
+    : `<div class="msg-meta"><div class="msg-avatar ai">A</div><span>Architect AI</span><span>${time}</span></div><div class="bubble">${content}</div>`;
+  chat.appendChild(div);
+  // Smooth scroll to bottom with delay for DOM render
+  requestAnimationFrame(() => { chat.scrollTo({top:chat.scrollHeight,behavior:'smooth'}); });
 }
 function hideWelcome() { const w=document.getElementById('welcomeScreen'); if(w) w.style.display='none'; }
 function showTyping() { const chat=document.getElementById('chatMessages'),d=document.createElement('div'); d.className='typing';d.id='typingIndicator';d.innerHTML='<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';chat.appendChild(d);chat.scrollTop=chat.scrollHeight; }
@@ -1453,6 +1469,22 @@ function loadGLBModel(url) {
     console.warn('Three.js not ready');
     return;
   }
+  // Show canvas FIRST so it has non-zero dimensions
+  document.getElementById('c3d').style.display='block';
+  const es=document.getElementById('emptyState');
+  if(es) es.style.display='none';
+  // Force reflow and resize renderer to actual canvas size
+  const canvas = document.getElementById('c3d');
+  const wrap = document.getElementById('canvasWrap');
+  // Force layout reflow
+  void canvas.offsetHeight;
+  const w = canvas.clientWidth || wrap.clientWidth || canvas.parentElement.clientWidth || 800;
+  const h = canvas.clientHeight || wrap.clientHeight || canvas.parentElement.clientHeight || 600;
+  if(renderer) {
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
   const loader = new THREE.GLTFLoader();
   loader.load(url, (gltf) => {
     // Remove old models
@@ -1482,10 +1514,6 @@ function loadGLBModel(url) {
     }
     camera.position.set(center.x + maxDim*1.5, center.y + maxDim, center.z + maxDim*1.5);
     camera.lookAt(center);
-    // Show canvas, hide empty state
-    document.getElementById('c3d').style.display='block';
-    const es=document.getElementById('emptyState');
-    if(es) es.style.display='none';
     showNotif(currentLang==='en'?'3D model ready!':'3D модель готова!');
   }, (progress) => {
     console.log('Loading GLB:', Math.round(progress.loaded/progress.total*100)+'%');
