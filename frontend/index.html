@@ -458,7 +458,12 @@ async function callAI(msg,sys,maxTok){
             has_balcony: data.has_balcony||false,
             has_terrace: data.has_terrace||false,
             has_garage: data.has_garage||false,
-            reasoning: [{icon:'»',text:'AI парсинг через /api/v1/parse',confidence:0.85}]
+            reasoning: data.reasoning||[{icon:'»',text:'AI парсинг через /api/v1/parse',confidence:0.85}],
+            decomposition: data.decomposition||[],
+            suggestions: data.suggestions||[],
+            clarification: data.clarification||[],
+            references: data.references||[],
+            comparison: data.comparison||[]
           });
         }
         if(r.status===401||r.status===403){

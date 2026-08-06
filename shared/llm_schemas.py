@@ -40,6 +40,20 @@ class ComparisonItem(BaseModel):
     recommended: bool = False
 
 
+class SuggestionItem(BaseModel):
+    label: str = ""
+    text: str = ""
+
+
+class ClarificationItem(BaseModel):
+    field: str = ""
+    text: str = ""
+    options: list[str] = []
+    visual_options: list[dict] = []
+    priority: str = "normal"
+    is_fork: bool = False
+
+
 class ParsedParams(BaseModel):
     """Strict schema for LLM parse response. All fields validated."""
 
@@ -65,6 +79,9 @@ class ParsedParams(BaseModel):
     reasoning_steps: list[ReasoningStep] = []
     decomposition: list[DecompositionItem] = []
     comparison: list[ComparisonItem] = []
+    suggestions: list[SuggestionItem] = []
+    clarification: list[ClarificationItem] = []
+    references: list[str] = []
 
     @field_validator("building_type", mode="before")
     @classmethod

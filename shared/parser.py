@@ -84,7 +84,7 @@ object_type определяет ЧТО генерировать:
   "furniture": ["ЛЮБАЯ мебель для интерьера"],
   "special_requirements": ["ЛЮБЫЕ особые требования"],
   "confidence": 0.0-1.0,
-  "reasoning": "кратко почему решил именно так",
+  "reasoning": [{"icon":"»","text":"шаг рассуждения","confidence":0.9}],
 
   "structural_system": "frame|shear_wall|tube|braced|hybrid",
   "foundation_type": "strip|slab|pile|raft|combined",
@@ -97,7 +97,13 @@ object_type определяет ЧТО генерировать:
   "ventilation_type": "natural|mechanical|mixed",
   "water_supply": "central|well|none",
   "sewage": "central|septic|none",
-  "exposure_class": "XC1|XC2|XC3|XC4"
+  "exposure_class": "XC1|XC2|XC3|XC4",
+
+  "decomposition": [{"name":"Этап","description":"что делаем","service":"сервис"}],
+  "suggestions": [{"label":"Короткий текст","text":"Полный промт для следующего шага"}],
+  "clarification": [{"field":"имя_поля","text":"вопрос","options":"вар1|вар2"}],
+  "references": ["ключевое_слово_для_поиска"],
+  "comparison": [{"name":"Вариант","emoji":"◆","description":"описание","pros":["плюс"],"cons":["минус"],"price":"цена","recommended":false}]
 }
 
 ═══ ПРАВИЛА ═══
@@ -115,6 +121,27 @@ object_type определяет ЧТО генерировать:
 5. Для интерьера — перечисли мебель в поле furniture.
 
 6. Если запрос неясен — confidence < 0.5, в reasoning объясни что неясно.
+
+7. reasoning — МАССИВ 3-6 шагов рассуждений: [{"icon":"»","text":"шаг","confidence":0.9}].
+   Показывай КАК ты понял запрос, какие решения принял и почему.
+
+8. decomposition — МАССИВ этапов генерации: парсинг, геометрия, материалы, освещение, рендер.
+   Каждый этап: {"name":"Название","description":"что делаем","service":"сервис"}.
+
+9. suggestions — МАССИВ 3-5 подсказок для развития проекта.
+   Это следующие шаги которые клиент может захотеть. Релевантны ТОЛЬКО текущему промту.
+   Для ванной: «Добавить банные принадлежности», «Выбрать плитку», «Добавить полотенцесушитель».
+   Для детской: «Добавить игрушки», «Выбрать обои», «Добавить ночник».
+   НЕ предлагай «Построить гараж» для ванной!
+
+10. clarification — МАССИВ уточняющих вопросов если запрос неоднозначен (confidence < 0.7).
+    Не задавай если всё ясно. Каждый: {"field":"поле","text":"вопрос","options":"вар1|вар2"}.
+
+11. references — МАССИВ ключевых слов для поиска референсов в интернете.
+    Для ванной хайтек: ["ванная хайтек дизайн", "джакузи интерьер", "душевая кабинка стекло"].
+
+12. comparison — МАССИВ 2-3 вариантов реализации если есть развилка.
+    Пустой массив если однозначно. Каждый: {"name","emoji","description","pros","cons","price","recommended"}.
 """
 
 
@@ -512,7 +539,7 @@ async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) 
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
-        "max_tokens": 500,
+        "max_tokens": 2000,
         "temperature": 0.1,
     }
 
