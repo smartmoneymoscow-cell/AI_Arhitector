@@ -19,7 +19,7 @@ QUALITY_PRESETS = {
         "resolution_x": 1280,
         "resolution_y": 720,
         "samples": 64,
-        "use_denoising": True,
+        "use_denoising": False,
         "tile_size": 64,
     },
     "standard": {
@@ -27,7 +27,7 @@ QUALITY_PRESETS = {
         "resolution_x": 3840,
         "resolution_y": 2160,
         "samples": 128,
-        "use_denoising": True,
+        "use_denoising": False,
         "tile_size": 128,
     },
     "high": {
@@ -35,7 +35,7 @@ QUALITY_PRESETS = {
         "resolution_x": 7680,
         "resolution_y": 4320,
         "samples": 256,
-        "use_denoising": True,
+        "use_denoising": False,
         "tile_size": 256,
     },
     "ultra": {
@@ -43,7 +43,7 @@ QUALITY_PRESETS = {
         "resolution_x": 15360,
         "resolution_y": 8640,
         "samples": 1024,
-        "use_denoising": True,
+        "use_denoising": False,
         "use_adaptive_sampling": True,
         "adaptive_threshold": 0.01,
         "tile_size": 64,
@@ -55,7 +55,7 @@ QUALITY_PRESETS = {
         "resolution_x": 15360,
         "resolution_y": 8640,
         "samples": 2048,
-        "use_denoising": True,
+        "use_denoising": False,
         "use_adaptive_sampling": True,
         "adaptive_threshold": 0.005,
         "tile_size": 64,
@@ -100,7 +100,7 @@ bpy.context.scene.render.filepath = r'{output_path}'
 # Cycles settings
 bpy.context.scene.cycles.samples = {samples}
 bpy.context.scene.cycles.use_denoising = {denoise}
-bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
+bpy.context.scene.cycles.denoiser = 'OPTIX'  # OIDN not available on Render free tier
 bpy.context.scene.cycles.use_adaptive_sampling = {preset.get("use_adaptive_sampling", True)}
 bpy.context.scene.cycles.adaptive_threshold = {preset.get("adaptive_threshold", 0.01)}
 bpy.context.scene.cycles.tile_x = {preset.get("tile_size", 64)}
