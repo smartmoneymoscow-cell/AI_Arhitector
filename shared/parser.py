@@ -598,7 +598,7 @@ async def _call_gemini(prompt: str, timeout: int = 60, max_retries: int = 3) -> 
     for attempt in range(max_retries):
         key = keys[_GEMINI_KEY_IDX % len(keys)]
         _GEMINI_KEY_IDX = (_GEMINI_KEY_IDX + 1) % len(keys)
-        model_name = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
+        model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite-001")
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={key}"
 
         try:
