@@ -530,8 +530,12 @@ async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) 
             logger.warning("LLM %s rate-limited, trying next key/model", model)
             return None  # signal to try next key
 
+        if r.status_code == 402:
+            logger.error("LLM %s: 402 — key has no credits", model)
+            return None
+
         if r.status_code != 200:
-            logger.warning("LLM %s returned %d", model, r.status_code)
+            logger.warning("LLM %s returned %d: %s", model, r.status_code, r.text[:200])
             return None
 
         data = r.json()
@@ -576,6 +580,7 @@ async def _call_gemini(prompt: str, timeout: int = 60, max_retries: int = 3) -> 
     global _GEMINI_KEY_IDX
     keys = _get_google_keys()
     if not keys:
+        logger.warning("Gemini: NO GOOGLE_API_KEY configured!")
         return None
 
     payload = {
@@ -595,7 +600,8 @@ async def _call_gemini(prompt: str, timeout: int = 60, max_retries: int = 3) -> 
     for attempt in range(max_retries):
         key = keys[_GEMINI_KEY_IDX % len(keys)]
         _GEMINI_KEY_IDX = (_GEMINI_KEY_IDX + 1) % len(keys)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
+        model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={key}"
 
         try:
             async with httpx.AsyncClient() as client:
@@ -608,7 +614,7 @@ async def _call_gemini(prompt: str, timeout: int = 60, max_retries: int = 3) -> 
                 continue
 
             if r.status_code != 200:
-                logger.warning("Gemini returned %d: %s", r.status_code, r.text[:200])
+                logger.error("Gemini FAILED %d (key %d/%d): %s", r.status_code, attempt+1, len(keys), r.text[:300])
                 continue
 
             data = r.json()
@@ -622,7 +628,7 @@ async def _call_gemini(prompt: str, timeout: int = 60, max_retries: int = 3) -> 
             logger.warning("Gemini error: %s", e)
             continue
 
-    logger.warning("Gemini: all %d attempts exhausted", max_retries)
+    logger.error("Gemini: ALL %d attempts FAILED for %d keys", max_retries, len(keys))
     return None
 
 
@@ -743,8 +749,10 @@ async def parse_prompt_async(text: str) -> dict:
         _l1_set(text, cached)
         return cached
 
-    # ═══ 0. Google Gemini — БЕСПЛАТНО, без OpenRouter ═══
-    logger.info("Trying Google Gemini (free tier)...")
+    # ═══ 0. Google Gemini — БЕСПЛАТНО ═══
+    google_keys = _get_google_keys()
+    or_keys = _get_api_keys()
+    logger.info("Parse: %d Google keys, %d OR keys", len(google_keys), len(or_keys))
     gemini_result = await _call_gemini(text)
     if gemini_result:
         validated = _validate_and_fix(gemini_result, text)
@@ -813,7 +821,7 @@ async def parse_prompt_async(text: str) -> dict:
                 break
 
     # L4: All OpenRouter models failed → try Ollama
-    logger.warning("All OpenRouter models failed, trying Ollama fallback")
+    logger.warning("All %d OR models failed (keys: %d). Trying Ollama...", len(cascade), len(api_keys))
     result = await _call_ollama(text)
     if result:
         validated = _validate_and_fix(result, text)
@@ -823,7 +831,12 @@ async def parse_prompt_async(text: str) -> dict:
             logger.info("Ollama fallback succeeded: %s", validated.get("building_type"))
             return validated
 
-    raise AllModelsFailedError(f"All {len(cascade)} LLM models (+ Ollama) failed for prompt: {text[:100]}...")
+    google_count = len(_get_google_keys())
+    or_count = len(api_keys)
+    raise AllModelsFailedError(
+        f"All {len(cascade)} models failed. Google: {google_count}, OR: {or_count}. "
+        f"FIX: Set GOOGLE_API_KEY in Render env. Prompt: {text[:80]}..."
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
