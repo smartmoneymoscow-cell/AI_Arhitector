@@ -14,7 +14,7 @@ class Settings:
     GOOGLE_API_KEY: str = os.environ.get("GOOGLE_API_KEY", "")
     OPENROUTER_API_KEY: str = os.environ.get("OPENROUTER_API_KEY", "")
     OPENROUTER_BASE: str = "https://openrouter.ai/api/v1"
-    LLM_MODEL: str = os.environ.get("LLM_MODEL", "google/gemini-2.5-flash")
+    LLM_MODEL: str = os.environ.get("LLM_MODEL", "google/gemini-2.0-flash-lite-001:free")
 
     # Redis
     REDIS_URL: str = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
