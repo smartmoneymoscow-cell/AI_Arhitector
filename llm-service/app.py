@@ -1,10 +1,20 @@
 """
-LLM Microservice — LLM-only парсинг промтов через OpenRouter.
+LLM Microservice — LLM-only парсинг промтов через ModelManager.
 
-v6.0 — БЕЗ REGEX FALLBACK.
-Каскад 7 моделей: сильная → средняя → слабая → бесплатные.
-Кеш: Redis (L2) + in-memory (L1).
-Если все модели недоступны → HTTP 503.
+v10.0 — Центральный менеджер моделей:
+  - Auto-discovery бесплатных моделей каждые 4 часа
+  - Ротация 8 OpenRouter ключей + 8 Gemini ключей
+  - Каскад: OpenRouter free → Gemini free
+  - Только бесплатные модели
+
+Endpoints:
+  POST /api/v1/parse          — парсинг промта
+  POST /api/v1/chat/completions — chat proxy
+  GET  /api/v1/models         — текущий каскад моделей
+  POST /api/v1/models/refresh — принудительное обновление
+  GET  /api/v1/models/health  — здоровье ключей
+  GET  /api/v1/cache/stats    — статистика кеша
+  GET  /health                — health check
 """
 
 import logging
@@ -19,6 +29,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from shared.config import settings
 from shared.logging_config import setup_logging
+from shared.model_manager import AllModelsFailedError, get_model_manager
+from shared.model_discovery import (
+    get_discovery_status,
+    start_discovery_scheduler,
+    stop_discovery_scheduler,
+)
 from shared.models import (
     ChatRequest,
     ChatResponse,
@@ -27,14 +43,8 @@ from shared.models import (
     ParseRequest,
 )
 from shared.parser import (
-    LLM_CASCADE,
-    AllModelsFailedError,
     get_cache_stats,
     parse_prompt_async,
-    discover_free_models,
-    get_active_cascade,
-    get_discovery_stats,
-    invalidate_discovery,
 )
 
 setup_logging("llm-service")
@@ -42,8 +52,8 @@ logger = logging.getLogger("archai.llm")
 
 app = FastAPI(
     title="Architect LLM Service",
-    description="LLM-only парсинг архитектурных промтов (каскад 7 моделей, Redis кеш)",
-    version="7.0.0",
+    description="ModelManager: auto-discovery free models, 8 OpenRouter keys + 8 Gemini keys",
+    version="10.0.0",
 )
 
 _cors_origins = os.environ.get("CORS_ORIGINS", "*")
@@ -57,79 +67,81 @@ app.add_middleware(
 )
 
 
+# ═══════════════════════════════════════════════════════════════
+# LIFESPAN — start/stop discovery scheduler
+# ═══════════════════════════════════════════════════════════════
+
+@app.on_event("startup")
+async def startup():
+    """Initialize ModelManager and start discovery scheduler."""
+    manager = get_model_manager()
+    logger.info(
+        "LLM Service starting — %d OpenRouter keys, %d Gemini keys",
+        len(manager._openrouter_keys), len(manager._gemini_keys),
+    )
+    # Start background discovery (every 4 hours)
+    start_discovery_scheduler()
+    # Run initial discovery
+    try:
+        models = await manager.discover_free_models(force=True)
+        logger.info("Initial discovery: %d free models found", len(models))
+    except Exception as e:
+        logger.warning("Initial discovery failed: %s", e)
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    stop_discovery_scheduler()
+
+
+# ═══════════════════════════════════════════════════════════════
+# HEALTH
+# ═══════════════════════════════════════════════════════════════
+
 @app.get("/health")
 async def health():
-    # Fast health check — don't wait for Redis
-    gemini_configured = bool(os.environ.get("GOOGLE_API_KEY", ""))
+    manager = get_model_manager()
+    stats = manager.get_stats()
     return HealthResponse(
         status="ok",
         service="llm-service",
-        version="8.0.0",
-        model=settings.LLM_MODEL,
-        services={"gemini": "configured" if gemini_configured else "not_configured"},
+        version="10.0.0",
+        model="ModelManager (auto-discovery)",
+        services={
+            "openrouter_keys": str(stats["openrouter_keys_available"]),
+            "gemini_keys": str(stats["gemini_keys_available"]),
+            "free_models": str(stats["free_models_count"]),
+            "discovery_ago": str(stats["last_discovery_ago"]),
+        },
     )
 
 
-@app.post("/api/v1/chat/completions", response_model=ChatResponse)
-async def chat_completions(req: ChatRequest):
-    """Chat proxy to OpenRouter."""
-    headers = {
-        "Content-Type": "application/json; charset=utf-8",
-        "HTTP-Referer": "https://archai.app",
-        "X-Title": "Architect LLM",
-    }
-    if settings.OPENROUTER_API_KEY:
-        headers["Authorization"] = f"Bearer {settings.OPENROUTER_API_KEY}"
-    else:
-        # Fallback: read directly from env (settings may not pick up Render env vars)
-        import os
-        _key = os.environ.get("OPENROUTER_API_KEY", "")
-        if _key:
-            headers["Authorization"] = f"Bearer {_key}"
-
-    payload = {
-        "model": req.model or settings.LLM_MODEL,
-        "messages": [m.model_dump() for m in req.messages],
-        "max_tokens": req.max_tokens,
-        "temperature": req.temperature,
-    }
-
-    try:
-        async with httpx.AsyncClient() as client:
-            r = await client.post(
-                f"{settings.OPENROUTER_BASE}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=60.0,
-            )
-        if r.status_code == 200:
-            return r.json()
-        raise HTTPException(status_code=r.status_code, detail=r.text)
-    except httpx.TimeoutException:
-        raise HTTPException(504, "OpenRouter timeout")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(502, str(e))
-
+# ═══════════════════════════════════════════════════════════════
+# PARSE — main endpoint
+# ═══════════════════════════════════════════════════════════════
 
 @app.post("/api/v1/parse", response_model=ParsedParams)
 async def parse_prompt_endpoint(req: ParseRequest):
     """
     Парсинг промта → структурированные параметры.
-    LLM-only (каскад 7 моделей). БЕЗ regex fallback.
-    Кеш: Redis + in-memory.
+
+    Каскад: OpenRouter free models → Gemini (8 ключей).
+    Только бесплатные модели. БЕЗ regex fallback.
     """
     try:
         params = await parse_prompt_async(req.text)
         return ParsedParams(**params)
     except AllModelsFailedError as e:
+        manager = get_model_manager()
+        stats = manager.get_stats()
         raise HTTPException(
             status_code=503,
             detail={
                 "error": "all_models_failed",
                 "message": str(e),
-                "cascade": [m["model"] for m in LLM_CASCADE],
+                "openrouter_keys": stats["openrouter_keys"],
+                "gemini_keys": stats["gemini_keys"],
+                "free_models": stats["free_models_count"],
             },
         )
     except Exception as e:
@@ -143,47 +155,136 @@ async def parse_prompt_endpoint(req: ParseRequest):
         )
 
 
+# ═══════════════════════════════════════════════════════════════
+# CHAT COMPLETIONS — proxy to ModelManager
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/v1/chat/completions", response_model=ChatResponse)
+async def chat_completions(req: ChatRequest):
+    """Chat proxy через ModelManager (OpenRouter → Gemini cascade)."""
+    manager = get_model_manager()
+
+    messages = [{"role": "system", "content": "You are a helpful architectural assistant."}]
+    for m in req.messages:
+        messages.append({"role": m.role, "content": m.content})
+
+    try:
+        result = await manager.send_request(
+            messages=messages,
+            max_tokens=req.max_tokens or 500,
+            temperature=req.temperature or 0.7,
+        )
+        return {
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": result["content"],
+                },
+                "finish_reason": "stop",
+            }],
+            "model": result["model"],
+            "provider": result["provider"],
+        }
+    except AllModelsFailedError as e:
+        raise HTTPException(503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(502, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL MANAGEMENT ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/v1/models")
+async def models_list():
+    """Получить текущий каскад бесплатных моделей."""
+    manager = get_model_manager()
+    stats = manager.get_stats()
+    return {
+        "cascade": [m.to_dict() for m in manager.get_active_models()],
+        "count": stats["free_models_count"],
+        "last_discovery_ago": stats["last_discovery_ago"],
+        "discovery_interval": stats["discovery_interval"],
+        "providers": {
+            "openrouter": {
+                "keys_total": stats["openrouter_keys"],
+                "keys_available": stats["openrouter_keys_available"],
+            },
+            "gemini": {
+                "keys_total": stats["gemini_keys"],
+                "keys_available": stats["gemini_keys_available"],
+            },
+        },
+    }
+
+
+@app.post("/api/v1/models/refresh")
+async def models_refresh():
+    """Принудительное обновление каскада бесплатных моделей."""
+    manager = get_model_manager()
+    models = await manager.discover_free_models(force=True)
+    return {
+        "refreshed": True,
+        "discovered": len(models),
+        "models": [m.to_dict() for m in models],
+    }
+
+
+@app.get("/api/v1/models/health")
+async def models_health():
+    """Здоровье всех API ключей."""
+    manager = get_model_manager()
+    keys = manager.get_keys_health()
+    stats = manager.get_stats()
+    return {
+        "keys": keys,
+        "summary": {
+            "openrouter_total": stats["openrouter_keys"],
+            "openrouter_available": stats["openrouter_keys_available"],
+            "gemini_total": stats["gemini_keys"],
+            "gemini_available": stats["gemini_keys_available"],
+        },
+        "stats": {
+            "total_requests": stats["total_requests"],
+            "openrouter_successes": stats["openrouter_successes"],
+            "openrouter_failures": stats["openrouter_failures"],
+            "gemini_successes": stats["gemini_successes"],
+            "gemini_failures": stats["gemini_failures"],
+        },
+    }
+
+
+@app.post("/api/v1/models/reset-breakers")
+async def reset_circuit_breakers():
+    """Сбросить все circuit breaker'ы."""
+    manager = get_model_manager()
+    manager.reset_all_circuit_breakers()
+    return {"status": "ok", "message": "All circuit breakers reset"}
+
+
+@app.get("/api/v1/models/discovery")
+async def discovery_status():
+    """Статус фонового discovery планировщика."""
+    return get_discovery_status()
+
+
+# ═══════════════════════════════════════════════════════════════
+# CACHE STATS
+# ═══════════════════════════════════════════════════════════════
+
 @app.get("/api/v1/cache/stats")
 async def cache_stats():
     """Статистика кеша парсинга."""
     return get_cache_stats()
 
 
-@app.get("/api/v1/models/discover")
-async def models_discover():
-    """Trigger free model discovery and return results."""
-    from shared.config import settings
-    api_key = settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY", "")
-    if not api_key:
-        raise HTTPException(503, "No OPENROUTER_API_KEY configured")
-    models = await discover_free_models(api_key)
-    return {
-        "discovered": len(models),
-        "models": models,
-        "stats": get_discovery_stats(),
-    }
-
-
-@app.post("/api/v1/models/refresh")
-async def models_refresh():
-    """Force refresh of free model cache."""
-    from shared.config import settings
-    invalidate_discovery()
-    api_key = settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY", "")
-    if not api_key:
-        raise HTTPException(503, "No OPENROUTER_API_KEY configured")
-    models = await discover_free_models(api_key)
-    return {
-        "refreshed": True,
-        "discovered": len(models),
-        "models": [m["model"] for m in models[:20]],
-    }
-
+# ═══════════════════════════════════════════════════════════════
+# MAIN
+# ═══════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     import uvicorn
 
     port = int(os.environ.get("PORT", 8081))
     logger.info("LLM Service starting on port %d", port)
-    logger.info("Cascade: %s", [m["model"] for m in LLM_CASCADE])
     uvicorn.run(app, host="0.0.0.0", port=port)

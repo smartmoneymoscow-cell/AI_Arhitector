@@ -60,10 +60,25 @@ services:
       dockerfile: llm.Dockerfile
     expose: ["8081"]
     environment:
+      # OpenRouter keys (4 штуки, round-robin)
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:?Set OPENROUTER_API_KEY in .env}
+      - OPENROUTER_FALLBACK_KEYS=${OPENROUTER_FALLBACK_KEYS:-}
       - OPENROUTER_BASE=https://openrouter.ai/api/v1
+      # Gemini keys (8 штук, fallback cascade)
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_API_KEYS=${GOOGLE_API_KEYS:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+      # Model Manager
+      - MODEL_DISCOVERY_INTERVAL=${MODEL_DISCOVERY_INTERVAL:-14400}
+      - MODEL_MAX_CASCADE=${MODEL_MAX_CASCADE:-12}
+      - MODEL_TIMEOUT=${MODEL_TIMEOUT:-30}
+      - CB_FAILURES=${CB_FAILURES:-3}
+      - CB_COOLDOWN=${CB_COOLDOWN:-300}
+      - LLM_MODEL=${LLM_MODEL:-auto}
+      # Redis + server
       - REDIS_URL=redis://redis:6379/1
       - PORT=8081
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
     depends_on:
       redis: {condition: service_healthy}
     restart: unless-stopped

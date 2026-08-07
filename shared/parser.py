@@ -1,16 +1,14 @@
 """
-llm-service/parser_flexible.py — FLEXIBLE LLM parsing with all fixes applied.
+shared/parser.py — LLM парсинг архитектурных промтов.
 
-Fixes:
-  L1  — Prompt sanitization (injection prevention)
-  L2  — Timeouts increased to 30-40s
-  L3  — Fallback OpenRouter key
-  L4  — Ollama local model fallback
-  L5  — Improved JSON extraction
-  L6  — threading.Lock for L1 cache (thread-safe)
-  L7  — Full sha256 hash (no truncation)
-  L8  — Model version in cache key (auto-invalidation)
-  L9  — Agent isolation (in orchestrator, not here)
+v10.0 — Интеграция с ModelManager:
+  - Все LLM вызовы через ModelManager (auto-discovery + key rotation)
+  - Только бесплатные модели OpenRouter + Gemini fallback
+  - Кеширование: Redis L2 + in-memory L1
+  - Pydantic валидация ответов
+  - Prompt sanitization
+
+НЕТ regex fallback — LLM only.
 """
 
 import asyncio
@@ -28,10 +26,10 @@ logger = logging.getLogger("archai.parser")
 
 
 # ═══════════════════════════════════════════════════════════════
-# SYSTEM PROMPT — FLEXIBLE, no hardcoded values
+# SYSTEM PROMPT
 # ═══════════════════════════════════════════════════════════════
 
-SYSTEM_PROMPT_VERSION = "v9.0"  # ← bump to invalidate all caches
+SYSTEM_PROMPT_VERSION = "v10.0"
 
 SYSTEM_PROMPT = """Ты — парсер архитектурных описаний для 3D-генератора.
 Отвечай ТОЛЬКО валидным JSON. Никаких рассуждений, пояснений, markdown.
@@ -50,8 +48,7 @@ object_type определяет ЧТО генерировать:
 
 1. ИНТЕРЬЕР (object_type="interior") — когда пользователь хочет ДИЗАЙН ВНУТРИ:
    Ключевые слова: "ванная", "кухня", "спальня", "гостиная", "детская", "интерьер",
-   "дизайн комнаты", "дизайн кухни", "оформление", "мебель", "обстановка",
-   "ванная с джакузи", "кухня в стиле хайтек", "дизайн детской", "сауна внутри"
+   "дизайн комнаты", "дизайн кухни", "оформление", "мебель", "обстановка"
    → object_type="interior", room_type=тип комнаты
 
 2. ЗДАНИЕ (object_type="building") — когда пользователь хочет ПОСТРОИТЬ ЗДАНИЕ:
@@ -60,12 +57,9 @@ object_type определяет ЧТО генерировать:
    → object_type="building"
 
 3. ЛАНДШАФТ (object_type="landscape") — когда пользователь хочет ЛАНДШАФТ:
-   Ключевые слова: "ландшафт", "сад", "двор", "участок", "ландшафтный дизайн",
-   "клумба", "газон", "дорожки", "пруд на участке", "бассейн во дворе"
+   Ключевые слова: "ландшафт", "сад", "двор", "участок", "ландшафтный дизайн"
    → object_type="landscape"
    НЕ ГЕНЕРИРУЙ ЗДАНИЕ если просят ландшафт!
-
-4. Если запрос неоднозначен — поставь confidence низким (< 0.5)
 
 ═══ ФОРМАТ JSON (строго) ═══
 {
@@ -91,253 +85,47 @@ object_type определяет ЧТО генерировать:
 }
 
 ═══ ПРАВИЛА ═══
-1. building_type — НЕ ограничивайся. Сарай→barn, навес→carport, беседка→gazebo,
-   теплица→greenhouse, баня→bathhouse, курятник→chicken_coop, отель→hotel.
-
+1. building_type — НЕ ограничивайся. Сарай→barn, навес→carport, беседка→gazebo.
 2. material — НЕ ограничивайся. Из брёвен→log, из соломы→straw, из кирпича→brick.
-
 3. style — НЕ ограничивайся. Японский→japanese, средневековый→medieval, лофт→loft.
-
 4. Размеры по умолчанию (если не указаны):
    Сарай: 3×4×2.5м. Беседка: 3×3×2.5м. Гараж: 6×3×3м. Дом: 10×12×3м.
-   Отель: 24×36×3.2м. Ванная: 2.5×3×2.8м. Кухня: 4×5×2.8м.
-
+   Ванная: 2.5×3×2.8м. Кухня: 4×5×2.8м.
 5. Для интерьера — перечисли мебель в поле furniture.
-
 6. Если запрос неясен — confidence < 0.5, в reasoning объясни что неясно.
-
 7. reasoning — кратко почему решил именно так (2-3 предложения).
-
-8. suggestions — массив 3-5 строк-подсказок для развития проекта. Релевантны промту.
-   Для ванной: ["Добавить банные принадлежности", "Выбрать плитку", "Добавить полотенцесушитель"].
-   Для детской: ["Добавить игрушки", "Выбрать обои", "Добавить ночник"].
-
+8. suggestions — массив 3-5 строк-подсказок для развития проекта.
 9. references — массив 2-4 ключевых слов для поиска референсов.
-   Для ванной хайтек: ["ванная хайтек дизайн", "джакузи интерьер"].
-
 10. decomposition — массив этапов: [{"name":"Название","description":"что делаем"}].
 """
 
 
 # ═══════════════════════════════════════════════════════════════
-# L3: FALLBACK API KEYS — multiple keys for resilience
+# BACKWARD COMPATIBILITY: LLM_CASCADE
 # ═══════════════════════════════════════════════════════════════
 
+def _get_fallback_cascade() -> list[dict]:
+    """Hardcoded fallback — only used if ModelManager not initialized."""
+    return [
+        {"model": "meta-llama/llama-3.3-70b-instruct:free", "tier": 1, "timeout": 30},
+        {"model": "mistralai/mistral-small-3.2-24b:free", "tier": 1, "timeout": 30},
+        {"model": "google/gemma-4-26b-a4b-it:free", "tier": 1, "timeout": 30},
+        {"model": "qwen/qwen3-235b-a22b:free", "tier": 1, "timeout": 30},
+        {"model": "deepseek/deepseek-chat-v3-0324:free", "tier": 2, "timeout": 30},
+        {"model": "google/gemma-4-31b-it:free", "tier": 2, "timeout": 30},
+    ]
 
-def _get_api_keys() -> list[str]:
-    """Get all available API keys (primary + fallbacks)."""
-    keys = []
-    primary = os.environ.get("OPENROUTER_API_KEY", "")
-    if primary:
-        keys.append(primary)
-
-    # L3: Fallback keys (comma-separated)
-    fallback = os.environ.get("OPENROUTER_FALLBACK_KEYS", "")
-    if fallback:
-        for k in fallback.split(","):
-            k = k.strip()
-            if k and k not in keys:
-                keys.append(k)
-
-    return keys
+LLM_CASCADE = _get_fallback_cascade()
 
 
 # ═══════════════════════════════════════════════════════════════
-# L4: OLLAMA LOCAL FALLBACK
+# PROMPT SANITIZATION
 # ═══════════════════════════════════════════════════════════════
-
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "")  # e.g. "http://host.docker.internal:11434"
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
-
-
-# ═══════════════════════════════════════════════════════════════
-# LLM CASCADE
-# ═══════════════════════════════════════════════════════════════
-
-LLM_CASCADE = [
-    {"model": "meta-llama/llama-3.3-70b-instruct:free", "tier": 1, "timeout": 30},
-    {"model": "mistralai/mistral-small-3.2-24b:free", "tier": 1, "timeout": 30},
-    {"model": "google/gemma-4-26b-a4b-it:free", "tier": 1, "timeout": 30},
-    {"model": "google/gemma-4-31b-it:free", "tier": 2, "timeout": 30},
-    {"model": "nvidia/nemotron-3-nano-30b-a3b:free", "tier": 2, "timeout": 30},
-    {"model": "deepseek/deepseek-r1-0528:free", "tier": 2, "timeout": 30},
-    {"model": "inclusionai/ling-3.0-flash:free", "tier": 3, "timeout": 30},
-    {"model": "nvidia/nemotron-3-ultra-550b-a55b:free", "tier": 3, "timeout": 30},
-    {"model": "nvidia/nemotron-3-super-120b-a12b:free", "tier": 3, "timeout": 30},
-]
-
-
-# ═══════════════════════════════════════════════════════════════
-# AUTO-DISCOVER FREE MODELS FROM OPENROUTER
-# Queries OpenRouter API for available free models,
-# rebuilds cascade automatically when models change.
-# ═══════════════════════════════════════════════════════════════
-
-_DISCOVERED_MODELS: list[dict] = []
-_DISCOVER_TS: float = 0
-_DISCOVER_TTL: int = 3600  # refresh every 1 hour
-_DISCOVER_LOCK = threading.Lock()
-
-# Models to SKIP (known to be bad for JSON/arch tasks)
-_BLOCKLIST = {
-    "openrouter/auto",
-    "deepseek/deepseek-r1-0528:free",  # thinking model, outputs <think> tags
-    "google/gemma-3-1b-it:free",       # too small
-    "meta-llama/llama-4-maverick:free", # inconsistent JSON
-    "google/lyria-3-clip-preview",     # music model
-    "google/lyria-3-pro-preview",      # music model
-    "nvidia/nemotron-3-nano-30b-a3b:free",  # reasoning model, slow
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",  # reasoning, slow
-    "nvidia/nemotron-3.5-content-safety:free",  # safety model, not text gen
-    "nvidia/nemotron-nano-12b-v2-vl:free",  # vision-language, not ideal for JSON
-    "nvidia/nemotron-nano-9b-v2:free",  # too small
-    "inclusionai/ling-3.0-flash:free",  # unknown quality
-}
-
-# Preferred free models (boost priority)
-_PREFERRED = {
-    "google/gemini-2.5-flash",         # best free-tier model
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "mistralai/mistral-small-3.2-24b:free",
-    "qwen/qwen3-235b-a22b:free",
-    "deepseek/deepseek-chat-v3-0324:free",
-}
-
-
-async def discover_free_models(api_key: str) -> list[dict]:
-    """Query OpenRouter for available free models."""
-    global _DISCOVERED_MODELS, _DISCOVER_TS
-
-    with _DISCOVER_LOCK:
-        if _DISCOVERED_MODELS and (time.time() - _DISCOVER_TS) < _DISCOVER_TTL:
-            return _DISCOVERED_MODELS
-
-    base_url = os.environ.get("OPENROUTER_BASE", "https://openrouter.ai/api/v1")
-
-    try:
-        async with httpx.AsyncClient() as client:
-            r = await client.get(
-                f"{base_url}/models",
-                headers={"Authorization": f"Bearer {api_key}"},
-                timeout=15,
-            )
-        if r.status_code != 200:
-            logger.warning("OpenRouter /models returned %d", r.status_code)
-            return []
-
-        data = r.json()
-        models = data.get("data", [])
-
-        free_models = []
-        for m in models:
-            mid = m.get("id", "")
-            pricing = m.get("pricing", {})
-            prompt_price = float(pricing.get("prompt", "1") or "1")
-            completion_price = float(pricing.get("completion", "1") or "1")
-
-            # Free = price is 0
-            is_free = prompt_price == 0 and completion_price == 0
-            # Also include very cheap models (< $0.0001 per 1K tokens)
-            is_cheap = prompt_price < 0.0001 and completion_price < 0.0001
-
-            if not (is_free or is_cheap):
-                continue
-            if mid in _BLOCKLIST:
-                continue
-
-            # Filter: must support text generation
-            arch = m.get("architecture", {})
-            modality = arch.get("output_modalities", [])
-            if "text" not in modality and not modality:
-                continue
-
-            # Filter: skip models that are clearly not for text generation
-            mid_lower = mid.lower()
-            skip_keywords = ["lyria", "imagen", "dall-e", "stable-diffusion", "midjourney", "tts", "whisper", "embed", "rerank", "content-safety"]
-            if any(kw in mid_lower for kw in skip_keywords):
-                continue
-
-            # Score: prefer known good models
-            priority = 3
-            if mid in _PREFERRED:
-                priority = 1
-            elif is_free:
-                priority = 2
-
-            free_models.append({
-                "model": mid,
-                "tier": priority,
-                "timeout": 30,
-                "is_free": is_free,
-                "name": m.get("name", ""),
-            })
-
-        # Sort by priority, then by name
-        free_models.sort(key=lambda x: (x["tier"], x["model"]))
-
-        # Limit to top 15 models to avoid cascade timeout
-        free_models = free_models[:15]
-
-        with _DISCOVER_LOCK:
-            _DISCOVERED_MODELS = free_models
-            _DISCOVER_TS = time.time()
-
-        logger.info(
-            "Discovered %d free/cheap models from OpenRouter (was %d in cascade)",
-            len(free_models),
-            len(LLM_CASCADE),
-        )
-        return free_models
-
-    except Exception as e:
-        logger.warning("Free model discovery failed: %s", e)
-        return []
-
-
-def get_active_cascade(api_key: str = "") -> list[dict]:
-    """Return the active cascade: discovered models + hardcoded fallback."""
-    global _DISCOVERED_MODELS, _DISCOVER_TS
-
-    # If we have fresh discovered models, use them
-    with _DISCOVER_LOCK:
-        if _DISCOVERED_MODELS and (time.time() - _DISCOVER_TS) < _DISCOVER_TTL:
-            return _DISCOVERED_MODELS
-
-    # Otherwise return hardcoded cascade
-    return LLM_CASCADE
-
-
-def invalidate_discovery() -> None:
-    """Force re-discovery on next call."""
-    global _DISCOVERED_MODELS, _DISCOVER_TS
-    with _DISCOVER_LOCK:
-        _DISCOVERED_MODELS = []
-        _DISCOVER_TS = 0
-
-
-def get_discovery_stats() -> dict:
-    """Return discovery stats for health endpoint."""
-    with _DISCOVER_LOCK:
-        return {
-            "discovered_count": len(_DISCOVERED_MODELS),
-            "discovered_models": [m["model"] for m in _DISCOVERED_MODELS[:10]],
-            "last_discover_ago": int(time.time() - _DISCOVER_TS) if _DISCOVER_TS else None,
-            "ttl": _DISCOVER_TTL,
-            "hardcoded_fallback": [m["model"] for m in LLM_CASCADE],
-        }
-
-
-# ═══════════════════════════════════════════════════════════════
-# PROMPT SANITIZATION (L1: security)
-# ═══════════════════════════════════════════════════════════════
-
 
 def _sanitize_prompt(text: str) -> str:
-    """Sanitize user prompt before sending to LLM."""
     text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
-    MAX_PROMPT_LENGTH = 2000
-    if len(text) > MAX_PROMPT_LENGTH:
-        text = text[:MAX_PROMPT_LENGTH] + "...(truncated)"
+    if len(text) > 2000:
+        text = text[:2000] + "...(truncated)"
     injection_patterns = [
         r"ignore\s+(all\s+)?previous\s+instructions",
         r"you\s+are\s+now\s+",
@@ -353,9 +141,8 @@ def _sanitize_prompt(text: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════
-# JSON EXTRACTION (L5: improved)
+# JSON EXTRACTION
 # ═══════════════════════════════════════════════════════════════
-
 
 def _extract_json(text: str) -> dict | None:
     """Extract JSON from LLM response, handling various formats."""
@@ -390,309 +177,162 @@ def _extract_json(text: str) -> dict | None:
 
 
 # ═══════════════════════════════════════════════════════════════
-# CACHE — L1 (thread-safe) + L2 (Redis)
-# L6: threading.Lock
-# L7: full sha256
-# L8: model version in key
+# CACHE — L1 (in-memory) + L2 (Redis)
 # ═══════════════════════════════════════════════════════════════
 
-_l1: dict[str, tuple[float, dict]] = {}
-_l1_lock = threading.Lock()  # L6: thread-safe
-_L1_TTL = 300
-_L1_MAX = 1000
+_l1_cache: dict[str, tuple[float, dict]] = {}
+_l1_lock = threading.Lock()
+L1_TTL = 300  # 5 min
+L1_MAX = 500
+
+_redis_client = None
 
 
 def _key(text: str) -> str:
-    """L7: Full sha256 hash (no truncation). L8: includes model version."""
-    content = f"{SYSTEM_PROMPT_VERSION}:{text.strip().lower()}"
-    return hashlib.sha256(content.encode()).hexdigest()  # L7: full 64 chars
+    """Generate cache key from prompt text + system prompt version."""
+    return hashlib.sha256(f"{SYSTEM_PROMPT_VERSION}:{text}".encode()).hexdigest()
 
 
 def _l1_get(text: str) -> dict | None:
+    """L1 cache get (thread-safe)."""
     k = _key(text)
-    with _l1_lock:  # L6: thread-safe read
-        if k in _l1:
-            ts, val = _l1[k]
-            if time.time() - ts < _L1_TTL:
+    with _l1_lock:
+        if k in _l1_cache:
+            ts, val = _l1_cache[k]
+            if time.time() - ts < L1_TTL:
                 return val
-            del _l1[k]
+            del _l1_cache[k]
     return None
 
 
 def _l1_set(text: str, val: dict) -> None:
+    """L1 cache set (thread-safe)."""
     k = _key(text)
-    with _l1_lock:  # L6: thread-safe write
-        if len(_l1) >= _L1_MAX:
-            oldest = min(_l1, key=lambda x: _l1[x][0])
-            del _l1[oldest]
-        _l1[k] = (time.time(), val)
-
-
-_redis = None
+    with _l1_lock:
+        if len(_l1_cache) >= L1_MAX:
+            oldest = min(_l1_cache.items(), key=lambda x: x[1][0])
+            del _l1_cache[oldest[0]]
+        _l1_cache[k] = (time.time(), val)
 
 
 def _get_redis():
-    global _redis
-    if _redis is not None:
-        return _redis
+    """Get Redis client (lazy init)."""
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client
     try:
-        import redis
-
-        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/1")
-        _redis = redis.from_url(
-            redis_url, decode_responses=True, socket_timeout=3, socket_connect_timeout=5, retry_on_timeout=True
-        )
-        _redis.ping()
-        return _redis
+        import redis.asyncio as aioredis
+        redis_url = os.environ.get("REDIS_URL", "")
+        if redis_url:
+            _redis_client = aioredis.from_url(redis_url, decode_responses=True)
+            return _redis_client
     except Exception:
-        _redis = None
-        return None
+        pass
+    return None
 
 
-def _l2_get(text: str) -> dict | None:
-    r = _get_redis()
-    if r is None:
+async def _l2_get(text: str) -> dict | None:
+    """L2 (Redis) cache get."""
+    redis = _get_redis()
+    if not redis:
         return None
     try:
-        raw = r.get(f"parse:{_key(text)}")
-        return json.loads(raw) if raw else None
+        raw = await redis.get(f"parse:{_key(text)}")
+        if raw:
+            data = json.loads(raw)
+            _l1_set(text, data)
+            return data
     except Exception:
-        return None
+        pass
+    return None
 
 
-def _l2_set(text: str, val: dict) -> None:
-    r = _get_redis()
-    if r is None:
+async def _l2_set(text: str, val: dict) -> None:
+    """L2 (Redis) cache set."""
+    redis = _get_redis()
+    if not redis:
         return
     try:
-        r.setex(f"parse:{_key(text)}", 86400, json.dumps(val, ensure_ascii=False))
+        await redis.setex(f"parse:{_key(text)}", 86400, json.dumps(val, ensure_ascii=False))
     except Exception:
         pass
 
 
-class AllModelsFailedError(Exception):
-    pass
-
-
-def _validate_and_fix(result: dict | None, text: str) -> dict | str | None:
-    """Level 1+2: Pydantic validation + auto-retry with fix prompt."""
-    from shared.llm_schemas import build_fix_prompt, validate_llm_response
-
-    parsed, errors = validate_llm_response(result)
-    if parsed:
-        return parsed.model_dump()
-
-    # Level 2: Auto-retry with fix prompt
-    if result is not None and errors:
-        logger.warning("LLM response validation failed: %s", errors[:3])
-        fix_prompt = build_fix_prompt(text, errors)
-        return fix_prompt  # signal to retry with this prompt
-
-    return None
+def get_cache_stats() -> dict:
+    with _l1_lock:
+        l1_count = len(_l1_cache)
+    return {
+        "l1_size": l1_count,
+        "l1_max": L1_MAX,
+        "l1_ttl": L1_TTL,
+        "redis_connected": _get_redis() is not None,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════
-# LLM CALL — with key rotation (L3) + ollama fallback (L4)
+# COST TRACKING
 # ═══════════════════════════════════════════════════════════════
 
-
-async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) -> dict | None:
-    """Call a single LLM model via OpenRouter with given key."""
-    base_url = os.environ.get("OPENROUTER_BASE", "https://openrouter.ai/api/v1")
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-        "HTTP-Referer": "https://archai.app",
-        "X-Title": "Architect Parser",
-    }
-
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        "max_tokens": 800,
-        "temperature": 0.1,
-    }
-
-    try:
-        async with httpx.AsyncClient() as client:
-            r = await client.post(
-                f"{base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=timeout,
-            )
-
-        if r.status_code == 429:
-            logger.warning("LLM %s rate-limited, trying next key/model", model)
-            return None  # signal to try next key
-
-        if r.status_code != 200:
-            logger.warning("LLM %s returned %d", model, r.status_code)
-            return None
-
-        data = r.json()
-        # Cost tracking: extract token usage
-        usage = data.get("usage", {})
-        tokens_in = usage.get("prompt_tokens", 0)
-        tokens_out = usage.get("completion_tokens", 0)
-        if tokens_in or tokens_out:
-            _track_cost(model, tokens_in, tokens_out)
-            logger.info("LLM %s tokens: %d in / %d out", model, tokens_in, tokens_out)
-        content = data["choices"][0]["message"]["content"]
-        return _extract_json(content)
-
-    except httpx.TimeoutException:
-        logger.warning("LLM %s timeout (%ds)", model, timeout)
-        return None
-    except Exception as e:
-        logger.warning("LLM %s error: %s", model, e)
-        return None
+_cost_data: dict[str, dict] = {"total_tokens_in": 0, "total_tokens_out": 0, "by_model": {}}
 
 
-def _get_google_keys() -> list[str]:
-    """Get all Google API keys (primary + fallbacks)."""
-    keys = []
-    primary = os.environ.get("GOOGLE_API_KEY", "")
-    if primary:
-        keys.append(primary)
-    fallback = os.environ.get("GOOGLE_FALLBACK_KEYS", "")
-    if fallback:
-        for k in fallback.split(","):
-            k = k.strip()
-            if k and k not in keys:
-                keys.append(k)
-    return keys
+def _track_cost(model: str, tokens_in: int, tokens_out: int) -> None:
+    _cost_data["total_tokens_in"] += tokens_in
+    _cost_data["total_tokens_out"] += tokens_out
+    if model not in _cost_data["by_model"]:
+        _cost_data["by_model"][model] = {"in": 0, "out": 0, "calls": 0}
+    _cost_data["by_model"][model]["in"] += tokens_in
+    _cost_data["by_model"][model]["out"] += tokens_out
+    _cost_data["by_model"][model]["calls"] += 1
 
 
-_GEMINI_KEY_IDX = 0
-
-
-async def _call_gemini(prompt: str, timeout: int = 60, max_retries: int = 3) -> dict | None:
-    """Call Google Gemini API — БЕСПЛАТНО (free tier, 15 RPM per key, ротация ключей)."""
-    global _GEMINI_KEY_IDX
-    keys = _get_google_keys()
-    if not keys:
-        return None
-
-    payload = {
-        "system_instruction": {
-            "parts": [{"text": SYSTEM_PROMPT}]
-        },
-        "contents": [
-            {"parts": [{"text": prompt}]}
-        ],
-        "generationConfig": {
-            "temperature": 0.1,
-            "maxOutputTokens": 2048,
-            "responseMimeType": "application/json"
-        }
-    }
-
-    for attempt in range(max_retries):
-        key = keys[_GEMINI_KEY_IDX % len(keys)]
-        _GEMINI_KEY_IDX = (_GEMINI_KEY_IDX + 1) % len(keys)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
-
-        try:
-            async with httpx.AsyncClient() as client:
-                r = await client.post(url, json=payload, timeout=timeout)
-
-            if r.status_code == 429:
-                wait = min(2 ** attempt * 3, 30)
-                logger.warning("Gemini rate-limited (key %d/%d), waiting %ds", attempt + 1, len(keys), wait)
-                await asyncio.sleep(wait)
-                continue
-
-            if r.status_code != 200:
-                logger.warning("Gemini returned %d: %s", r.status_code, r.text[:200])
-                continue
-
-            data = r.json()
-            content = data["candidates"][0]["content"]["parts"][0]["text"]
-            return _extract_json(content)
-
-        except httpx.TimeoutException:
-            logger.warning("Gemini timeout (%ds)", timeout)
-            continue
-        except Exception as e:
-            logger.warning("Gemini error: %s", e)
-            continue
-
-    logger.warning("Gemini: all %d attempts exhausted", max_retries)
-    return None
-
-
-async def _call_ollama(prompt: str) -> dict | None:
-    """L4: Call local Ollama model as last resort."""
-    if not OLLAMA_URL:
-        return None
-
-    logger.info("Trying Ollama fallback: %s at %s", OLLAMA_MODEL, OLLAMA_URL)
-
-    payload = {
-        "model": OLLAMA_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        "stream": False,
-    }
-
-    try:
-        async with httpx.AsyncClient() as client:
-            r = await client.post(
-                f"{OLLAMA_URL}/api/chat",
-                json=payload,
-                timeout=60,
-            )
-
-        if r.status_code != 200:
-            logger.warning("Ollama returned %d", r.status_code)
-            return None
-
-        data = r.json()
-        content = data.get("message", {}).get("content", "")
-        return _extract_json(content)
-
-    except Exception as e:
-        logger.warning("Ollama error: %s", e)
-        return None
+def get_cost_stats() -> dict:
+    return dict(_cost_data)
 
 
 # ═══════════════════════════════════════════════════════════════
 # VALIDATION
 # ═══════════════════════════════════════════════════════════════
 
+def _validate(params: dict) -> dict:
+    """Validate and normalize parsed parameters (backward compat)."""
+    if "object_type" not in params:
+        params["object_type"] = "building"
+    obj = str(params.get("object_type", "building")).lower().strip()
+    if obj in ("room", "apartment"):
+        obj = "interior"
+    params["object_type"] = obj
+    for field in ("floors", "width_m", "length_m", "height_m"):
+        val = params.get(field)
+        if val is not None:
+            try:
+                params[field] = float(val)
+            except (ValueError, TypeError):
+                params[field] = None
+    for field in ("features", "furniture", "special_requirements", "suggestions", "references", "decomposition"):
+        if not isinstance(params.get(field), list):
+            params[field] = []
+    try:
+        params["confidence"] = max(0.0, min(1.0, float(params.get("confidence", 0.5))))
+    except (ValueError, TypeError):
+        params["confidence"] = 0.5
+    return params
+
+
+def _validate_and_fix(result: dict | None, text: str) -> dict | None:
+    """Validate LLM result, fix common issues (backward compat)."""
+    if result is None:
+        return None
+    return _validate(result)
+
 
 def _validate_result(result: dict) -> bool:
-    """FLEXIBLE validation — trust LLM, check only structure."""
-    if not isinstance(result, dict):
-        return False
-    if not result.get("object_type"):
-        return False
-    w = result.get("width_m", 0)
-    l = result.get("length_m", 0)
-    # Only reject clearly invalid dimensions
-    if w <= 0 or l <= 0 or w > 500 or l > 500:
-        return False
-    floors = result.get("floors", 0)
-    if floors <= 0 or floors > 50:
-        return False
-    # Interior requests — set default room_type if missing
-    if result.get("object_type") in ("interior", "room") and not result.get("room_type"):
-        result["room_type"] = "living"
-    # Ensure building_type is not empty
-    if not result.get("building_type"):
-        result["building_type"] = "house"
-    return True
+    """Check if result has minimum required fields."""
+    return bool(result and result.get("object_type"))
 
 
 def _minimal_defaults(reason: str) -> dict:
-    """Absolute minimal defaults when everything fails."""
+    """Return minimal valid params when LLM fails."""
     return {
         "object_type": "building",
         "building_type": "house",
@@ -700,227 +340,168 @@ def _minimal_defaults(reason: str) -> dict:
         "floors": 2,
         "width_m": 10,
         "length_m": 12,
-        "height_m": 3.0,
+        "height_m": 6,
         "style": "modern",
-        "material": "plaster",
+        "material": "brick",
         "roof_type": "gabled",
         "features": [],
         "furniture": [],
+        "special_requirements": [],
         "confidence": 0.1,
         "reasoning": reason,
+        "suggestions": [],
+        "references": [],
+        "decomposition": [],
     }
 
 
 # ═══════════════════════════════════════════════════════════════
-# MAIN PARSE FUNCTION
+# GET GENERATION TYPE
 # ═══════════════════════════════════════════════════════════════
-
-
-async def parse_prompt_async(text: str) -> dict:
-    """
-    Parse architectural prompt using LLM cascade.
-
-    L1: Prompt sanitized (injection prevention)
-    L2: Timeouts 30-40s
-    L3: Multiple API keys with rotation
-    L4: Ollama local fallback
-    L6: Thread-safe L1 cache
-    L7: Full sha256 hash
-    L8: Model version in cache key
-    """
-    text = _sanitize_prompt(text)
-    if not text:
-        return _minimal_defaults("Empty prompt")
-
-    # L1 cache
-    cached = _l1_get(text)
-    if cached:
-        return cached
-
-    # L2 cache
-    cached = _l2_get(text)
-    if cached:
-        _l1_set(text, cached)
-        return cached
-
-    # ═══ 0. Google Gemini — БЕСПЛАТНО, без OpenRouter ═══
-    logger.info("Trying Google Gemini (free tier)...")
-    gemini_result = await _call_gemini(text)
-    if gemini_result:
-        validated = _validate_and_fix(gemini_result, text)
-        if isinstance(validated, dict):
-            _l1_set(text, validated)
-            _l2_set(text, validated)
-            logger.info("Gemini parsed successfully: %s", validated.get("building_type"))
-            return validated
-
-    # L3: Get all available keys
-    api_keys = _get_api_keys()
-    if not api_keys:
-        logger.error("No OPENROUTER_API_KEY configured")
-        # L4: Try Ollama as last resort
-        result = await _call_ollama(text)
-        if result and _validate_result(result):
-            _l1_set(text, result)
-            _l2_set(text, result)
-            return result
-        raise AllModelsFailedError("No API keys configured and Ollama unavailable")
-
-    # Auto-discover free models from OpenRouter
-    cascade = get_active_cascade(api_keys[0] if api_keys else "")
-
-    # If cascade is empty or stale, trigger async discovery
-    if api_keys and not _DISCOVERED_MODELS:
-        try:
-            await discover_free_models(api_keys[0])
-            cascade = get_active_cascade(api_keys[0])
-        except Exception as e:
-            logger.warning("Discovery failed, using hardcoded cascade: %s", e)
-
-    # LLM cascade with key rotation (L3) + Pydantic validation
-    for model_config in cascade:
-        model: str = model_config["model"]  # type: ignore[assignment]
-        timeout: int = model_config["timeout"]  # type: ignore[assignment]
-        tier: int = model_config["tier"]  # type: ignore[assignment]
-
-        for key_idx, api_key in enumerate(api_keys):
-            logger.info("Trying LLM: %s (key %d/%d)", model, key_idx + 1, len(api_keys))
-            result = await _call_openrouter(model, text, timeout, api_key)
-
-            if result:
-                # Level 1: Pydantic validation
-                validated = _validate_and_fix(result, text)
-                if isinstance(validated, dict):
-                    _l1_set(text, validated)
-                    _l2_set(text, validated)
-                    logger.info("LLM %s parsed successfully: %s", model, validated.get("building_type"))
-                    return validated
-
-                # Level 2: Retry with fix prompt (one attempt)
-                if isinstance(validated, str) and tier <= 2:
-                    logger.info("Retrying %s with fix prompt", model)
-                    fix_result = await _call_openrouter(model, validated, timeout, api_key)
-                    if fix_result:
-                        fix_validated = _validate_and_fix(fix_result, text)
-                        if isinstance(fix_validated, dict):
-                            _l1_set(text, fix_validated)
-                            _l2_set(text, fix_validated)
-                            logger.info("LLM %s fixed and parsed: %s", model, fix_validated.get("building_type"))
-                            return fix_validated
-
-            if result is not None:
-                # Got response but invalid — try next model, not next key
-                break
-
-    # L4: All OpenRouter models failed → try Ollama
-    logger.warning("All OpenRouter models failed, trying Ollama fallback")
-    result = await _call_ollama(text)
-    if result:
-        validated = _validate_and_fix(result, text)
-        if isinstance(validated, dict):
-            _l1_set(text, validated)
-            _l2_set(text, validated)
-            logger.info("Ollama fallback succeeded: %s", validated.get("building_type"))
-            return validated
-
-    raise AllModelsFailedError(f"All {len(cascade)} LLM models (+ Ollama) failed for prompt: {text[:100]}...")
-
-
-# ═══════════════════════════════════════════════════════════════
-# COST TRACKING — per model and aggregate
-# ═══════════════════════════════════════════════════════════════
-
-import threading as _threading
-
-_cost_lock = _threading.Lock()
-_cost_stats: dict[str, dict] = {}  # {model: {calls, tokens_in, tokens_out, cost_usd}}
-
-# Approximate costs per 1M tokens (input/output) — update as needed
-_MODEL_COSTS = {
-    "google/gemini-2.5-pro": {"input": 1.25, "output": 10.0},
-    "anthropic/claude-sonnet-4": {"input": 3.0, "output": 15.0},
-    "google/gemini-2.5-flash": {"input": 0.075, "output": 0.3},
-    "openai/gpt-4o-mini": {"input": 0.15, "output": 0.6},
-    "meta-llama/llama-4-maverick:free": {"input": 0, "output": 0},
-    "qwen/qwen3-235b-a22b:free": {"input": 0, "output": 0},
-    "deepseek/deepseek-chat-v3-0324:free": {"input": 0, "output": 0},
-}
-
-
-def _track_cost(model: str, tokens_in: int, tokens_out: int) -> None:
-    """Track cost of an LLM call."""
-    costs: dict = _MODEL_COSTS.get(model, {"input": 0, "output": 0})  # type: ignore[assignment]
-    cost = (tokens_in * costs["input"] + tokens_out * costs["output"]) / 1_000_000
-    with _cost_lock:
-        stats = _cost_stats.setdefault(model, {"calls": 0, "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0})
-        stats["calls"] += 1
-        stats["tokens_in"] += tokens_in
-        stats["tokens_out"] += tokens_out
-        stats["cost_usd"] = round(stats["cost_usd"] + cost, 6)
-
-
-def get_cost_stats() -> dict:
-    """Return cost tracking statistics."""
-    with _cost_lock:
-        total_calls = sum(s["calls"] for s in _cost_stats.values())
-        total_cost = sum(s["cost_usd"] for s in _cost_stats.values())
-        return {
-            "per_model": dict(_cost_stats),
-            "total_calls": total_calls,
-            "total_cost_usd": round(total_cost, 4),
-        }
-
-
-def get_cache_stats() -> dict:
-    """Cache statistics for health endpoint."""
-    with _l1_lock:
-        l1_count = len(_l1)
-    redis_ok = _get_redis() is not None
-    return {
-        "l1_entries": l1_count,
-        "l1_max": _L1_MAX,
-        "l1_ttl": _L1_TTL,
-        "redis_connected": redis_ok,
-        "system_prompt_version": SYSTEM_PROMPT_VERSION,
-        "api_keys_configured": len(_get_api_keys()),
-        "ollama_configured": bool(OLLAMA_URL),
-        "llm_cascade": [{"model": m["model"], "tier": m["tier"]} for m in LLM_CASCADE],
-        "discovery": get_discovery_stats(),
-        "cost_tracking": get_cost_stats(),
-    }
-
-
-def parse_prompt_sync(text: str) -> dict:
-    """Sync wrapper for compatibility."""
-    import asyncio
-    import concurrent.futures
-
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(asyncio.run, parse_prompt_async(text)).result()
-        return loop.run_until_complete(parse_prompt_async(text))
-    except RuntimeError:
-        return asyncio.run(parse_prompt_async(text))
-
-
-# ═══════════════════ BACKWARD COMPAT ALIASES ═══════════════════
-# v8.0.0 renamed internal functions; these aliases keep tests + router working
-parse_prompt = parse_prompt_sync
-_call_llm = _call_openrouter
-
 
 def get_generation_type(params: dict) -> str:
-    """Determine generation type from parsed params."""
-    obj = (params.get("object_type") or "").lower()
-    if obj in ("room", "interior"):
+    """Detect generation type from parsed params."""
+    obj = (params.get("object_type") or "").strip().lower()
+    if obj in ("interior", "room"):
+        return "interior"
+    if obj == "landscape":
+        return "landscape"
+    if params.get("room_type"):
         return "interior"
     return "building"
 
 
-def _validate(params: dict) -> dict:
-    """Validate and sanitize parsed parameters."""
-    if not isinstance(params, dict):
-        return {}
-    return params
+# ═══════════════════════════════════════════════════════════════
+# MAIN PARSE FUNCTION — uses ModelManager
+# ═══════════════════════════════════════════════════════════════
+
+async def parse_prompt_async(text: str) -> dict:
+    """
+    Parse architectural prompt → structured parameters.
+    Uses ModelManager for LLM calls (free OpenRouter models + Gemini fallback).
+    """
+    from shared.model_manager import get_model_manager, AllModelsFailedError
+
+    sanitized = _sanitize_prompt(text)
+    if not sanitized:
+        raise ValueError("Empty prompt after sanitization")
+
+    # Check cache L1 → L2
+    cached = _l1_get(sanitized)
+    if cached:
+        return cached
+    cached = await _l2_get(sanitized)
+    if cached:
+        return cached
+
+    manager = get_model_manager()
+    messages = [{"role": "user", "content": sanitized}]
+
+    try:
+        result = await manager.send_request(
+            messages=messages,
+            max_tokens=500,
+            temperature=0.1,
+            system_prompt=SYSTEM_PROMPT,
+        )
+    except AllModelsFailedError:
+        raise
+    except Exception as e:
+        raise AllModelsFailedError(f"Unexpected error: {e}") from e
+
+    content = result.get("content", "")
+    parsed = _extract_json(content)
+
+    if parsed is None:
+        # Retry with stricter prompt
+        try:
+            retry = await manager.send_request(
+                messages=[{"role": "user", "content": f"Ответь ТОЛЬКО валидным JSON без пояснений.\n\n{sanitized}"}],
+                max_tokens=500,
+                temperature=0.0,
+                system_prompt=SYSTEM_PROMPT,
+            )
+            parsed = _extract_json(retry.get("content", ""))
+        except Exception:
+            pass
+
+    if parsed is None:
+        raise AllModelsFailedError(f"All models returned non-JSON. Last: {content[:300]}")
+
+    parsed = _validate(parsed)
+    parsed["_model"] = result.get("model", "unknown")
+    parsed["_provider"] = result.get("provider", "unknown")
+
+    # Cache
+    _l1_set(sanitized, parsed)
+    await _l2_set(sanitized, parsed)
+
+    logger.info(
+        "Parsed: type=%s, confidence=%.2f, model=%s/%s",
+        parsed.get("object_type"), parsed.get("confidence", 0),
+        result.get("provider"), result.get("model"),
+    )
+    return parsed
+
+
+def parse_prompt_sync(text: str) -> dict:
+    """Synchronous wrapper for parse_prompt_async (backward compat)."""
+    return asyncio.run(parse_prompt_async(text))
+
+
+# Alias for backward compat
+parse_prompt = parse_prompt_async
+
+
+# ═══════════════════════════════════════════════════════════════
+# BACKWARD COMPAT: discovery functions used by llm-service
+# ═══════════════════════════════════════════════════════════════
+
+async def discover_free_models(api_key: str = "") -> list[dict]:
+    from shared.model_manager import get_model_manager
+    manager = get_model_manager()
+    models = await manager.discover_free_models(force=True)
+    return [m.to_dict() for m in models]
+
+
+def get_active_cascade(api_key: str = "") -> list[dict]:
+    from shared.model_manager import get_model_manager
+    manager = get_model_manager()
+    models = manager.get_active_models()
+    if not models:
+        return _get_fallback_cascade()
+    return [{"model": m.model_id, "tier": m.tier, "timeout": 30} for m in models]
+
+
+def get_discovery_stats() -> dict:
+    from shared.model_manager import get_model_manager
+    manager = get_model_manager()
+    stats = manager.get_stats()
+    return {
+        "discovered_count": stats["free_models_count"],
+        "discovered_models": [m["model"] for m in stats["free_models"][:10]],
+        "last_discover_ago": stats["last_discovery_ago"],
+        "ttl": stats["discovery_interval"],
+        "hardcoded_fallback": [m["model"] for m in _get_fallback_cascade()],
+        "openrouter_keys": stats["openrouter_keys"],
+        "gemini_keys": stats["gemini_keys"],
+    }
+
+
+def invalidate_discovery() -> None:
+    from shared.model_manager import get_model_manager
+    manager = get_model_manager()
+    manager._free_models = []
+    manager._last_discovery = 0.0
+
+
+# ═══════════════════════════════════════════════════════════════
+# ALL MODELS FAILED ERROR (must be importable from here)
+# ═══════════════════════════════════════════════════════════════
+
+# Re-export from model_manager for backward compat
+try:
+    from shared.model_manager import AllModelsFailedError
+except ImportError:
+    class AllModelsFailedError(Exception):
+        pass
