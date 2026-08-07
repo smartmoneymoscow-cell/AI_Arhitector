@@ -155,15 +155,14 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 # ═══════════════════════════════════════════════════════════════
 
 LLM_CASCADE = [
-    {"model": "meta-llama/llama-3.3-70b-instruct:free", "tier": 1, "timeout": 30},
-    {"model": "mistralai/mistral-small-3.2-24b:free", "tier": 1, "timeout": 30},
     {"model": "google/gemma-4-26b-a4b-it:free", "tier": 1, "timeout": 30},
-    {"model": "google/gemma-4-31b-it:free", "tier": 2, "timeout": 30},
+    {"model": "google/gemma-4-31b-it:free", "tier": 1, "timeout": 30},
+    {"model": "nvidia/nemotron-3-ultra-550b-a55b:free", "tier": 1, "timeout": 30},
+    {"model": "openai/gpt-oss-20b:free", "tier": 1, "timeout": 30},
+    {"model": "nvidia/nemotron-3-super-120b-a12b:free", "tier": 2, "timeout": 30},
     {"model": "nvidia/nemotron-3-nano-30b-a3b:free", "tier": 2, "timeout": 30},
-    {"model": "deepseek/deepseek-r1-0528:free", "tier": 2, "timeout": 30},
-    {"model": "inclusionai/ling-3.0-flash:free", "tier": 3, "timeout": 30},
-    {"model": "nvidia/nemotron-3-ultra-550b-a55b:free", "tier": 3, "timeout": 30},
-    {"model": "nvidia/nemotron-3-super-120b-a12b:free", "tier": 3, "timeout": 30},
+    {"model": "poolside/laguna-s-2.1:free", "tier": 2, "timeout": 30},
+    {"model": "cohere/north-mini-code:free", "tier": 3, "timeout": 30},
 ]
 
 
@@ -181,17 +180,16 @@ _DISCOVER_LOCK = threading.Lock()
 # Models to SKIP (known to be bad for JSON/arch tasks)
 _BLOCKLIST = {
     "openrouter/auto",
+    "openrouter/free",
     "deepseek/deepseek-r1-0528:free",  # thinking model, outputs <think> tags
-    "google/gemma-3-1b-it:free",       # too small
-    "meta-llama/llama-4-maverick:free", # inconsistent JSON
-    "google/lyria-3-clip-preview",     # music model
-    "google/lyria-3-pro-preview",      # music model
-    "nvidia/nemotron-3-nano-30b-a3b:free",  # reasoning model, slow
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",  # reasoning, slow
     "nvidia/nemotron-3.5-content-safety:free",  # safety model, not text gen
-    "nvidia/nemotron-nano-12b-v2-vl:free",  # vision-language, not ideal for JSON
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",  # reasoning, slow
+    "nvidia/nemotron-nano-12b-v2-vl:free",  # vision-language
     "nvidia/nemotron-nano-9b-v2:free",  # too small
-    "inclusionai/ling-3.0-flash:free",  # unknown quality
+    "inclusionai/ling-3.0-flash:free",  # inconsistent JSON
+    "inclusionai/ling-3.0-tiny:free",  # returns None
+    "google/lyria-3-clip-preview",  # music model
+    "google/lyria-3-pro-preview",  # music model
 }
 
 # Preferred free models (boost priority)
