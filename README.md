@@ -1,29 +1,77 @@
-# Architect v10.5.0 — AI Architecture Generator
+# Architect v10.6.0 — AI Architecture Generator
 
 Генерация 3D-моделей зданий и интерьеров по текстовому описанию на русском языке.
 
+## Быстрый старт
+
+```bash
+# 1. Клонировать репозиторий
+git clone https://github.com/smartmoneymoscow-cell/AI_Arhitector.git
+cd AI_Arhitector
+
+# 2. Создать .env из примера
+cp .env.example .env
+
+# 3. Заполнить ключи в .env (минимум один):
+#    GOOGLE_API_KEY=AIzaSy-xxxx        ← бесплатно, https://aistudio.google.com/apikey
+#    OPENROUTER_API_KEY=sk-or-xxxx     ← бесплатные модели, https://openrouter.ai
+
+# 4. Запуск
+docker-compose up -d
+```
+
+## Архитектура
+
+```
+Пользователь → Nginx → Gateway → LLM Service → Blender Service
+                  │         │          │              │
+                  │         │    Google Gemini    Blender CLI
+                  │         │    OpenRouter       (bpy-скрипты)
+                  │         │    Ollama (local)
+                  │         │
+                  │    Orchestrator
+                  │    (20+ AI-агентов)
+                  │
+              Frontend
+              (Three.js 3D)
+```
+
+### LLM-цепочка (бесплатно)
+
+```
+1. Google Gemini API  ← основной, 4 ключа с ротацией
+2. OpenRouter :free   ← фолбэк, 8 моделей
+3. Ollama (local)     ← опционально
+4. Regex fallback     ← крайний случай
+```
+
+### Pipeline агентов
+
+```
+Промт → Parser → Clarification → Style → Geometry → Texture
+     → Lighting → Structural → Compliance → Render → Quality → Export
+```
+
+20+ специализированных агентов: парсер, геометрия, текстуры, свет,
+конструктив, нормативы, рендер, качество, экспорт.
+
+## Что нового в v10.6.0
+
+- **Google Gemini прямой API** — бесплатный LLM без зависимости от OpenRouter
+- **4 ключа Gemini с ротацией** — обход rate limit (15 RPM/ключ)
+- **Docker: проброс GOOGLE_API_KEY** — ключи теперь доходят до LLM-сервиса
+- **Kaggle GPU Renderer** — polling-режим для бесплатного T4 GPU рендеринга
+
 ## Что нового в v10.5.0
 
-- **Render pipeline fix** — исправлен критический баг: render_agent получал неправильные параметры (`geometry_script` вместо `script`, отсутствовал `blender_service_url`)
-- **Denoising fix** — отключён OpenImageDenoiser (недоступен на Render free tier), используется Cycles CPU без шумоподавления
-- **Bathroom furniture** — добавлены: jacuzzi, shower, shower_cabin, toilet, mirror, cabinet, faucet, washing_machine, dryer, bidet, towel_rack, double_bed, tv, sofa_bed, dining_table, kitchen_counter, fridge
-- **Russian→English mapping** — автоматическая конвертация русских названий мебели (кровать→bed, джакузи→jacuzzi, душ→shower и т.д.)
-- **File download endpoint** — `/api/v1/files/{path}` для скачивания рендеров с Blender сервиса
-- **return_file parameter** — `/api/v1/execute` может возвращать файл напрямую (PNG, GLB)
-- **Kaggle GPU Renderer** — документация по настройке Kaggle T4 GPU для рендеринга
-- **CV-тестирование** — полный анализ компьютерным зрением (mimo-omni) всех скриншотов
+- **Render pipeline fix** — исправлен критический баг: render_agent получал неправильные параметры
+- **Denoising fix** — отключён OpenImageDenoiser (недоступен на Render free tier)
+- **Bathroom furniture** — добавлены: jacuzzi, shower, shower_cabin, toilet и др.
+- **Russian→English mapping** — автоматическая конвертация русских названий мебели
+- **File download endpoint** — `/api/v1/files/{path}` для скачивания рендеров
+- **Kaggle GPU Renderer** — документация по настройке Kaggle T4 GPU
 
-## Баги исправленные в v10.5.0
-
-| Баг | Описание | Фикс |
-|-----|----------|------|
-| Render null image_path | render_agent не получал script и blender_service_url | orchestrator передаёт правильные параметры |
-| OIDN not available | Blender на Render не имеет OpenImageDenoiser | use_denoising=False для всех пресетов |
-| Мебель не маппится | Русские названия (кровать, джакузи) не конвертировались | Добавлен RU→EN маппинг |
-| Нет bathroom furniture | jacuzzi, shower, toilet отсутствовали в VALID_FURNITURE | Добавлены 15+ новых items |
-| Нет file download | Рендеры оставались на сервере | Добавлен /api/v1/files endpoint |
-
-## CV-тест результаты (mimo-omni)
+## CV-тест результаты
 
 | Проверка | Статус |
 |----------|--------|
@@ -33,6 +81,16 @@
 | Уточняющие вопросы | ✅ Качество (Премиум/Стандарт/Быстрый) |
 | Чипсины подсказки | ✅ Дом, Офис, Коттедж |
 | Адаптивность | ✅ Поле ввода не обрезается |
-| 3D модель генерируется | ⚠️ Работает с фиксом |
+| 3D модель генерируется | ✅ Через Three.js + Blender pipeline |
 | Текстуры | ⚠️ Базовые, нужен Kaggle GPU |
-| Качество рендера | ⚠️ 4/10 (CPU), улучшится с GPU |
+| Качество рендера | ⚠️ 4/10 (CPU), улучшится с Kaggle T4 GPU |
+
+## Документация
+
+| Документ | Описание |
+|----------|----------|
+| [CHANGELOG.md](CHANGELOG.md) | Журнал изменений и планы доработок |
+| [PLAN.md](PLAN.md) | Комплексный план исправлений |
+| [ROADMAP.md](ROADMAP.md) | Дорожная карта на будущее |
+| [AUDIT.md](AUDIT.md) | Аудит безопасности |
+| [docs/KAGGLE_SETUP.md](docs/KAGGLE_SETUP.md) | Настройка Kaggle GPU рендера |
