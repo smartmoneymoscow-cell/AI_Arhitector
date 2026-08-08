@@ -452,6 +452,72 @@ async def orchestrator_execute(
     }
 
 
+@app.post("/api/v1/orchestrator/resume")
+async def orchestrator_resume(
+    req: dict,
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Resume a clarification-needed job with user answers."""
+    from shared.agents import Orchestrator
+
+    job_id = req.get("job_id", "")
+    answers = req.get("answers", {})
+    if not job_id:
+        raise HTTPException(400, "No job_id provided")
+    if not answers:
+        raise HTTPException(400, "No answers provided")
+
+    quality = req.get("quality", "standard")
+    export_formats = req.get("export_formats", ["glb"])
+    pipeline_profile = req.get("pipeline_profile", "standard")
+
+    orch = Orchestrator(
+        blender_service_url=settings.BLENDER_SERVICE_URL,
+        llm_service_url=settings.LLM_SERVICE_URL,
+        output_dir=settings.OUTPUT_DIR,
+    )
+
+    # Retrieve stored job from Redis/memory
+    stored = _get_job(job_id)
+    if stored:
+        orch.jobs[job_id] = stored
+
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(
+            None,
+            lambda: orch.resume_with_answers(
+                job_id=job_id,
+                answers=answers,
+                quality=quality,
+                export_formats=export_formats,
+                pipeline_profile=pipeline_profile,
+            ),
+        )
+    except Exception as e:
+        logger.error("Orchestrator resume error: %s: %s", type(e).__name__, str(e)[:500], exc_info=True)
+        raise HTTPException(500, detail={"error": "resume_failed", "message": str(e)[:500]})
+
+    result_job_id = result.get("job_id", job_id)
+    _store_job(result_job_id, result)
+
+    r = result.get("result") or {}
+    return {
+        "job_id": result_job_id,
+        "status": result["status"],
+        "gen_type": r.get("gen_type"),
+        "quality": quality,
+        "params": r.get("params"),
+        "render": r.get("render"),
+        "exports": r.get("exports", {}),
+        "confidence": r.get("confidence"),
+        "duration_ms": result.get("duration_ms", 0),
+        "steps": result.get("steps", []),
+        "agent_results": r.get("agent_results", {}),
+    }
+
+
 @app.get("/api/v1/orchestrator/jobs/{job_id}")
 async def orchestrator_job_status(
     job_id: str,

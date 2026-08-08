@@ -1143,91 +1143,251 @@ function parseLocal(text){
 
 // ═══════════════════ CHAT ═══════════════════
 function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,160)+'px'; }
+// ═══════════════════ ORCHESTRATOR CLARIFICATION STATE ═══════════════════
+let _orchJobId = null;        // Current orchestrator job awaiting clarification
+let _orchPipelineProfile = 'standard';
+let _orchPrompt = '';         // Original prompt for the current job
+
 async function sendMessage() {
   const inp=document.getElementById('msgInput'), text=inp.value.trim();
   if(!text) return;
   hideWelcome(); addMessage('user',text); inp.value=''; autoResize(inp);
   showTyping();
+  _orchPrompt = text;
+
   try {
-    // === STEP 1: Parse prompt via LLM ===
-    const parsed = await callParseAPI(text);
+    // ═══ STEP 1: Send to orchestrator (handles parse + clarification internally) ═══
+    if(!_backendOk) await checkBackend();
+    if(!_backendOk) {
+      hideTyping();
+      addMessage('assistant', currentLang==='en'?'💡 Backend unavailable':'💡 Бэкенд недоступен');
+      return;
+    }
+
+    _ensureApiKey();
+    const orchCtrl = new AbortController();
+    const orchTid = setTimeout(()=>orchCtrl.abort(), 300000);
+
+    // Determine pipeline profile from prompt keywords
+    const t = text.toLowerCase();
+    let profile = 'standard';
+    if(/ванн|кухн|спальн|детск|гостин|интерьер|дизайн|комнат/.test(t)) profile = 'interior';
+    if(/ландшафт|сад|двор|участок/.test(t)) profile = 'landscape';
+    _orchPipelineProfile = profile;
+
+    addMessage('assistant', '<div class="reasoning-card"><div class="reasoning-title">🧠 '+(currentLang==='en'?'Analyzing your request...':'Анализирую ваш запрос...')+'</div><div class="reasoning-step"><div class="rs-icon">◉</div><div class="rs-text">'+(currentLang==='en'?'Sending to AI orchestrator...':'Отправляю в AI-оркестратор...')+'</div></div></div>');
+
+    const r = await fetch(API_BASE+'/api/v1/orchestrator/execute', {
+      method:'POST',
+      headers:_apiHeaders(),
+      signal:orchCtrl.signal,
+      body:JSON.stringify({
+        prompt: text,
+        quality: 'standard',
+        pipeline_profile: profile,
+        skip_clarification: false,
+        export_formats: ['glb']
+      })
+    });
+    clearTimeout(orchTid);
     hideTyping();
-    // === STEP 2: Show reasoning/thinking ===
-    const reasoningSteps = buildReasoning(text, parsed);
-    if(reasoningSteps.length > 0) {
-      const reasoningHtml = '<div class="reasoning-card"><div class="reasoning-title">🧠 '+(currentLang==='en'?'Analysis of your request':'Анализ вашего запроса')+'</div>'+reasoningSteps.map(r=>'<div class="reasoning-step"><div class="rs-icon">◉</div><div class="rs-text">'+esc(r)+'</div></div>').join('')+'</div>';
-      addMessage('assistant', reasoningHtml);
+
+    if(!r.ok) {
+      const errData = await r.json().catch(()=>({})) ;
+      throw new Error(errData.detail?.message || errData.message || 'HTTP '+r.status);
     }
-    // === STEP 3: Correct label ===
-    const label = getLabel(parsed);
-    const w = parsed.width_m||parsed.width||10;
-    const l = parsed.length_m||parsed.length||12;
-    const style = parsed.style||'';
-    let desc = `🏗 <b>${label}</b>`;
-    if(parsed.object_type==='interior') {
-      desc += ` — ${w}×${l}м`;
-      if(style) desc += `, стиль: ${style}`;
-      if(parsed.features && parsed.features.length) desc += `, ${parsed.features.join(', ')}`;
-    } else {
-      const floors = parsed.floors||1;
-      const mat = parsed.material||parsed.facade_material||'';
-      const roof = parsed.roof_type||'';
-      desc += ` — ${floors} ${floors===1?(currentLang==='en'?'floor':'этаж'):(currentLang==='en'?'floors':'этажей')}, ${w}×${l}м`;
-      if(mat) desc += `, ${mat}`;
-      if(roof && roof!=='none') desc += `, ${roof}`;
-    }
-    addMessage('assistant', desc);
-    // === STEP 4: Decomposition ===
-    const tasks = buildDecomposition(parsed);
-    if(tasks.length > 0) {
-      const decompHtml = '<div class="decomp-tree"><div class="decomp-title">📋 '+(currentLang==='en'?'Task decomposition':'Декомпозиция задачи')+'</div>'+tasks.map((t,i)=>'<div class="decomp-item"><div class="di-num">'+(i+1)+'</div><div class="di-line">'+esc(t.text)+'</div>'+(t.service?'<div class="di-service">'+esc(t.service)+'</div>':'')+'</div>').join('')+'</div>';
-      addMessage('assistant', decompHtml);
-    }
-    // === STEP 5: References ===
-    const refs = buildReferences(parsed);
-    if(refs.length > 0) {
-      const refHtml = '<div class="ref-gallery"><div class="ref-title">🖼 '+(currentLang==='en'?'References':'Референсы')+'</div><div class="ref-grid">'+refs.map(r=>'<div class="ref-card"><div style="height:90px;background:linear-gradient(135deg,#f1f5f9,#e2e8f0);display:flex;align-items:center;justify-content:center;font-size:28px">'+r.icon+'</div><div class="rc-label">'+esc(r.label)+'</div></div>').join('')+'</div></div>';
-      addMessage('assistant', refHtml);
-    }
-    // === STEP 6: Clarifying questions (show but DON'T return — continue to generation) ===
-    const questions = buildClarificationQuestions(text, parsed);
-    if(questions.length > 0) {
-      showClarificationUI(questions, parsed, text);
-    }
-    // === STEP 7: Update chips ===
-    updateQuickActions(parsed);
-    // === STEP 8: 3D generation via orchestrator ===
-    if(_backendOk) {
-      try {
-        showGenOverlay();
-        const orchResult = await callOrchestratorAPI(text, parsed);
-        if(orchResult.status==='success' && orchResult.exports && orchResult.exports.glb) {
-          loadGLBModel(API_BASE + orchResult.exports.glb);
-          addMessage('assistant', currentLang==='en'?'✅ 3D model ready!':'✅ 3D модель готова!');
-        } else {
-          addMessage('assistant', currentLang==='en'?'⚠️ Generation incomplete':'⚠️ Генерация не завершена');
-        }
-      } catch(orchErr) {
-        console.warn('Orchestrator error:', orchErr);
-        try {
-          addMessage('assistant', currentLang==='en'?'⏳ Retrying with simple generation...':'⏳ Повторяю с простой генерацией...');
-          const genCtrl = new AbortController();
-          const genTid = setTimeout(()=>genCtrl.abort(), 120000);
-          const genR = await fetch(API_BASE+'/api/v1/generate', {method:'POST',headers:_apiHeaders(),signal:genCtrl.signal,body:JSON.stringify({prompt:text,...parsed})});
-          clearTimeout(genTid);
-          if(genR.ok) {
-            const blob = await genR.blob();
-            if(blob.size > 1000) { loadGLBModel(URL.createObjectURL(blob)); addMessage('assistant', currentLang==='en'?'✅ 3D model ready!':'✅ 3D модель готова!'); }
-            else { addMessage('assistant', currentLang==='en'?'⚠️ Server returned empty model':'⚠️ Сервер вернул пустую модель'); }
-          } else { addMessage('assistant', '⚠️ HTTP '+genR.status); }
-        } catch(genErr) { addMessage('assistant', currentLang==='en'?'⚠️ 3D generation temporarily unavailable. Parameters saved.':'⚠️ 3D-генерация временно недоступна. Параметры сохранены.'); }
+
+    const orchResult = await r.json();
+
+    // ═══ STEP 2: Handle clarification_needed ═══
+    if(orchResult.status === 'clarification_needed' && orchResult.clarification) {
+      _orchJobId = orchResult.job_id;
+      const clar = orchResult.clarification;
+
+      // Show parsed info first
+      const params = clar.partial_params || {};
+      const label = getLabel(params);
+      const w = params.width_m||10, l = params.length_m||12;
+      let desc = `🏗 <b>${label}</b> — ${w}×${l}м`;
+      if(params.style) desc += `, ${params.style}`;
+      addMessage('assistant', desc);
+
+      // Show references if LLM provided them
+      if(params.references && params.references.length) {
+        const refHtml = '<div class="ref-gallery"><div class="ref-title">🖼 '+(currentLang==='en'?'References':'Референсы')+'</div><div class="ref-grid">'+params.references.map(r=>'<div class="ref-card"><div style="height:90px;background:linear-gradient(135deg,#f1f5f9,#e2e8f0);display:flex;align-items:center;justify-content:center;font-size:28px">🔍</div><div class="rc-label">'+esc(r)+'</div></div>').join('')+'</div></div>';
+        addMessage('assistant', refHtml);
       }
-    } else { addMessage('assistant', currentLang==='en'?'💡 Backend unavailable':'💡 Бэкенд недоступен'); }
+
+      // Show orchestrator's clarification questions
+      showOrchestratorClarification(clar.questions, params);
+      return;
+    }
+
+    // ═══ STEP 3: Handle direct success (no clarification needed) ═══
+    _handleOrchestratorResult(orchResult, text);
+
   } catch(e) {
     hideTyping();
     console.error('Chat error:', e);
     addMessage('assistant', '❌ '+(e.message || (currentLang==='en'?'Error occurred':'Произошла ошибка')));
   }
+}
+
+// ═══════════════════ ORCHESTRATOR CLARIFICATION UI ═══════════════════
+let _orchAnswers = {};
+function showOrchestratorClarification(questions, params) {
+  _orchAnswers = {};
+  if(!questions || !questions.length) return;
+
+  let html = '<div style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1px solid #fbbf24;border-radius:14px;padding:14px 16px;margin-bottom:8px;max-width:460px">';
+  html += '<div style="font-weight:700;color:#92400e;margin-bottom:10px">💬 '+(currentLang==='en'?'I need to clarify a few things':'Нужно уточнить несколько деталей')+'</div>';
+
+  questions.forEach((q,i) => {
+    html += '<div style="margin-bottom:12px"><div style="font-size:13px;color:#78350f;margin-bottom:6px;font-weight:600">'+esc(q.text)+'</div>';
+    if(q.visual_options && q.visual_options.length) {
+      // Visual options with pros/cons
+      html += '<div style="display:flex;flex-direction:column;gap:6px">';
+      q.visual_options.forEach(vo => {
+        html += '<div onclick="answerOrchClarification('+i+',\''+esc(vo.id)+'\',\''+esc(vo.title)+'\')" style="padding:10px 12px;border-radius:10px;border:2px solid '+(vo.recommended?'#f59e0b':'#e5e7eb')+';background:'+(vo.recommended?'#fffbeb':'#fff')+';cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor=\'#f59e0b\'" onmouseout="this.style.borderColor=\''+(vo.recommended?'#f59e0b':'#e5e7eb')+'\'">';
+        html += '<div style="font-weight:700;font-size:12px;color:#1e293b">'+esc(vo.title)+(vo.recommended?' <span style="color:#f59e0b;font-size:10px">★ Рекомендуется</span>':'')+'</div>';
+        html += '<div style="font-size:11px;color:#64748b;margin-top:2px">'+esc(vo.description)+'</div>';
+        if(vo.pros&&vo.pros.length) html += '<div style="font-size:10px;color:#16a34a;margin-top:3px">✅ '+esc(vo.pros.join(', '))+'</div>';
+        if(vo.cons&&vo.cons.length) html += '<div style="font-size:10px;color:#dc2626;margin-top:1px">❌ '+esc(vo.cons.join(', '))+'</div>';
+        if(vo.price_range) html += '<div style="font-size:10px;color:#7c3aed;margin-top:2px">💰 '+esc(vo.price_range)+'</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    } else if(q.options && q.options.length) {
+      // Simple button options
+      html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+      q.options.forEach(opt => {
+        html += '<button onclick="answerOrchClarification('+i+',\''+esc(opt)+'\',\''+esc(opt)+'\')" style="padding:6px 12px;border-radius:16px;border:1px solid #d97706;background:#fffbeb;color:#92400e;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background=\'#fbbf24\';this.style.color=\'#fff\'" onmouseout="this.style.background=\'#fffbeb\';this.style.color=\'#92400e\'">'+esc(opt)+'</button>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+
+  html += '<button onclick="skipOrchClarification()" style="padding:6px 14px;border-radius:12px;border:1px solid #d97706;background:transparent;color:#92400e;font-size:11px;cursor:pointer;font-family:inherit;margin-top:4px">'+(currentLang==='en'?'Skip — generate now':'Пропустить — генерировать сейчас')+'</button>';
+  html += '</div>';
+  addMessage('assistant', html);
+}
+
+function answerOrchClarification(qIdx, answerId, displayText) {
+  if(!_orchJobId) return;
+  const questions = document.querySelectorAll('[data-orch-q]');
+  _orchAnswers[qIdx] = answerId;
+  addMessage('user', displayText);
+
+  // Check if all questions answered
+  const totalQ = document.querySelectorAll('[data-orch-q]').length || Object.keys(_orchAnswers).length;
+  if(Object.keys(_orchAnswers).length >= Math.min(totalQ, 2)) {
+    _resumeOrchestrator();
+  }
+}
+
+function skipOrchClarification() {
+  addMessage('assistant', currentLang==='en'?'⚡ Generating without clarifications...':'⚡ Генерирую без уточнений...');
+  _resumeOrchestrator();
+}
+
+async function _resumeOrchestrator() {
+  if(!_orchJobId) return;
+  const jobId = _orchJobId;
+  _orchJobId = null;
+
+  showTyping();
+  addMessage('assistant', currentLang==='en'?'✅ Got it! Generating 3D model...':'✅ Понял! Генерирую 3D модель...');
+
+  try {
+    _ensureApiKey();
+    const ctrl = new AbortController();
+    const tid = setTimeout(()=>ctrl.abort(), 300000);
+
+    const r = await fetch(API_BASE+'/api/v1/orchestrator/resume', {
+      method:'POST',
+      headers:_apiHeaders(),
+      signal:ctrl.signal,
+      body:JSON.stringify({
+        job_id: jobId,
+        answers: _orchAnswers,
+        quality: 'standard',
+        pipeline_profile: _orchPipelineProfile,
+        export_formats: ['glb']
+      })
+    });
+    clearTimeout(tid);
+    hideTyping();
+
+    if(!r.ok) {
+      const errData = await r.json().catch(()=>({}));
+      throw new Error(errData.detail?.message || 'HTTP '+r.status);
+    }
+
+    const result = await r.json();
+    _handleOrchestratorResult(result, _orchPrompt);
+
+  } catch(e) {
+    hideTyping();
+    console.error('Resume error:', e);
+    addMessage('assistant', '❌ '+(e.message || 'Resume failed'));
+  }
+  _orchAnswers = {};
+}
+
+// ═══════════════════ HANDLE ORCHESTRATOR RESULT ═══════════════════
+function _handleOrchestratorResult(orchResult, prompt) {
+  // Show decomposition if available
+  if(orchResult.steps && orchResult.steps.length) {
+    const decompHtml = '<div class="decomp-tree"><div class="decomp-title">📋 '+(currentLang==='en'?'Pipeline steps':'Этапы пайплайна')+'</div>'+orchResult.steps.map((s,i)=>'<div class="decomp-item"><div class="di-num">'+(i+1)+'</div><div class="di-line">'+esc(s.name)+'</div><div class="di-service">'+(s.status==='done'?'✅':s.status==='failed'?'❌':'⏭')+'</div></div>').join('')+'</div>';
+    addMessage('assistant', decompHtml);
+  }
+
+  // Show agent results summary
+  const agentResults = orchResult.agent_results || {};
+  const agentNames = Object.keys(agentResults);
+  if(agentNames.length) {
+    const summary = agentNames.map(a => {
+      const r = agentResults[a];
+      const icon = r && !r.error ? '✅' : '⚠️';
+      return icon + ' ' + a;
+    }).join(' │ ');
+    addMessage('assistant', '<div style="font-size:11px;color:#64748b;padding:4px 0">'+summary+'</div>');
+  }
+
+  // Show quality score
+  if(orchResult.quality && orchResult.quality.score !== undefined) {
+    const score = orchResult.quality.score;
+    const color = score >= 8 ? '#16a34a' : score >= 5 ? '#f59e0b' : '#dc2626';
+    addMessage('assistant', '<div style="font-size:12px;color:'+color+';font-weight:600">🎯 '+(currentLang==='en'?'Quality score: ':'Оценка качества: ')+score+'/10</div>');
+  }
+
+  // Show duration
+  if(orchResult.duration_ms) {
+    const sec = Math.round(orchResult.duration_ms / 1000);
+    addMessage('assistant', '<div style="font-size:11px;color:#94a3b8">⏱ '+(currentLang==='en'?'Completed in ':'Завершено за ')+sec+'s</div>');
+  }
+
+  // Load 3D model
+  if(orchResult.exports && orchResult.exports.formats) {
+    const glbPath = orchResult.exports.formats.glb || orchResult.exports.formats.GLB;
+    if(glbPath) {
+      const url = glbPath.startsWith('http') ? glbPath : API_BASE + '/api/v1/files/' + glbPath;
+      loadGLBModel(url);
+      addMessage('assistant', currentLang==='en'?'✅ 3D model ready!':'✅ 3D модель готова!');
+      return;
+    }
+  }
+
+  // Fallback: check render image
+  if(orchResult.render && orchResult.render.output_path) {
+    const imgUrl = API_BASE + '/api/v1/files/' + orchResult.render.output_path;
+    addMessage('assistant', '<img src="'+imgUrl+'" style="max-width:100%;border-radius:12px;margin:8px 0" />');
+    addMessage('assistant', currentLang==='en'?'✅ Render complete!':'✅ Рендер готов!');
+    return;
+  }
+
+  addMessage('assistant', currentLang==='en'?'⚠️ Generation completed but no model produced':'⚠️ Генерация завершена, но модель не создана');
 }
 // ═══════════════════ HELPER: Get correct label ═══════════════════
 function getLabel(parsed) {

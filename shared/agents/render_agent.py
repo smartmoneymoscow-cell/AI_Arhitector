@@ -15,47 +15,54 @@ from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 # Пресеты качества рендера
 QUALITY_PRESETS = {
     "preview": {
-        "engine": "CYCLES", "device": "CPU", "samples": 16,
+        "engine": "CYCLES", "device": "CPU",
         "resolution_x": 1280,
         "resolution_y": 720,
         "samples": 64,
-        "use_denoising": False,
+        "use_denoising": True,
         "tile_size": 64,
     },
     "standard": {
-        "engine": "CYCLES", "device": "CPU", "samples": 16,
+        "engine": "CYCLES", "device": "CPU",
         "resolution_x": 3840,
         "resolution_y": 2160,
-        "samples": 128,
-        "use_denoising": False,
+        "samples": 256,
+        "use_denoising": True,
         "tile_size": 128,
+        "use_adaptive_sampling": True,
+        "adaptive_threshold": 0.05,
     },
     "high": {
-        "engine": "CYCLES", "device": "CPU", "samples": 16,
+        "engine": "CYCLES", "device": "CPU",
         "resolution_x": 7680,
         "resolution_y": 4320,
-        "samples": 256,
-        "use_denoising": False,
+        "samples": 512,
+        "use_denoising": True,
         "tile_size": 256,
+        "use_adaptive_sampling": True,
+        "adaptive_threshold": 0.02,
     },
     "ultra": {
-        "engine": "CYCLES", "device": "CPU", "samples": 16,
+        "engine": "CYCLES", "device": "CPU",
         "resolution_x": 15360,
         "resolution_y": 8640,
         "samples": 1024,
-        "use_denoising": False,
+        "use_denoising": True,
         "use_adaptive_sampling": True,
         "adaptive_threshold": 0.01,
         "tile_size": 64,
+        "max_bounces": 12,
+        "diffuse_bounces": 4,
+        "glossy_bounces": 4,
+        "transmission_bounces": 8,
         "use_motion_blur": False,
-        "use_bloom": True,
     },
     "16k": {
-        "engine": "CYCLES", "device": "CPU", "samples": 16,
+        "engine": "CYCLES", "device": "CPU",
         "resolution_x": 15360,
         "resolution_y": 8640,
         "samples": 2048,
-        "use_denoising": False,
+        "use_denoising": True,
         "use_adaptive_sampling": True,
         "adaptive_threshold": 0.005,
         "tile_size": 64,
@@ -64,7 +71,6 @@ QUALITY_PRESETS = {
         "glossy_bounces": 4,
         "transmission_bounces": 8,
         "use_motion_blur": True,
-        "use_bloom": True,
     },
 }
 
@@ -83,8 +89,6 @@ import bpy, os
 # Render settings
 bpy.context.scene.render.engine = '{engine}'
 bpy.context.scene.cycles.device = 'CPU'
-bpy.context.scene.cycles.samples = 16
-bpy.context.scene.cycles.use_denoising = False
 bpy.context.scene.render.resolution_x = {rx}
 bpy.context.scene.render.resolution_y = {ry}
 bpy.context.scene.render.resolution_percentage = 100
@@ -100,7 +104,10 @@ bpy.context.scene.render.filepath = r'{output_path}'
 # Cycles settings
 bpy.context.scene.cycles.samples = {samples}
 bpy.context.scene.cycles.use_denoising = {denoise}
-bpy.context.scene.cycles.denoiser = 'OPTIX'  # OIDN not available on Render free tier
+try:
+    bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
+except:
+    pass
 bpy.context.scene.cycles.use_adaptive_sampling = {preset.get("use_adaptive_sampling", True)}
 bpy.context.scene.cycles.adaptive_threshold = {preset.get("adaptive_threshold", 0.01)}
 bpy.context.scene.cycles.tile_x = {preset.get("tile_size", 64)}

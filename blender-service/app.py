@@ -265,8 +265,10 @@ async def generate_preview(req: dict):
 import bpy
 bpy.context.scene.render.engine = 'CYCLES'
 bpy.context.scene.cycles.device = 'CPU'
-bpy.context.scene.cycles.samples = 16
-bpy.context.scene.cycles.use_denoising = False
+bpy.context.scene.cycles.samples = 64
+bpy.context.scene.cycles.use_denoising = True
+try:bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
+except:pass
 bpy.context.scene.render.resolution_x = 1920
 bpy.context.scene.render.resolution_y = 1080
 bpy.context.scene.render.image_settings.file_format = 'PNG'
@@ -499,8 +501,12 @@ def _render_cycles_cpu(script: str, job_id: str, output_png: str):
 import bpy
 bpy.context.scene.render.engine = 'CYCLES'
 bpy.context.scene.cycles.device = 'CPU'
-bpy.context.scene.cycles.samples = 32
-bpy.context.scene.cycles.use_denoising = False
+bpy.context.scene.cycles.samples = 128
+bpy.context.scene.cycles.use_denoising = True
+try:bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
+except:pass
+bpy.context.scene.cycles.use_adaptive_sampling = True
+bpy.context.scene.cycles.adaptive_threshold = 0.05
 bpy.context.scene.render.resolution_x = 1920
 bpy.context.scene.render.resolution_y = 1080
 bpy.context.scene.render.resolution_percentage = 100
@@ -549,17 +555,21 @@ async def _generate_interior(params: dict, quality: str = "16k"):
             logger.info("Interior 16K render done: %s", output_file)
         except Exception as e:
             logger.warning("Interior 16K failed: %s, falling back to Cycles CPU", e)
-            render_cmd = (
-                "\nimport bpy"
-                f"\nbpy.context.scene.render.filepath = r'{output_file}'"
-                "\nbpy.context.scene.render.engine = 'CYCLES'
+            render_cmd = f"""
+import bpy
+bpy.context.scene.render.filepath = r'{output_file}'
+bpy.context.scene.render.engine = 'CYCLES'
 bpy.context.scene.cycles.device = 'CPU'
-bpy.context.scene.cycles.samples = 16
-bpy.context.scene.cycles.use_denoising = False"
-                "\nbpy.context.scene.render.resolution_x = 3840"
-                "\nbpy.context.scene.render.resolution_y = 2160"
-                "\nbpy.ops.render.render(write_still=True)"
-            )
+bpy.context.scene.cycles.samples = 256
+bpy.context.scene.cycles.use_denoising = True
+try:bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
+except:pass
+bpy.context.scene.cycles.use_adaptive_sampling = True
+bpy.context.scene.cycles.adaptive_threshold = 0.05
+bpy.context.scene.render.resolution_x = 3840
+bpy.context.scene.render.resolution_y = 2160
+bpy.ops.render.render(write_still=True)
+"""
             try:
                 run_blender(script + render_cmd, output_file, timeout=settings.RENDER_INTERIOR_TIMEOUT)
             except TimeoutError as e:
@@ -567,17 +577,21 @@ bpy.context.scene.cycles.use_denoising = False"
             except RuntimeError as e:
                 raise HTTPException(500, detail=str(e))
     else:
-        render_cmd = (
-            "\nimport bpy"
-            f"\nbpy.context.scene.render.filepath = r'{output_file}'"
-            "\nbpy.context.scene.render.engine = 'CYCLES'
+        render_cmd = f"""
+import bpy
+bpy.context.scene.render.filepath = r'{output_file}'
+bpy.context.scene.render.engine = 'CYCLES'
 bpy.context.scene.cycles.device = 'CPU'
-bpy.context.scene.cycles.samples = 16
-bpy.context.scene.cycles.use_denoising = False"
-            "\nbpy.context.scene.render.resolution_x = 3840"
-            "\nbpy.context.scene.render.resolution_y = 2160"
-            "\nbpy.ops.render.render(write_still=True)"
-        )
+bpy.context.scene.cycles.samples = 256
+bpy.context.scene.cycles.use_denoising = True
+try:bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
+except:pass
+bpy.context.scene.cycles.use_adaptive_sampling = True
+bpy.context.scene.cycles.adaptive_threshold = 0.05
+bpy.context.scene.render.resolution_x = 3840
+bpy.context.scene.render.resolution_y = 2160
+bpy.ops.render.render(write_still=True)
+"""
         try:
             run_blender(script + render_cmd, output_file, timeout=settings.RENDER_INTERIOR_TIMEOUT)
         except TimeoutError as e:
@@ -617,17 +631,19 @@ async def _generate_landscape(params: dict, quality: str = "16k"):
     job_id = uuid.uuid4().hex[:8]
     output_file = os.path.join(settings.OUTPUT_DIR, f"{job_id}_landscape.png")
 
-    render_cmd = (
-        "\nimport bpy"
-        f"\nbpy.context.scene.render.filepath = r'{output_file}'"
-        "\nbpy.context.scene.render.engine = 'CYCLES'
+    render_cmd = f"""
+import bpy
+bpy.context.scene.render.filepath = r'{output_file}'
+bpy.context.scene.render.engine = 'CYCLES'
 bpy.context.scene.cycles.device = 'CPU'
-bpy.context.scene.cycles.samples = 16
-bpy.context.scene.cycles.use_denoising = False"
-        "\nbpy.context.scene.render.resolution_x = 3840"
-        "\nbpy.context.scene.render.resolution_y = 2160"
-        "\nbpy.ops.render.render(write_still=True)"
-    )
+bpy.context.scene.cycles.samples = 256
+bpy.context.scene.cycles.use_denoising = True
+try:bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
+except:pass
+bpy.context.scene.render.resolution_x = 3840
+bpy.context.scene.render.resolution_y = 2160
+bpy.ops.render.render(write_still=True)
+"""
 
     try:
         run_blender(bpy_script + render_cmd, output_file, timeout=120)

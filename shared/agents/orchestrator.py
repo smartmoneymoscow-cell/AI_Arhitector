@@ -732,3 +732,297 @@ class Orchestrator:
             "steps": [{"name": s.get("name", ""), "status": s.get("status", "")} for s in steps],
             "fallback_agents": job.get("fallback_agents", []),
         }
+
+    def resume_with_answers(
+        self,
+        job_id: str,
+        answers: dict[str, str],
+        quality: str = "standard",
+        export_formats: list[str] | None = None,
+        pipeline_profile: str = "standard",
+    ) -> dict:
+        """
+        Resume a clarification-needed job with user answers.
+        Merges answers into parsed params and continues the pipeline.
+        """
+        job = self.jobs.get(job_id)
+        if not job:
+            return {"job_id": job_id, "status": "failed", "error": "Job not found"}
+        if job.get("status") != "clarification_needed":
+            return {"job_id": job_id, "status": "failed", "error": f"Job status is '{job.get('status')}', expected 'clarification_needed'"}
+
+        # Get stored partial params and prompt
+        clarification = job.get("clarification", {})
+        partial_params = clarification.get("partial_params", {})
+        prompt = job.get("prompt", "")
+
+        # Apply answers to params
+        updated_params = dict(partial_params)
+        for field_name, answer in answers.items():
+            answer_lower = answer.lower().strip()
+            if field_name == "object_type":
+                mapping = {"дом": "house", "офис": "office", "коттедж": "cottage", "таунхаус": "townhouse", "вилл": "villa", "квартир": "interior"}
+                for kw, val in mapping.items():
+                    if kw in answer_lower:
+                        updated_params["object_type"] = val
+                        updated_params["building_type"] = val
+                        break
+            elif field_name == "building_type":
+                mapping = {"дом": "house", "офис": "office", "коттедж": "cottage", "вилл": "villa"}
+                for kw, val in mapping.items():
+                    if kw in answer_lower:
+                        updated_params["building_type"] = val
+                        break
+            elif field_name == "floors":
+                import re
+                m = re.search(r"\d+", answer)
+                if m:
+                    updated_params["floors"] = int(m.group())
+            elif field_name == "material":
+                mapping = {"кирпич": "brick", "дерев": "wood", "камен": "stone", "штукатурк": "plaster", "стекл": "glass", "бетон": "concrete"}
+                for kw, val in mapping.items():
+                    if kw in answer_lower:
+                        updated_params["material"] = val
+                        break
+            elif field_name == "roof_type":
+                mapping = {"двускат": "gabled", "плоск": "flat", "вальм": "hip"}
+                for kw, val in mapping.items():
+                    if kw in answer_lower:
+                        updated_params["roof_type"] = val
+                        break
+            elif field_name == "style":
+                updated_params["style"] = answer.strip()
+            else:
+                updated_params[field_name] = answer.strip()
+
+        # Update job status
+        job["status"] = "running"
+        job["clarification"] = None
+
+        # Re-execute the pipeline with updated params
+        # Build a modified execute call that skips parsing (we already have params)
+        try:
+            result = self._execute_with_params(
+                prompt=prompt,
+                params=updated_params,
+                quality=quality,
+                export_formats=export_formats or ["glb"],
+                pipeline_profile=pipeline_profile,
+                job=job,
+            )
+            return result
+        except Exception as e:
+            logger.error("Resume failed for job %s: %s", job_id, e, exc_info=True)
+            job["status"] = "failed"
+            job["error"] = str(e)
+            return {"job_id": job_id, "status": "failed", "error": str(e)}
+
+    def _execute_with_params(
+        self,
+        prompt: str,
+        params: dict,
+        quality: str,
+        export_formats: list[str],
+        pipeline_profile: str,
+        job: dict,
+    ) -> dict:
+        """Execute the pipeline with pre-parsed params (skip parsing step)."""
+        import os
+        from shared.router import route_generation
+        from shared.streaming import create_streamer
+
+        start = time.time()
+        job_id = job["job_id"]
+        streamer = job.get("streamer") or create_streamer(job_id)
+        agent_sequence = PIPELINE_PROFILES.get(pipeline_profile, PIPELINE_PROFILES["standard"])
+
+        gen_type = params.get("object_type", "building")
+        if gen_type in ("room", "interior"):
+            gen_type = "interior"
+        confidence = params.get("confidence", 0.7)
+
+        streamer.emit("resume", "running", progress=10, message="Resuming with clarified parameters...")
+
+        # Route
+        streamer.emit("route", "running", progress=12, message="Planning generation...")
+        plan = route_generation(prompt, params)
+        building_params = plan.params.get("building", {})
+        streamer.emit("route", "done", progress=15, message=f"Plan: {len(plan.steps)} steps, type={gen_type}")
+
+        # Pre-pipeline agents (parallel)
+        pre_agents = [a for a in agent_sequence if a in ("research", "market", "concept", "brand", "style", "masterplan")]
+        pre_pipeline_results = {}
+        if pre_agents:
+            import concurrent.futures
+            streamer.emit("pre_pipeline", "running", progress=15, message=f"Running {len(pre_agents)} agents...")
+            def _run_pre(agent_name):
+                ap = self._build_agent_params(agent_name, params, gen_type, building_params)
+                r = self._run_agent(agent_name, {"name": agent_name, "agent": agent_name, "params": ap}, timeout=60)
+                return agent_name, r
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(pre_agents), 4)) as ex:
+                futures = {ex.submit(_run_pre, a): a for a in pre_agents}
+                for f in concurrent.futures.as_completed(futures):
+                    an, r = f.result()
+                    if r.status == TaskStatus.DONE and r.data:
+                        pre_pipeline_results[an] = r.data
+                        if r.fallback:
+                            job["fallback_agents"].append(an)
+            streamer.emit("pre_pipeline", "done", progress=30, message=f"{len(pre_pipeline_results)}/{len(pre_agents)} agents complete")
+
+        # Geometry + Texture (parallel)
+        streamer.emit("geometry", "running", progress=35, message="Generating 3D geometry...")
+        streamer.emit("texture", "running", progress=37, message="Generating PBR materials...")
+
+        geom_params = {
+            "gen_type": gen_type,
+            "building_params": building_params,
+            "interior_params": {
+                "width": params.get("width_m", 6),
+                "length": params.get("length_m", 8),
+                "height": params.get("height_m", 3),
+                "style": params.get("style", "modern"),
+                "furniture": params.get("furniture", []),
+                "room_type": params.get("room_type", "living"),
+            },
+        }
+        texture_params = {"material": params.get("material", "plaster"), "resolution": 2048}
+
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+            gf = ex.submit(self._run_agent, "geometry", {"name": "geometry", "agent": "geometry", "params": geom_params}, 120)
+            tf = ex.submit(self._run_agent, "texture", {"name": "texture", "agent": "texture", "params": texture_params}, 60)
+            geom_result = gf.result()
+            texture_result = tf.result()
+
+        if geom_result.status == TaskStatus.FAILED:
+            streamer.emit("geometry", "failed", progress=35, message=geom_result.error)
+            job["status"] = "failed"
+            job["error"] = f"Geometry failed: {geom_result.error}"
+            return job
+
+        geometry_script = geom_result.data.get("script", "") if geom_result.data else ""
+        if geom_result.fallback:
+            job["fallback_agents"].append("geometry")
+        streamer.emit("geometry", "done", progress=50, message="Geometry generated")
+
+        texture_script = ""
+        if texture_result.status == TaskStatus.DONE and texture_result.data:
+            texture_script = texture_result.data.get("script", "")
+        streamer.emit("texture", "done", progress=55, message="Materials generated")
+
+        # Mid-pipeline agents
+        mid_agents = [a for a in agent_sequence if a in ("landscape", "furniture", "lighting", "mep", "structural")]
+        mid_results = {}
+        if mid_agents:
+            streamer.emit("mid_pipeline", "running", progress=55, message=f"Running {len(mid_agents)} agents...")
+            def _run_mid(agent_name):
+                ap = self._build_agent_params(agent_name, params, gen_type, building_params)
+                r = self._run_agent(agent_name, {"name": agent_name, "agent": agent_name, "params": ap}, timeout=60)
+                return agent_name, r
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(mid_agents), 4)) as ex:
+                futures = {ex.submit(_run_mid, a): a for a in mid_agents}
+                for f in concurrent.futures.as_completed(futures):
+                    an, r = f.result()
+                    if r.status == TaskStatus.DONE and r.data:
+                        mid_results[an] = r.data
+                        if r.fallback:
+                            job["fallback_agents"].append(an)
+            streamer.emit("mid_pipeline", "done", progress=65, message=f"{len(mid_results)}/{len(mid_agents)} agents complete")
+
+        # Render
+        streamer.emit("render", "running", progress=70, message="Rendering...")
+        render_result = self._run_agent(
+            "render",
+            {
+                "name": "render",
+                "agent": "render",
+                "params": {
+                    "script": geometry_script + "\n" + texture_script,
+                    "blender_service_url": self.blender_service_url,
+                    "quality": quality,
+                    "output_path": os.path.join(self.output_dir, f"{job_id}_render.png"),
+                    "output_dir": self.output_dir,
+                    "job_id": job_id,
+                },
+            },
+            timeout=300 if quality == "16k" else 120,
+        )
+        render_data = {}
+        if render_result.status == TaskStatus.DONE and render_result.data:
+            render_data = render_result.data
+        streamer.emit("render", "done", progress=85, message="Render complete")
+
+        # Quality
+        render_path = render_data.get("image_path", "") if render_data else ""
+        quality_result = self._run_agent(
+            "quality",
+            {
+                "name": "quality",
+                "agent": "quality",
+                "params": {"render_path": render_path, "quality": quality, "prompt": prompt, "gen_type": gen_type},
+            },
+            timeout=60,
+        )
+        quality_data = quality_result.data if quality_result.status == TaskStatus.DONE else {}
+
+        # Export
+        export_result = self._run_agent(
+            "export",
+            {
+                "name": "export",
+                "agent": "export",
+                "params": {"script": geometry_script, "format": export_formats[0] if export_formats else "glb", "blender_service_url": self.blender_service_url, "output_dir": self.output_dir, "job_id": job_id},
+            },
+            timeout=120,
+        )
+        export_data = export_result.data if export_result.status == TaskStatus.DONE else {}
+
+        # SVG drawings
+        drawings = {}
+        try:
+            from shared.agents.drawings_svg import generate_floor_plan_svg, generate_section_svg, generate_elevation_svg
+            drawings["floor_plan"] = generate_floor_plan_svg(params, building_params.get("rooms", []))
+            drawings["section"] = generate_section_svg(params)
+            drawings["elevation_front"] = generate_elevation_svg(params, "front")
+            drawings["elevation_side"] = generate_elevation_svg(params, "left")
+        except Exception as e:
+            logger.warning("SVG drawings failed: %s", e)
+
+        # Post-pipeline
+        post_agents = [a for a in agent_sequence if a in ("compliance", "financial", "presentation")]
+        post_results = {}
+        for an in post_agents:
+            ap = self._build_agent_params(an, params, gen_type, building_params)
+            r = self._run_agent(an, {"name": an, "agent": an, "params": ap}, timeout=60)
+            if r.status == TaskStatus.DONE and r.data:
+                post_results[an] = r.data
+
+        streamer.emit("complete", "done", progress=100, message="Complete!")
+
+        agent_results = {}
+        for d in [pre_pipeline_results, mid_results, post_results]:
+            agent_results.update(d)
+
+        job["status"] = "done"
+        job["result"] = {
+            "gen_type": gen_type,
+            "params": params,
+            "building_params": building_params,
+            "render": render_data,
+            "exports": export_data,
+            "quality": quality_data,
+            "confidence": confidence,
+            "agent_results": agent_results,
+            "drawings": drawings,
+        }
+        job["steps"] = [
+            {"name": "parse", "status": "done"},
+            {"name": "route", "status": "done"},
+            {"name": "geometry", "status": "done" if geometry_script else "failed"},
+            {"name": "texture", "status": "done" if texture_script else "skipped"},
+            {"name": "render", "status": "done" if render_data else "failed"},
+            {"name": "quality", "status": "done" if quality_data else "skipped"},
+            {"name": "export", "status": "done" if export_data else "skipped"},
+        ]
+        job["duration_ms"] = (time.time() - start) * 1000
+        return job

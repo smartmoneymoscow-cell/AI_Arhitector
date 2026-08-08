@@ -789,39 +789,86 @@ bpy.ops.object.transform_apply(scale=True);fr.data.materials.append(fridge_mat)
 
     # === Camera + Lighting ===
     script += """
-cam=bpy.data.cameras.new("InteriorCam");cam.lens=24
+# Camera — interior view from corner
+import math
+cam=bpy.data.cameras.new("InteriorCam");cam.lens=24;cam.clip_end=100
 cam_obj=bpy.data.objects.new("InteriorCam",cam)
 bpy.context.scene.collection.objects.link(cam_obj);bpy.context.scene.camera=cam_obj
-cam_obj.location=(W/2-0.5,-L/2+0.5,H*0.7)
-cam_obj.rotation_euler=(math.radians(60),0,math.radians(45))
+# Position camera in corner looking at center
+cam_obj.location=(W/2-0.3,-L/2+0.3,H*0.65)
+dir_x=-W/2+0.3;dir_y=L/2-0.3;dir_z=H*0.45-H*0.65
+cam_obj.rotation_euler=(math.atan2(math.sqrt(dir_x**2+dir_y**2),abs(dir_z)),0,math.atan2(dir_y,dir_x)+math.pi)
 
-sun=bpy.data.lights.new("Sun","SUN");sun.energy=3;sun.color=(1.0,0.95,0.9)
-sun_obj=bpy.data.objects.new("Sun",sun)
-bpy.context.collection.objects.link(sun_obj)
-sun_obj.rotation_euler=(math.radians(50),math.radians(20),math.radians(-30))
+# Window area light (simulates daylight through window)
+win_light=bpy.data.lights.new("WindowLight","AREA")
+win_light.energy=400;win_light.size=2;win_light.color=(1.0,0.97,0.92)
+win_obj=bpy.data.objects.new("WindowLight",win_light)
+bpy.context.collection.objects.link(win_obj)
+win_obj.location=(0,-L/2-0.5,H*0.7)
+win_obj.rotation_euler=(math.radians(70),0,0)
 
-amb=bpy.data.lights.new("Ambient","AREA");amb.energy=100;amb.size=8
-amb_obj=bpy.data.objects.new("AmbientLight",amb)
-bpy.context.collection.objects.link(amb_obj)
-amb_obj.location=(0,0,H-0.5)
+# Ceiling spot lights (interior fixtures)
+for lx,ly in [(W*0.25,L*0.25),(W*0.25,-L*0.25),(-W*0.25,L*0.25),(-W*0.25,-L*0.25)]:
+    pt=bpy.data.lights.new(f"CeilingPt_{lx}_{ly}","POINT")
+    pt.energy=150;pt.color=(1.0,0.95,0.88)
+    pt_obj=bpy.data.objects.new(f"CeilingPt_{lx}_{ly}",pt)
+    bpy.context.collection.objects.link(pt_obj)
+    pt_obj.location=(lx,ly,H-0.15)
 
+# Fill light (soft ambient)
+fill=bpy.data.lights.new("Fill","AREA")
+fill.energy=80;fill.size=10;fill.color=(0.95,0.97,1.0)
+fill_obj=bpy.data.objects.new("FillLight",fill)
+bpy.context.collection.objects.link(fill_obj)
+fill_obj.location=(0,0,H-0.3)
+fill_obj.rotation_euler=(math.pi,0,0)
+
+# World — dark blue for interior atmosphere
 world=bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
 bpy.context.scene.world=world;world.use_nodes=True
 bg=world.node_tree.nodes.get("Background")
-if bg:bg.inputs["Color"].default_value=(0.02,0.02,0.05,1.0);bg.inputs["Strength"].default_value=0.15
+if bg:bg.inputs["Color"].default_value=(0.01,0.015,0.03,1.0);bg.inputs["Strength"].default_value=0.1
 
-# Render settings - 4K default
+# Add window with glass (for natural light)
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2,0.6))
+win=bpy.context.active_object;win.name="Window";win.scale=(1.2,0.03,0.8)
+bpy.ops.object.transform_apply(scale=True)
+win_mat=bpy.data.materials.new("WindowGlass")
+win_mat.use_nodes=True;win_mat.blend_method='HASHED'
+wbsdf=win_mat.node_tree.nodes.get("Principled BSDF")
+if wbsdf:
+    wbsdf.inputs["Base Color"].default_value=(0.85,0.92,1.0,1.0)
+    wbsdf.inputs["Roughness"].default_value=0.02
+    wbsdf.inputs["Metallic"].default_value=0.0
+    try:wbsdf.inputs["Transmission"].default_value=0.9
+    except:pass
+    try:wbsdf.inputs["Alpha"].default_value=0.85
+    except:pass
+win.data.materials.append(win_mat)
+
+# Window frame
+frame_mat=bpy.data.materials.new("WindowFrame")
+frame_mat.use_nodes=True
+fbsdf=frame_mat.node_tree.nodes.get("Principled BSDF")
+if fbsdf:fbsdf.inputs["Base Color"].default_value=(0.9,0.9,0.9,1.0);fbsdf.inputs["Roughness"].default_value=0.4
+for fw,fd,fz in [(1.3,0.04,0.6),(0.04,0.04,1.4)]:
+    for sign in [-1,1]:
+        bpy.ops.mesh.primitive_cube_add(size=1,location=(sign*(1.2/2+0.02) if fw<0.1 else 0,-L/2+0.01,0.6+sign*(0.8/2+0.02) if fd<0.1 else 0.6))
+        fr=bpy.context.active_object;fr.name="Frame";fr.scale=(fw/2,0.02,(0.8 if fw>0.1 else 1.4)/2)
+        bpy.ops.object.transform_apply(scale=True);fr.data.materials.append(frame_mat)
+
+# Render settings - will be overridden by render agent
 bpy.context.scene.render.resolution_x = 3840
 bpy.context.scene.render.resolution_y = 2160
 bpy.context.scene.render.resolution_percentage = 100
 bpy.context.scene.render.engine = 'CYCLES'
 bpy.context.scene.cycles.device = 'CPU'
-bpy.context.scene.cycles.samples = 16
-bpy.context.scene.cycles.use_denoising = False
-try:
-    bpy.context.scene.eevee.taa_render_samples = 64
-except:
-    pass
+bpy.context.scene.cycles.samples = 256
+bpy.context.scene.cycles.use_denoising = True
+try:bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
+except:pass
+bpy.context.scene.cycles.use_adaptive_sampling = True
+bpy.context.scene.cycles.adaptive_threshold = 0.05
 """
 
     return script
