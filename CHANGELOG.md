@@ -40,10 +40,12 @@
 | # | Задача | Приоритет | Статус |
 |---|--------|-----------|--------|
 | 1 | Проброс GOOGLE_API_KEY в Docker | 🔴 Критично | ✅ Done |
-| 2 | Frontend → orchestrator вместо прямого generate | 🟡 Важно | 📋 Planned |
-| 3 | Kaggle GPU polling integration | 🟡 Важно | 📋 Planned |
-| 4 | Удаление дубликатов HTML (3 копии) | 🟢 Улучшение | 📋 Planned |
-| 5 | Добавить Google Gemini в чат-эндпоинт | 🟡 Важно | 📋 Planned |
+| 2 | Frontend → orchestrator + clarification flow | 🟡 Важно | ✅ Done |
+| 3 | Kaggle GPU polling endpoints | 🟡 Важно | ✅ Done (были реализованы) |
+| 4 | answerClarification → resume orchestrator | 🟡 Важно | ✅ Done |
+| 5 | _handleOrchestratorResult (clarif/success/fail) | 🟡 Важно | ✅ Done |
+| 6 | Удаление дубликатов HTML (3 копии) | 🟢 Улучшение | 📋 Planned |
+| 7 | Kaggle GPU notebook запуск | 🟡 Важно | 📋 Planned |
 
 ---
 
