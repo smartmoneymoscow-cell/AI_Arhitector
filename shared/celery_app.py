@@ -114,17 +114,21 @@ try:
         job_id = uuid.uuid4().hex[:8]
         output_file = os.path.join(settings.OUTPUT_DIR, f"{job_id}_int.png")
 
-        render_cmd = (
-            "\nimport bpy"
-            f"\nbpy.context.scene.render.filepath = r'{output_file}'"
-            "\nbpy.context.scene.render.engine = 'CYCLES'
+        render_cmd = f"""
+import bpy
+bpy.context.scene.render.filepath = r'{output_file}'
+bpy.context.scene.render.engine = 'CYCLES'
 bpy.context.scene.cycles.device = 'CPU'
-bpy.context.scene.cycles.samples = 16
-bpy.context.scene.cycles.use_denoising = False"
-            "\nbpy.context.scene.render.resolution_x = 1920"
-            "\nbpy.context.scene.render.resolution_y = 1080"
-            "\nbpy.ops.render.render(write_still=True)"
-        )
+bpy.context.scene.cycles.samples = 256
+bpy.context.scene.cycles.use_denoising = True
+try:bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
+except:pass
+bpy.context.scene.cycles.use_adaptive_sampling = True
+bpy.context.scene.cycles.adaptive_threshold = 0.05
+bpy.context.scene.render.resolution_x = 3840
+bpy.context.scene.render.resolution_y = 2160
+bpy.ops.render.render(write_still=True)
+"""
 
         self.update_state(state="PROGRESS", meta={"step": "rendering", "progress": 30})
 

@@ -4,6 +4,82 @@
 
 ---
 
+## 2026-08-09 — Полный фикс pipeline генерации 3D интерьера
+
+### Проблема
+Генерация 3D-моделей интерьера по промту не работала end-to-end:
+1. Фронтенд обходил оркестратор — парсил промт сам, генерировал свои clarification-вопросы
+2. Оркестратор возвращал `clarification_needed`, но не было endpoint'а для resume
+3. Рендер: samples=16, denoiser выключен — качество 4/10
+4. Интерьер: нет окна со стеклом, слабое освещение
+5. Три копии HTML-фронта рассинхронизированы
+6. Синтаксические ошибки в Python-файлах (celery_app.py, тесты)
+
+### Что исправлено
+
+#### Критические исправления (pipeline)
+- **`shared/agents/orchestrator.py`**: добавлен `resume_with_answers()` — принимает ответы пользователя, мержит в параметры, продолжает pipeline
+- **`gateway/app.py`**: добавлен `POST /api/v1/orchestrator/resume` — принимает `{job_id, answers}`
+- **`index.html`**: переписана `sendMessage()`:
+  - Промт → сразу в оркестратор (НЕ в parse напрямую)
+  - Оркестратор парсит, проверяет confidence
+  - Если `clarification_needed` → показывает вопросы от оркестратора (visual_options с pros/cons)
+  - Пользователь отвечает → `/api/v1/orchestrator/resume`
+  - Оркестратор продолжает → генерация → 3D модель
+
+#### Качество рендера
+- **`shared/agents/render_agent.py`**: samples 16→256 (standard), 512 (high), denoiser=OPENIMAGEDENOISE
+- **`shared/blender.py`**: interior — окно со стеклом (transmission 0.9), 4 потолочных светильника, window area light, fill light
+- **`blender-service/app.py`**: все hardcoded samples=16 заменены на 256+, denoiser включён, исправлены сломанные multiline строки
+- **`shared/celery_app.py`**: исправлен синтаксис (broken multiline string)
+
+#### Синхронизация фронтендов
+- **`gateway/frontend/index.html`** и **`frontend/index.html`**: синхронизированы с `index.html`
+
+#### Исправление тестов
+- **`tests/test_ui_v2.py`**: JS regex `/pattern/` → Python `re.compile('pattern')`
+- **`tests/visual_test_runner.py`**: исправлен indentation в `.replace()` цепочке
+
+### Архитектура pipeline (после исправления)
+```
+Промт → /api/v1/orchestrator/execute
+    ↓
+1. ParserAgent (Gemini → OpenRouter → Ollama)
+    ↓
+2. ClarificationEngine (confidence < 0.6 → вопросы)
+    ↓ если нужны уточнения
+3. Frontend показывает вопросы → пользователь отвечает
+    ↓
+4. /api/v1/orchestrator/resume (с ответами)
+    ↓
+5. Route → Pre-agents (concept, style, furniture, lighting)
+    ↓ параллельно
+6. Geometry + Texture agents
+    ↓ параллельно
+7. Mid-agents (landscape, furniture, mep, structural)
+    ↓
+8. Render (Cycles, 256 samples, OIDN denoiser)
+    ↓
+9. Quality check (resolution, file size, visual)
+    ↓
+10. Export (GLB + IFC + SVG drawings)
+```
+
+### Сводная таблица
+
+| # | Задача | Статус |
+|---|--------|--------|
+| 1 | Clarification → resume flow | ✅ Done |
+| 2 | Orchestrator resume endpoint | ✅ Done |
+| 3 | Frontend → orchestrator (не parse напрямую) | ✅ Done |
+| 4 | Samples 16→256, denoiser включён | ✅ Done |
+| 5 | Interior: окно + 4 светильника + fill | ✅ Done |
+| 6 | 3 HTML-фронта синхронизированы | ✅ Done |
+| 7 | Синтаксис Python файлов исправлен | ✅ Done |
+| 8 | Тесты test_ui_v2.py исправлены | ✅ Done |
+
+---
+
 ## 2026-08-08 — Исправление LLM-цепочки и бесплатного доступа
 
 ### Проблема

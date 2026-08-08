@@ -146,9 +146,9 @@ const puppeteer = require('puppeteer');
 
   await browser.close();
 })();
-""".replace("TESTS_JSON", json.dumps([{"id": t.id, "prompt": t.prompt} for t in TEST_CASES]))
-  .replace("BASE_URL", base_url)
-  .replace("OUTPUT_DIR", output_dir)
+""".replace("TESTS_JSON", json.dumps([{"id": t.id, "prompt": t.prompt} for t in TEST_CASES])) \
+        .replace("BASE_URL", base_url) \
+        .replace("OUTPUT_DIR", output_dir)
 
     script_path = os.path.join(output_dir, "run_tests.js")
     with open(script_path, "w") as f:

@@ -1,3 +1,4 @@
+import re
 """
 tests/test_ui_v2.py — Automated UI tests for the redesigned Architect AI interface.
 
@@ -78,7 +79,7 @@ class TestSidebar:
     def test_toggle_closes_sidebar(self, page):
         page.locator(".sidebar-toggle").click()
         sidebar = page.locator("#sidebar-left")
-        expect(sidebar).to_have_class(/collapsed/)
+        expect(sidebar).to_have_class(re.compile('collapsed'))
 
     def test_toggle_opens_sidebar(self, page):
         # Close first
@@ -87,7 +88,7 @@ class TestSidebar:
         # Open again
         page.locator(".sidebar-toggle").click()
         sidebar = page.locator("#sidebar-left")
-        expect(sidebar).not_to_have_class(/collapsed/)
+        expect(sidebar).not_to_have_class(re.compile('collapsed'))
 
     def test_chat_list_has_items(self, page):
         items = page.locator(".chat-item")
@@ -96,7 +97,7 @@ class TestSidebar:
     def test_chat_item_click_selects(self, page):
         items = page.locator(".chat-item")
         items.nth(1).click()
-        expect(items.nth(1)).to_have_class(/active/)
+        expect(items.nth(1)).to_have_class(re.compile('active'))
 
     def test_new_chat_button(self, page):
         count_before = page.locator(".chat-item").count()
@@ -193,7 +194,7 @@ class TestChatInput:
         expect(page.locator("#ci")).to_be_visible()
 
     def test_placeholder_text(self, page):
-        expect(page.locator("#ci")).to_have_attribute("placeholder", /Опишите/)
+        expect(page.locator("#ci")).to_have_attribute("placeholder", re.compile('Опишите'))
 
     def test_send_button_visible(self, page):
         expect(page.locator(".send-btn")).to_be_visible()
@@ -235,24 +236,24 @@ class TestChatInput:
 # ═══════════════════════════════════════════════
 class TestViewerTabs:
     def test_3d_tab_active_by_default(self, page):
-        expect(page.locator("#vt-ext")).to_have_class(/on/)
+        expect(page.locator("#vt-ext")).to_have_class(re.compile('on'))
 
     def test_click_int_tab(self, page):
         page.locator("#vt-int").click()
-        expect(page.locator("#vt-int")).to_have_class(/on/)
-        expect(page.locator("#vt-ext")).not_to_have_class(/on/)
+        expect(page.locator("#vt-int")).to_have_class(re.compile('on'))
+        expect(page.locator("#vt-ext")).not_to_have_class(re.compile('on'))
 
     def test_click_plan_tab(self, page):
         page.locator("#vt-plan").click()
-        expect(page.locator("#vt-plan")).to_have_class(/on/)
+        expect(page.locator("#vt-plan")).to_have_class(re.compile('on'))
 
     def test_click_sec_tab(self, page):
         page.locator("#vt-sec").click()
-        expect(page.locator("#vt-sec")).to_have_class(/on/)
+        expect(page.locator("#vt-sec")).to_have_class(re.compile('on'))
 
     def test_click_fac_tab(self, page):
         page.locator("#vt-fac").click()
-        expect(page.locator("#vt-fac")).to_have_class(/on/)
+        expect(page.locator("#vt-fac")).to_have_class(re.compile('on'))
 
     def test_reset_camera_button(self, page):
         page.locator("text=Центр").click()
@@ -307,13 +308,13 @@ class TestResponsive:
         mobile_page.locator(".sidebar-toggle").click()
         mobile_page.wait_for_timeout(400)
         sidebar = mobile_page.locator("#sidebar-left")
-        expect(sidebar).to_have_class(/open/)
+        expect(sidebar).to_have_class(re.compile('open'))
 
     def test_overlay_visible_on_mobile_open(self, mobile_page):
         mobile_page.locator(".sidebar-toggle").click()
         mobile_page.wait_for_timeout(400)
         overlay = mobile_page.locator("#sidebar-overlay")
-        expect(overlay).to_have_class(/show/)
+        expect(overlay).to_have_class(re.compile('show'))
 
     def test_overlay_click_closes_mobile_sidebar(self, mobile_page):
         mobile_page.locator(".sidebar-toggle").click()
@@ -321,7 +322,7 @@ class TestResponsive:
         mobile_page.locator("#sidebar-overlay").click(force=True)
         mobile_page.wait_for_timeout(400)
         sidebar = mobile_page.locator("#sidebar-left")
-        expect(sidebar).not_to_have_class(/open/)
+        expect(sidebar).not_to_have_class(re.compile('open'))
 
 
 # ═══════════════════════════════════════════════
@@ -369,7 +370,7 @@ class TestIntegration:
         page.locator(".send-btn").click()
         page.wait_for_timeout(500)
         page.locator("#vt-plan").click()
-        expect(page.locator("#vt-plan")).to_have_class(/on/)
+        expect(page.locator("#vt-plan")).to_have_class(re.compile('on'))
 
     def test_new_chat_clears_messages(self, page):
         """New chat should reset the chat area."""
