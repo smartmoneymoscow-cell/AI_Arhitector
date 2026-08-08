@@ -3414,11 +3414,123 @@ function addClarification(questions, partialParams, confidence) {
 }
 
 function answerClarification(field, answer) {
+  // Resume orchestrator with the answer
+  if(window._orchestratorActive && window._clarPartialParams) {
+    // Merge answer into partial params and re-run orchestrator
+    const mergedParams = Object.assign({}, window._clarPartialParams);
+    // Parse answer back to params
+    const fieldMap = {
+      'object_type': answer,
+      'building_type': answer,
+      'floors': parseInt(answer) || undefined,
+      'material': answer,
+      'roof_type': answer,
+      'style': answer,
+      'room_type': answer
+    };
+    if(fieldMap[field] !== undefined) mergedParams[field] = fieldMap[field];
+    
+    addMsg('u', answer);
+    addThink(['Применяю выбор: ' + field + ' = ' + answer, 'Продолжаю генерацию...']);
+    
+    // Re-run orchestrator with skip_clarification=true
+    const prompt = window._orchestratorPrompt || '';
+    window._orchestratorActive = false;
+    window._clarPartialParams = null;
+    
+    callOrchestrator(prompt, {
+      skip_clarification: true,
+      quality: 'standard',
+      pipeline_profile: 'standard'
+    }).then(result => {
+      _handleOrchestratorResult(result, prompt);
+    }).catch(e => {
+      addMsg('a', 'Ошибка оркестратора: ' + e.message + '. Пробую локальный рендер...');
+      generateWithFallback(prompt, mergedParams);
+    });
+    return;
+  }
+  // Fallback: just put answer in input
   const inp = document.getElementById('ci');
   if (inp) {
     inp.value = `${field}: ${answer}`;
     send();
   }
+}
+
+function _handleOrchestratorResult(result, prompt) {
+  if(!result) {
+    addMsg('a', 'Оркестратор не вернул результат.');
+    return;
+  }
+  
+  if(result.status === 'clarification_needed' && result.clarification) {
+    // Show clarification questions
+    const clar = result.clarification;
+    window._orchestratorActive = true;
+    window._clarPartialParams = clar.partial_params || {};
+    window._orchestratorPrompt = prompt;
+    addClarification(clar.questions || [], clar.partial_params || {}, clar.confidence || 0.5);
+    return;
+  }
+  
+  if(result.status === 'failed') {
+    addMsg('a', 'Генерация не удалась: ' + (result.error || 'неизвестная ошибка') + '. Пробую локальный рендер...');
+    const parsed = parseLocal(prompt);
+    const bld = applyParams(prompt, parsed);
+    startGen(bld);
+    return;
+  }
+  
+  // Success — show result
+  const r = result.result || {};
+  const render = r.render || {};
+  
+  if(render.image_path) {
+    // Show rendered image from Blender
+    const imgUrl = API_BASE + '/api/v1/files/' + render.image_path;
+    addMsg('a', '<b>Модель сгенерирована!</b><br>' +
+      'Качество: ' + (result.quality || 'standard') + '<br>' +
+      'Pipeline: ' + (result.pipeline_profile || 'standard') + '<br>' +
+      '<img src="' + imgUrl + '" style="max-width:100%;border-radius:8px;margin-top:8px" />'
+    );
+  } else if(r.exports && r.exports.glb) {
+    // Load GLB into Three.js viewer
+    const glbUrl = API_BASE + '/api/v1/files/' + r.exports.glb;
+    addThink(['Модель получена, загружаю в 3D viewer...']);
+    const loader = new THREE.GLTFLoader();
+    loader.load(glbUrl, (gltf) => {
+      if(scene) {
+        const toRemove = [];
+        scene.traverse(child => { if(child.isMesh && child.name !== 'Ground') toRemove.push(child); });
+        toRemove.forEach(obj => scene.remove(obj));
+        scene.add(gltf.scene);
+        resetCam();
+      }
+      addMsg('a', '<b>3D модель загружена!</b> Используйте мышь для вращения.');
+    }, undefined, (err) => {
+      addMsg('a', 'Ошибка загрузки GLB: ' + err.message);
+    });
+  } else {
+    addMsg('a', '<b>Генерация завершена!</b><br>Статус: ' + result.status);
+  }
+  
+  // Compliance
+  try {
+    if(_backendOk && API_BASE) {
+      fetch(API_BASE+'/api/v1/compliance/check', {
+        method:'POST', headers:_apiHeaders(),
+        body:JSON.stringify({params: r.params || {}, prompt: prompt})
+      }).then(cr => cr.json()).then(compData => {
+        if(compData && compData.compliance) {
+          var rd = compData.compliance;
+          rd.applicable_norms = compData.applicable_norms || [];
+          if(compData.structural) rd.structural_analysis = compData.structural;
+          renderCompliance(rd);
+        }
+      }).catch(()=>{});
+    }
+  } catch(e) {}
 }
 
 // ═══════════════ VARIANTS UI ═══════════════
