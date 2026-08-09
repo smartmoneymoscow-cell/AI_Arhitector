@@ -1,4 +1,4 @@
-# Architect v11.1.0 — AI Architecture Generator
+# Architect v11.2.1 — AI Architecture Generator
 
 Генерация 3D-моделей зданий и интерьеров по текстовому описанию на русском языке.
 
@@ -92,6 +92,22 @@ docker-compose up -d
 
 20+ специализированных агентов: парсер, геометрия, текстуры, свет,
 конструктив, нормативы, рендер, качество, экспорт.
+
+## Что нового в v11.2.1
+
+- **Agent Pool микросервис** — 30 агентов выполняются в отдельном сервисе через HTTP (не in-process)
+  - `AGENT_POOL_URL` env var → gateway вызывает agent-pool вместо importlib
+  - 3-tier fallback: agent-pool HTTP → subprocess → in-process
+- **Quality agent** — все 5 уровней работают (было 2/5): mimo-omni заменён на Gemini Vision
+  - Levels 3-5 (visual bugs, prompt match, geometry sanity) fail-safe при недоступности vision
+- **Threading timeout** — зависший агент не блокирует gateway
+- **CORS fix** — wildcard `*` удалён из LLM и Blender сервисов
+- **30+ bare `except:`** заменены на конкретные типы (KeyError, AttributeError, Exception)
+- **Post-pipeline agents** (compliance, financial, presentation) работают параллельно
+- **sys.path.insert** удалён из сервисов, PYTHONPATH в Dockerfiles
+- **Structured logging** — print() → logger в production коде
+- **Зависимости обновлены** — Python 3.13, fastapi 0.141, httpx 0.28, pydantic 2.13, redis 8.1
+- **Aedifex** — IFC/CAD routes, auth anonymous access, nginx bridge fix
 
 ## Что нового в v11.2.0
 

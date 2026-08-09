@@ -1,29 +1,46 @@
 # 📚 Architect AI — Документация
 
-## Архитектура системы
+## Архитектура системы (v11.2.1)
 
 ```
 Пользователь (браузер)
        │
        ▼
 ┌─────────────────────────────────────────────────────┐
-│  Gateway (architect-gateway.onrender.com)            │
-│  ├── Frontend (index.html — GitHub Pages)            │
-│  ├── FastAPI Backend                                 │
-│  ├── Оркестратор агентов                             │
-│  ├── Load Balancer (Blender instances)               │
-│  └── Redis кеш                                      │
+│  Nginx (routing, rate limiting, SSL)                 │
+└───┬──────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────┐
+│  Gateway (:8080)                                     │
+│  ├── FastAPI Backend (routing only)                  │
+│  ├── Оркестратор пайплайна                           │
+│  └── Load Balancer (Blender instances)               │
 └───┬──────────┬──────────┬────────────────────────────┘
     │          │          │
     ▼          ▼          ▼
 ┌────────┐ ┌────────┐ ┌────────────────┐
-│ LLM    │ │Blender │ │ Blender #2     │
-│Service │ │ #1     │ │ (failover)     │
-│:8081   │ │:8082   │ │ :8082          │
-│Gemini  │ │Cycles  │ │ Cycles CPU     │
-│Flash   │ │CPU     │ │                │
+│ Agent  │ │ LLM    │ │ Blender        │
+│ Pool   │ │Service │ │ Service        │
+│ :8083  │ │:8081   │ │ :8082          │
+│30 agents│ │Gemini  │ │ Cycles CPU/GPU │
+│isolated│ │Flash   │ │                │
 └────────┘ └────────┘ └────────────────┘
+    │
+    ▼
+┌────────┐
+│ Redis  │
+│ :6379  │
+│ state  │
+└────────┘
 ```
+
+### Agent Pool (v11.2.1+)
+
+Все 30 агентов выполняются в отдельном сервисе `agent-pool` через HTTP:
+- `POST /api/v1/agents/{name}/run` — запуск агента в изолированном thread
+- Timeout по умолчанию 120с
+- Gateway вызывает agent-pool вместо `importlib.import_module()`
 
 ## Pipeline обработки промта
 
