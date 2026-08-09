@@ -1,7 +1,7 @@
 """
 shared/agents/orchestrator.py — Orchestrator with ISOLATED agents.
 
-Each agent runs in a SEPARATE subprocess.
+Each agent runs with timeout protection and fallback.
 If an agent crashes → pipeline continues with fallback.
 Only parser and geometry are CRITICAL (pipeline fails without them).
 
@@ -125,7 +125,7 @@ class Orchestrator:
     """
     LLM-driven orchestrator with ISOLATED agent execution.
 
-    Each agent runs in a separate subprocess.
+    Each agent runs with timeout protection and fallback.
     Non-critical agents use fallback on failure.
     Pipeline NEVER crashes due to a single agent failure.
     """
@@ -158,7 +158,7 @@ class Orchestrator:
         """
         Full generation cycle with isolated agents.
 
-        Each agent runs in subprocess → crash-safe.
+        Each agent runs with timeout → hung agents are abandoned, non-critical agents get fallback.
         Non-critical failures → fallback → pipeline continues.
         """
         job_id = uuid.uuid4().hex[:8]
@@ -381,7 +381,7 @@ class Orchestrator:
                 "resolution": 2048,
             }
 
-            # Run in parallel — each in its own subprocess
+            # Run in parallel — each in its own thread
             import concurrent.futures
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
@@ -690,7 +690,7 @@ class Orchestrator:
             return job
 
     def _run_agent(self, agent_name: str, task_params: dict, timeout: int = 120) -> IsolatedResult:
-        """Run agent in isolated subprocess."""
+        """Run agent with timeout and fallback."""
         return self.runner.run(agent_name, task_params, timeout=timeout)
 
     def _build_agent_params(self, agent_name: str, params: dict, gen_type: str, building_params: dict) -> dict:

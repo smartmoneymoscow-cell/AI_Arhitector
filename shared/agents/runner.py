@@ -1,8 +1,11 @@
 """
-shared/agents/runner.py - Изолированное выполнение агентов.
+shared/agents/runner.py - Выполнение агентов с fallback.
 
-КАЖДЫЙ агент выполняется в ОТДЕЛЬНОМ subprocess.
-Если агент падает - НЕ роняет pipeline, возвращает fallback.
+По умолчанию агенты выполняются in-process (FORCE_SUBPROCESS не задан).
+Каждый агент имеет threading-based timeout — зависший агент не блокирует gateway.
+Если агент падает — НЕ роняет pipeline, возвращает fallback.
+
+FORCE_SUBPROCESS=1 включает multiprocessing-изоляцию (для контейнеров с >512MB RAM).
 
 Использование:
     runner = AgentRunner(timeout=120)
@@ -86,11 +89,13 @@ def _run_agent_in_subprocess(
 
 class AgentRunner:
     """
-    Запускает агентов в изолированных subprocess.
+    Запускает агентов с fallback-поведением.
 
-    Каждый агент - отдельный процесс. Если падает:
+    По умолчанию — in-process с threading timeout.
+    При FORCE_SUBPROCESS=1 — multiprocessing с join(timeout).
+    Если агент падает:
     - Логирует ошибку
-    - Возвращает fallback результат
+    - Возвращает fallback результат (для некритичных агентов)
     - Pipeline продолжает работу
     """
 
@@ -181,8 +186,10 @@ class AgentRunner:
 
     def run(self, agent_name: str, task_params: dict, timeout: int | None = None) -> IsolatedResult:
         """
-        Запускает агента в изолированном subprocess.
-        Fallback: если multiprocessing не работает (Render free tier) — in-process.
+        Запускает агента с timeout и fallback.
+
+        По умолчанию: in-process + threading timeout.
+        FORCE_SUBPROCESS=1: multiprocessing + join(timeout).
         """
         timeout = timeout or self.default_timeout
         agent_class = self.AGENT_CLASSES.get(agent_name)
