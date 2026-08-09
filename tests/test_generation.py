@@ -102,8 +102,8 @@ _mock_call_llm = _mock_call_openrouter
 class TestLLMCascade:
     """Тесты LLM каскада."""
 
-    def test_cascade_has_7_models(self):
-        assert len(LLM_CASCADE) == 7
+    def test_cascade_has_8_models(self):
+        assert len(LLM_CASCADE) == 8
 
     def test_cascade_tiers(self):
         tiers = {m["tier"] for m in LLM_CASCADE}

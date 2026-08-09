@@ -271,7 +271,7 @@ class Orchestrator:
                 job["clarification"] = {
                     "questions": [
                         {
-                            "field": q.field,
+                            "field": q.field_name,
                             "text": q.text,
                             "options": q.options,
                             "visual_options": [
