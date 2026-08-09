@@ -239,6 +239,14 @@ class Orchestrator:
             gen_type = parsed.get("gen_type", "building")
             confidence = parsed.get("confidence", 0.5)
 
+            # Use LLM-determined pipeline_profile if provided
+            llm_profile = parsed.get("pipeline_profile", params.get("pipeline_profile", ""))
+            if llm_profile and llm_profile in PIPELINE_PROFILES:
+                pipeline_profile = llm_profile
+                agent_sequence = PIPELINE_PROFILES[pipeline_profile]
+                job["pipeline_profile"] = pipeline_profile
+                job["agent_sequence"] = agent_sequence
+
             # Merge dialog modification params
             if dialog_merged_params:
                 for k, v in dialog_merged_params.items():
@@ -256,7 +264,7 @@ class Orchestrator:
 
             # ═══ Step 1.5: Clarification ═══
             # ALWAYS check clarification, not just on low confidence
-            clar = self.clarification.analyze(prompt, params, confidence)
+            clar = self.clarification.analyze(prompt, params, confidence, llm_service_url=self.llm_service_url)
             if clar.needs_clarification and not skip_clarification:
                 job["status"] = "clarification_needed"
                 job["clarification"] = {
@@ -341,6 +349,9 @@ class Orchestrator:
                     progress=30,
                     message=f"{len(pre_pipeline_results)}/{len(pre_agents)} agents complete",
                 )
+
+            # Store pre-agent results in job for resume reuse
+            job["pre_pipeline_results"] = pre_pipeline_results
 
             # ═══ Step 3+4: Geometry + Texture (PARALLEL, geometry CRITICAL) ═══
             streamer.emit("geometry", "running", progress=35, message="Generating 3D geometry...")
@@ -508,9 +519,9 @@ class Orchestrator:
                         "quality",
                         "warning",
                         progress=87,
-                        message=f"Quality below 16K ({res_check.get('actual', '?')}), retrying...",
+                        message=f"Quality below 16K ({res_check.get('actual', '?')}), retrying with enhanced settings...",
                     )
-                    # Retry render with forced 16K settings
+                    # Retry render with forced 16K settings + increased samples and tiled render
                     render_result_retry = self._run_agent(
                         "render",
                         {
@@ -520,6 +531,9 @@ class Orchestrator:
                                 "script": geometry_script + "\n" + texture_script,
                                 "blender_service_url": self.blender_service_url,
                                 "quality": "16k_force",
+                                "samples_override": 4096,
+                                "use_tiled_render": True,
+                                "tile_count": 16,
                                 "output_path": os.path.join(self.output_dir, f"{job_id}_render_16k.png"),
                                 "output_dir": self.output_dir,
                                 "job_id": job_id,
@@ -529,6 +543,10 @@ class Orchestrator:
                     )
                     if render_result_retry.status == TaskStatus.DONE and render_result_retry.data:
                         render_data = render_result_retry.data
+                        render_data["quality_retry_note"] = (
+                            "Render quality was below 16K on first attempt. "
+                            "Retried with 4096 samples and tiled rendering (16 tiles) for improved quality."
+                        )
                         # Re-check quality
                         render_path = render_data.get("image_path", "") if render_data else ""
                         quality_recheck = self._run_agent(
@@ -849,25 +867,31 @@ class Orchestrator:
         building_params = plan.params.get("building", {})
         streamer.emit("route", "done", progress=15, message=f"Plan: {len(plan.steps)} steps, type={gen_type}")
 
-        # Pre-pipeline agents (parallel)
+        # Pre-pipeline agents — reuse stored results if available
         pre_agents = [a for a in agent_sequence if a in ("research", "market", "concept", "brand", "style", "masterplan")]
-        pre_pipeline_results = {}
-        if pre_agents:
-            import concurrent.futures
-            streamer.emit("pre_pipeline", "running", progress=15, message=f"Running {len(pre_agents)} agents...")
-            def _run_pre(agent_name):
-                ap = self._build_agent_params(agent_name, params, gen_type, building_params)
-                r = self._run_agent(agent_name, {"name": agent_name, "agent": agent_name, "params": ap}, timeout=60)
-                return agent_name, r
-            with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(pre_agents), 4)) as ex:
-                futures = {ex.submit(_run_pre, a): a for a in pre_agents}
-                for f in concurrent.futures.as_completed(futures):
-                    an, r = f.result()
-                    if r.status == TaskStatus.DONE and r.data:
-                        pre_pipeline_results[an] = r.data
-                        if r.fallback:
-                            job["fallback_agents"].append(an)
-            streamer.emit("pre_pipeline", "done", progress=30, message=f"{len(pre_pipeline_results)}/{len(pre_agents)} agents complete")
+        stored_pre = job.get("pre_pipeline_results", {})
+        if stored_pre and all(a in stored_pre for a in pre_agents):
+            # Reuse pre-agent results from original execution (skip re-running)
+            pre_pipeline_results = stored_pre
+            streamer.emit("pre_pipeline", "done", progress=30, message=f"Reused {len(pre_pipeline_results)} pre-agent results from context")
+        else:
+            pre_pipeline_results = {}
+            if pre_agents:
+                import concurrent.futures
+                streamer.emit("pre_pipeline", "running", progress=15, message=f"Running {len(pre_agents)} agents...")
+                def _run_pre(agent_name):
+                    ap = self._build_agent_params(agent_name, params, gen_type, building_params)
+                    r = self._run_agent(agent_name, {"name": agent_name, "agent": agent_name, "params": ap}, timeout=60)
+                    return agent_name, r
+                with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(pre_agents), 4)) as ex:
+                    futures = {ex.submit(_run_pre, a): a for a in pre_agents}
+                    for f in concurrent.futures.as_completed(futures):
+                        an, r = f.result()
+                        if r.status == TaskStatus.DONE and r.data:
+                            pre_pipeline_results[an] = r.data
+                            if r.fallback:
+                                job["fallback_agents"].append(an)
+                streamer.emit("pre_pipeline", "done", progress=30, message=f"{len(pre_pipeline_results)}/{len(pre_agents)} agents complete")
 
         # Geometry + Texture (parallel)
         streamer.emit("geometry", "running", progress=35, message="Generating 3D geometry...")

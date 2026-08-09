@@ -567,6 +567,67 @@ for name,(sx,sy),(dx,dy) in [("CrownFront",(0,-L/2+0.07),(W-0.05,ch)),("CrownBac
     bpy.ops.object.transform_apply(scale=True);cm.data.materials.append(mat_crown)
 """
 
+    # === Door with frame ===
+    script += """
+# Door with frame on front wall
+door_mat=make_mat("DoorMat",(0.35,0.22,0.12),0.7)
+door_frame_mat=make_mat("DoorFrameMat",(0.9,0.9,0.9),0.4,0.1)
+# Door panel
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2+0.01,1.0))
+dr=bpy.context.active_object;dr.name="Door";dr.scale=(0.45,0.04,1.0)
+bpy.ops.object.transform_apply(scale=True);dr.data.materials.append(door_mat)
+# Door frame - left
+bpy.ops.mesh.primitive_cube_add(size=1,location=(-0.5,-L/2+0.01,1.0))
+dfl=bpy.context.active_object;dfl.name="DoorFrame_L";dfl.scale=(0.05,0.06,1.05)
+bpy.ops.object.transform_apply(scale=True);dfl.data.materials.append(door_frame_mat)
+# Door frame - right
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0.5,-L/2+0.01,1.0))
+dfr=bpy.context.active_object;dfr.name="DoorFrame_R";dfr.scale=(0.05,0.06,1.05)
+bpy.ops.object.transform_apply(scale=True);dfr.data.materials.append(door_frame_mat)
+# Door frame - top
+bpy.ops.mesh.primitive_cube_add(size=1,location=(0,-L/2+0.01,2.05))
+dft=bpy.context.active_object;dft.name="DoorFrame_T";dft.scale=(0.55,0.06,0.05)
+bpy.ops.object.transform_apply(scale=True);dft.data.materials.append(door_frame_mat)
+# Door handle
+handle_mat=make_mat("Handle",(0.8,0.75,0.6),0.2,0.8)
+bpy.ops.mesh.primitive_cylinder_add(radius=0.015,depth=0.12,location=(0.3,-L/2+0.06,0.95))
+hndl=bpy.context.active_object;hndl.name="DoorHandle";hndl.rotation_euler=(math.radians(90),0,0)
+hndl.data.materials.append(handle_mat)
+"""
+
+    # === Recessed ceiling lights ===
+    script += """
+# Recessed ceiling lights (flush with ceiling)
+light_positions=[(-W*0.25,-L*0.25),(W*0.25,-L*0.25),(-W*0.25,L*0.25),(W*0.25,L*0.25)]
+recess_mat=make_mat("Recess",(0.95,0.95,0.95),0.3)
+for lx,ly in light_positions:
+    # Light housing (recessed into ceiling)
+    bpy.ops.mesh.primitive_cylinder_add(radius=0.08,depth=0.03,location=(lx,ly,H-0.015))
+    rcss=bpy.context.active_object;rcss.name=f"RecessLight_{{lx}}_{{ly}}"
+    rcss.data.materials.append(recess_mat)
+    # Light emitter surface
+    bpy.ops.mesh.primitive_cylinder_add(radius=0.06,depth=0.005,location=(lx,ly,H-0.002))
+    emit=bpy.context.active_object;emit.name=f"EmitLight_{{lx}}_{{ly}}"
+    emit_mat=make_mat(f"Emit_{{lx}}_{{ly}}",(1.0,0.97,0.92),0.1,0.0,8.0)
+    emit.data.materials.append(emit_mat)
+"""
+
+    # === Enhanced floor material (style-based) ===
+    script += f"""
+# Enhanced floor material based on style
+floor_style_mats = {{
+    "modern": make_mat("FloorModern",(0.75,0.72,0.68),0.4),
+    "classic": make_mat("FloorClassic",(0.55,0.42,0.15),0.5),
+    "scandinavian": make_mat("FloorScand",(0.82,0.75,0.62),0.55),
+    "loft": make_mat("FloorLoft",(0.4,0.4,0.4),0.6),
+    "minimalist": make_mat("FloorMin",(0.88,0.85,0.80),0.35),
+    "hitech": make_mat("FloorHiTech",(0.3,0.3,0.35),0.2),
+}}
+if "{style}" in floor_style_mats:
+    fl.data.materials.clear()
+    fl.data.materials.append(floor_style_mats["{style}"])
+"""
+
     # === Furniture ===
     furniture_scripts = {
         "sofa": """
@@ -841,6 +902,8 @@ if wbsdf:
     wbsdf.inputs["Roughness"].default_value=0.02
     wbsdf.inputs["Metallic"].default_value=0.0
     try:wbsdf.inputs["Transmission"].default_value=0.9
+    except:pass
+    try:wbsdf.inputs["IOR"].default_value=1.52
     except:pass
     try:wbsdf.inputs["Alpha"].default_value=0.85
     except:pass

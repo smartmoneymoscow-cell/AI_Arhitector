@@ -1,10 +1,10 @@
 # AI_Arhitector — ROADMAP
 
-> Обновлено: 2026-08-01
+> Обновлено: 2026-08-09 (v11.0.0)
 
 ---
 
-## Phase 1 — Foundation ✅ (in progress)
+## Phase 1 — Foundation ✅ DONE
 
 ### 1.1 Устранение дублирования
 - [x] Удалить `promt_parser.py` (дубликат `shared/parser.py`)
@@ -24,12 +24,10 @@
 - [x] Расширенный набор материалов (15 vs 6)
 - [x] Расширенный набор features (10 vs 3)
 - [x] Поддержка confidence и ambiguities в LLM-ответе
+- [x] LLM-определение pipeline_profile в ответе парсера (v11.0.0)
 
 ### 1.4 Docker
-- [x] Разделить Dockerfile на per-service:
-  - `gateway.Dockerfile` — lightweight (~200 MB)
-  - `blender.Dockerfile` — heavy (~3 GB)
-  - `llm.Dockerfile` — lightweight (~200 MB)
+- [x] Разделить Dockerfile на per-service
 - [x] Multi-stage build для gateway и llm
 - [x] Обновить `docker-compose.yml` для per-service Dockerfiles
 - [x] Добавить memory limits per-service
@@ -42,21 +40,28 @@
 
 ---
 
-## Phase 2 — Quality (2-3 месяца)
+## Phase 2 — Quality ✅ DONE (v11.0.0)
 
 ### 2.1 Геометрия
+- [x] Окна со стеклом (Transmission 0.9, IOR 1.52) + рамы + подоконники
+- [x] Двери с коробкой и ручками
+- [x] Плинтусы и карнизы (baseboard + crown molding)
 - [ ] Parametric wall generation (не box, а real wall with openings)
 - [ ] Boolean operations для окон/дверей (CSG)
 - [ ] UV mapping для текстур
 - [ ] Asset library: 100+ типов мебели (low-poly GLB)
 
 ### 2.2 Текстуры
+- [x] PBR материалы с правильными параметрами (roughness, metallic)
+- [x] Материал пола по стилю интерьера
 - [ ] Image-based PBR текстуры (Poliigon/ambientCG)
 - [ ] UV unwrap автоматический
 - [ ] Texture atlas для оптимизации
 
 ### 2.3 Освещение
-- [ ] HDRI environment maps
+- [x] HDRI world — процедурный небесный купол (Nishita sky)
+- [x] Contact shadows (GTAO/SSAO)
+- [x] Встроенные потолочные светильники (recessed lights)
 - [ ] Время суток (утро/день/вечер/ночь)
 - [ ] IES profiles для светильников
 
@@ -66,9 +71,10 @@
 - [ ] Sky dome / HDRI background
 
 ### 2.5 Рендеринг
-- [ ] Tiled rendering для 16K (разбить на тайлы)
+- [x] Tiled rendering для 16K (разбить на тайлы)
+- [x] Kaggle GPU auto-submit (T4 GPU)
+- [x] Quality gate retry: 4096 samples при неудаче 16K
 - [ ] GPU support в Docker (nvidia-docker)
-- [ ] Denoising post-process (Intel OIDN)
 
 ---
 
@@ -84,18 +90,21 @@
 - [ ] Применение стиля к генерируемой модели
 
 ### 3.3 Multi-turn Dialog
-- [ ] Контекст предыдущих запросов
-- [ ] Итеративная модификация ("добавь балкон", "измени стиль")
+- [x] Контекст предыдущих запросов (dialog agent)
+- [x] Итеративная модификация ("добавь балкон", "измени стиль")
+- [x] LLM-генерация уточняющих вопросов (v11.0.0)
 
 ### 3.4 Quality Loop
 - [ ] Self-improving: рендер → анализ → исправление → рендер
 - [ ] Автоматическое исправление обнаруженных багов
 
 ### 3.5 Новые агенты
-- [ ] StyleAgent — определение стиля из промта + референсов
-- [ ] LightingAgent — настройка освещения под стиль
-- [ ] FurnitureAgent — эргономичное размещение мебели
-- [ ] LandscapeAgent — генерация окружения
+- [x] StyleAgent — определение стиля из промта + референсов
+- [x] LightingAgent — настройка освещения под стиль
+- [x] FurnitureAgent — эргономичное размещение мебели
+- [x] LandscapeAgent — генерация окружения
+- [x] PDF Analysis Agent — парсинг PDF чертежей (v11.0.0)
+- [x] DWG/DXF Analysis Agent — парсинг CAD файлов (v11.0.0)
 
 ---
 
@@ -113,6 +122,7 @@
 - [ ] IBC (международные)
 
 ### 4.3 CAD Integration
+- [x] DXF парсинг через ezdxf (v11.0.0)
 - [ ] STEP/IGES экспорт через OpenCASCADE
 - [ ] Интеграция с Revit/ArchiCAD (IFC round-trip)
 

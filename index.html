@@ -742,7 +742,7 @@ html,body{background:var(--bg);color:var(--txt)}
       </div>
       <div class="input-hint" data-i18n="inputHint">Enter — отправить · Shift+Enter — новая строка</div>
     </div>
-    <input type="file" id="fileIn" accept="image/*,.pdf" style="display:none" onchange="handleFile(this.files[0])">
+    <input type="file" id="fileIn" accept="image/*,.pdf,.dwg,.dxf" style="display:none" onchange="handleFile(this.files[0])">
   </div>
 
   <!-- VIEWER -->
@@ -999,15 +999,120 @@ function toggleMic() {
 }
 
 // ═══════════════════ FILE ═══════════════════
+let _pendingAnalysisFile = null;
 function handleFile(f) {
   if(!f) return;
   const p=document.getElementById('filePreview'),img=document.getElementById('fpImg'),nm=document.getElementById('fpName');
   nm.textContent=f.name;
-  if(f.type.startsWith('image/')){const r=new FileReader();r.onload=e=>{img.src=e.target.result};r.readAsDataURL(f);img.style.display='';}else{img.style.display='none';}
+  const ext = f.name.split('.').pop().toLowerCase();
+  if(f.type.startsWith('image/')){const r=new FileReader();r.onload=e=>{img.src=e.target.result};r.readAsDataURL(f);img.style.display='';}
+  else if(ext==='pdf'||ext==='dwg'||ext==='dxf'){img.style.display='none';_pendingAnalysisFile=f;}
+  else{img.style.display='none';}
   p.style.display='flex';
 }
-function clearFile() { document.getElementById('filePreview').style.display='none'; document.getElementById('fileIn').value=''; }
+function clearFile() { document.getElementById('filePreview').style.display='none'; document.getElementById('fileIn').value=''; _pendingAnalysisFile=null; }
 function attachFile() { document.getElementById('fileIn').click(); }
+
+async function analyzeUploadedFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const endpoint = ext === 'pdf' ? '/api/v1/analyze/pdf' : '/api/v1/analyze/dwg';
+  const formData = new FormData();
+  formData.append('file', file);
+  showTyping();
+  try {
+    _ensureApiKey();
+    const r = await fetch(API_BASE + endpoint, {
+      method: 'POST',
+      headers: _apiHeaders(),
+      body: formData,
+    });
+    hideTyping();
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    _displayAnalysisResult(data, file.name);
+    return data;
+  } catch(e) {
+    hideTyping();
+    addMessage('assistant', '❌ ' + (currentLang==='en'?'Analysis failed: ':'Анализ не удался: ') + e.message);
+    return null;
+  }
+}
+
+function _displayAnalysisResult(data, fileName) {
+  let html = '<div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:14px;padding:14px 16px;max-width:460px">';
+  html += '<div style="font-weight:700;color:var(--acc2);margin-bottom:10px">📄 ' + esc(fileName) + '</div>';
+
+  // Rooms
+  if(data.rooms && data.rooms.length) {
+    html += '<div style="font-size:12px;font-weight:600;color:var(--txt);margin-bottom:6px">🏠 ' + (currentLang==='en'?'Rooms: ':'Помещения: ') + data.rooms.length + '</div>';
+    data.rooms.slice(0,10).forEach(r => {
+      html += '<div style="font-size:11px;color:var(--txt2);padding:2px 0">• ' + esc(r.name);
+      if(r.area_m2) html += ' — ' + r.area_m2 + ' м²';
+      if(r.width_m && r.length_m) html += ' (' + r.width_m + '×' + r.length_m + ')';
+      html += '</div>';
+    });
+  }
+
+  // Dimensions
+  if(data.dimensions && Object.keys(data.dimensions).length) {
+    html += '<div style="font-size:12px;font-weight:600;color:var(--txt);margin:8px 0 4px">📐 ' + (currentLang==='en'?'Dimensions: ':'Размеры: ') + '</div>';
+    Object.entries(data.dimensions).forEach(([k,v]) => {
+      html += '<div style="font-size:11px;color:var(--txt2);padding:1px 0">• ' + esc(k) + ': ' + v + '</div>';
+    });
+  }
+
+  // MEP systems
+  if(data.mep_systems && data.mep_systems.length) {
+    html += '<div style="font-size:12px;font-weight:600;color:var(--txt);margin:8px 0 4px">🔧 ' + (currentLang==='en'?'Engineering: ':'Инженерные системы: ') + '</div>';
+    data.mep_systems.forEach(m => {
+      html += '<div style="font-size:11px;color:var(--txt2);padding:1px 0">• ' + esc(m.system_type) + ': ' + esc(m.description) + '</div>';
+    });
+  }
+
+  // Materials
+  if(data.materials && data.materials.length) {
+    html += '<div style="font-size:11px;color:var(--txt3);margin-top:6px">🧱 ' + data.materials.join(', ') + '</div>';
+  }
+
+  // Layers (for DXF)
+  if(data.layers && data.layers.length) {
+    const archLayers = data.layers.filter(l => l.is_architectural);
+    if(archLayers.length) {
+      html += '<div style="font-size:12px;font-weight:600;color:var(--txt);margin:8px 0 4px">📋 ' + (currentLang==='en'?'Architectural layers: ':'Архитектурные слои: ') + archLayers.length + '</div>';
+      archLayers.slice(0,8).forEach(l => {
+        html += '<div style="font-size:11px;color:var(--txt2);padding:1px 0">• ' + esc(l.name) + ' (' + l.entity_count + ' ' + (currentLang==='en'?'entities':'объектов') + ')</div>';
+      });
+    }
+  }
+
+  // Warnings
+  if(data.warnings && data.warnings.length) {
+    html += '<div style="font-size:10px;color:#f59e0b;margin-top:6px">⚠ ' + data.warnings.join('; ') + '</div>';
+  }
+
+  // Use as input button
+  html += '<button onclick="useAnalysisForGeneration()" style="margin-top:10px;padding:8px 16px;border-radius:10px;border:1px solid var(--acc);background:rgba(139,92,246,.1);color:var(--acc2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">' + (currentLang==='en'?'🏗 Use for 3D generation':'🏗 Использовать для 3D генерации') + '</button>';
+  html += '</div>';
+  addMessage('assistant', html);
+}
+
+let _lastAnalysisData = null;
+function useAnalysisForGeneration() {
+  if(!_lastAnalysisData) {
+    addMessage('assistant', currentLang==='en'?'Upload a PDF/DWG first':'Сначала загрузите PDF/DWG');
+    return;
+  }
+  const d = _lastAnalysisData;
+  let prompt = '';
+  if(d.rooms && d.rooms.length) {
+    prompt = 'Создай 3D модель по чертежу: ' + d.rooms.map(r => r.name).join(', ');
+    if(d.dimensions && d.dimensions.width_m) prompt += ', размеры ' + d.dimensions.width_m + 'x' + d.dimensions.length_m;
+  } else {
+    prompt = 'Создай 3D модель по загруженному чертежу';
+  }
+  document.getElementById('msgInput').value = prompt;
+  sendMessage();
+}
 
 // ═══════════════════ API INTEGRATION ═══════════════════
 const API_BASE = (()=>{
@@ -1150,6 +1255,23 @@ let _orchPrompt = '';         // Original prompt for the current job
 
 async function sendMessage() {
   const inp=document.getElementById('msgInput'), text=inp.value.trim();
+  // Check if there's a pending PDF/DWG file to analyze
+  if(_pendingAnalysisFile && !text) {
+    const f = _pendingAnalysisFile;
+    _pendingAnalysisFile = null;
+    hideWelcome(); addMessage('user', '📄 ' + f.name);
+    const data = await analyzeUploadedFile(f);
+    if(data) _lastAnalysisData = data;
+    return;
+  }
+  if(_pendingAnalysisFile && text) {
+    // File + text: analyze file then use text as prompt
+    const f = _pendingAnalysisFile;
+    _pendingAnalysisFile = null;
+    hideWelcome(); addMessage('user', '📄 ' + f.name + ' — ' + text);
+    const data = await analyzeUploadedFile(f);
+    if(data) _lastAnalysisData = data;
+  }
   if(!text) return;
   hideWelcome(); addMessage('user',text); inp.value=''; autoResize(inp);
   showTyping();
@@ -1168,9 +1290,9 @@ async function sendMessage() {
     const orchCtrl = new AbortController();
     const orchTid = setTimeout(()=>orchCtrl.abort(), 300000);
 
-    // Determine pipeline profile from prompt keywords
-    const t = text.toLowerCase();
+    // Determine pipeline profile — prefer LLM-determined, fallback to regex
     let profile = 'standard';
+    // Regex fallback for pipeline profile
     if(/ванн|кухн|спальн|детск|гостин|интерьер|дизайн|комнат/.test(t)) profile = 'interior';
     if(/ландшафт|сад|двор|участок/.test(t)) profile = 'landscape';
     _orchPipelineProfile = profile;
@@ -1198,6 +1320,11 @@ async function sendMessage() {
     }
 
     const orchResult = await r.json();
+
+    // Use LLM-determined pipeline_profile if provided
+    if(orchResult.pipeline_profile) {
+      _orchPipelineProfile = orchResult.pipeline_profile;
+    }
 
     // ═══ STEP 2: Handle clarification_needed ═══
     if(orchResult.status === 'clarification_needed' && orchResult.clarification) {

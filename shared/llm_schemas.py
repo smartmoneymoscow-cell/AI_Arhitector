@@ -58,6 +58,7 @@ class ParsedParams(BaseModel):
     """Strict schema for LLM parse response. All fields validated."""
 
     object_type: Literal["building", "interior", "room", "landscape", "structure", "element"] = "building"
+    pipeline_profile: str = Field(default="standard", min_length=1, max_length=50)
     building_type: str = Field(default="house", min_length=1, max_length=100)
     building_description: str = ""
     room_type: str | None = None

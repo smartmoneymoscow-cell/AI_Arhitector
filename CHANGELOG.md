@@ -4,6 +4,76 @@
 
 ---
 
+## v11.0.0 — PDF/DWG Analysis + 3D Quality + Pipeline Fixes
+
+### Новые возможности
+
+#### PDF/DWG анализ
+- **PDF Analysis Agent** (`shared/agents/pdf_analysis_agent.py`) — парсинг архитектурных чертежей из PDF:
+  - Извлечение помещений, размеров, материалов из спецификаций
+  - Определение MEP-систем (вентиляция, отопление, водоснабжение, канализация)
+  - Тип чертежа (план, разрез, фасад, спецификация)
+- **DWG/DXF Analysis Agent** (`shared/agents/dwg_analysis_agent.py`) — парсинг DXF через ezdxf:
+  - Слои, блоки, размерные линии, текстовые аннотации
+  - Классификация архитектурных элементов по именам слоёв
+- **API endpoints**: `POST /api/v1/analyze/pdf`, `POST /api/v1/analyze/dwg`
+- **Frontend**: кнопка загрузки PDF/DWG в чате, отображение результатов анализа, кнопка «Использовать для 3D генерации»
+
+#### Kaggle GPU Auto-Submit
+- **`shared/kaggle_auto_submit.py`** — автоматическая отправка рендер-задач на Kaggle T4 GPU
+- Экспоненциальный backoff при polling
+- Интеграция в RenderAgent как fallback
+
+### Улучшения качества 3D
+
+#### Интерьер (`shared/blender.py`)
+- **Дверь с коробкой** — панель, рама (лево/право/верх), ручка
+- **Потолочные светильники** — 4 встроенных recessed lights с emit-материалом
+- **Материал пола по стилю** — wood (classic), stone (loft), tile (hitech) и т.д.
+- **Стекло окна**: Transmission=0.9, IOR=1.52 (физически корректное стекло)
+
+#### Рендер (`shared/agents/render_agent.py`)
+- **HDRI world** — процедурный небесный купол (Nishita sky model) вместо плоского цвета
+- **Contact shadows** — SSAO (GTAO) для ambient occlusion
+- **Tiled render** — композитинг для 16K рендеринга (разбиение на тайлы)
+- **Samples override** — 4096 samples при retry 16K (вместо 2048)
+
+### Исправления pipeline
+
+#### ClarificationEngine (`shared/clarification.py`)
+- **LLM-генерация вопросов** — новый метод `generate_llm_questions()`: вызывает LLM для генерации контекстных вопросов с visual_options (pros/cons)
+- Fallback на хардкод вопросы если LLM недоступен
+
+#### Orchestrator (`shared/agents/orchestrator.py`)
+- **resume_with_answers**: сохраняет pre-agent результаты в job dict, переиспользует их вместо повторного запуска
+- **Pipeline profile**: LLM-парсер определяет `pipeline_profile` в ответе; оркестратор использует его, regex только как fallback
+- **Quality gate retry**: при неудаче 16K — 4096 samples + tiled render (16 тайлов) + уведомление пользователю
+
+#### LLM Schema (`shared/llm_schemas.py`)
+- Добавлено поле `pipeline_profile` в `ParsedParams`
+
+#### Frontend (`index.html`)
+- Pipeline profile: LLM-determined → regex fallback
+- Загрузка PDF/DWG/DXF файлов через кнопку «Прикрепить файл»
+- Анализ файлов и отображение результатов
+
+### Архитектура (v11.0.0)
+```
+Пользователь → Nginx → Gateway → LLM Service → Blender Service
+                  │         │          │              │
+                  │    Orchestrator    Gemini     Blender CLI
+                  │    (25+ agents)    OpenRouter   bpy-скрипты
+                  │         │          Ollama       Kaggle GPU
+                  │    Clarification
+                  │    (LLM-driven)
+                  │
+              Frontend
+              (Three.js 3D)
+              + PDF/DWG upload
+```
+
+---
+
 ## 2026-08-09 — Полный фикс pipeline генерации 3D интерьера
 
 ### Проблема

@@ -14,7 +14,14 @@ shared/clarification.py — Система уточняющих вопросов
             print(q.text)
 """
 
+import json
+import logging
+import os
 from dataclasses import dataclass, field
+
+import httpx
+
+logger = logging.getLogger("archai.clarification")
 
 
 @dataclass
@@ -92,7 +99,87 @@ class ClarificationEngine:
         },
     }
 
-    def analyze(self, prompt: str, parsed_params: dict, confidence: float = 0.5) -> ClarificationResult:
+    def generate_llm_questions(
+        self,
+        prompt: str,
+        params: dict,
+        confidence: float = 0.5,
+        llm_service_url: str = "",
+    ) -> list[ClarificationQuestion]:
+        """
+        Use LLM to generate contextual clarification questions with visual_options.
+
+        Falls back to hardcoded questions if LLM is unavailable.
+        """
+        if not llm_service_url:
+            llm_service_url = os.environ.get("LLM_SERVICE_URL", "")
+        if not llm_service_url:
+            logger.debug("No LLM_SERVICE_URL — falling back to hardcoded questions")
+            return []
+
+        llm_prompt = (
+            f"Ты — архитектурный ассистент. Пользователь хочет построить: {prompt}\n"
+            f"Уже известные параметры: {json.dumps(params, ensure_ascii=False)}\n"
+            f"Уверенность парсера: {confidence:.0%}\n\n"
+            f"Сгенерируй 1-3 уточняющих вопроса с вариантами ответа. "
+            f"Каждый вариант должен содержать pros/cons. "
+            f"Верни СТРОГО JSON-массив:\n"
+            f'[{{"field": "field_name", "text": "question text", "options": ["opt1","opt2"], '
+            f'"visual_options": [{{"id":"A","title":"...","description":"...","pros":["..."],"cons":["..."],"recommended":true}}], '
+            f'"priority": 1, "is_fork": false}}]'
+        )
+
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                r = client.post(
+                    f"{llm_service_url}/api/v1/chat/completions",
+                    json={"messages": [{"role": "user", "content": llm_prompt}], "temperature": 0.3},
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    # Extract JSON from response
+                    json_start = content.find("[")
+                    json_end = content.rfind("]") + 1
+                    if json_start >= 0 and json_end > json_start:
+                        questions_data = json.loads(content[json_start:json_end])
+                        result = []
+                        for qd in questions_data[:3]:
+                            visual_opts = []
+                            for vo in qd.get("visual_options", []):
+                                visual_opts.append(
+                                    ClarificationOption(
+                                        id=vo.get("id", "A"),
+                                        title=vo.get("title", ""),
+                                        description=vo.get("description", ""),
+                                        pros=vo.get("pros", []),
+                                        cons=vo.get("cons", []),
+                                        recommended=vo.get("recommended", False),
+                                        price_range=vo.get("price_range", ""),
+                                    )
+                                )
+                            result.append(
+                                ClarificationQuestion(
+                                    field_name=qd.get("field", ""),
+                                    text=qd.get("text", ""),
+                                    options=qd.get("options", []),
+                                    visual_options=visual_opts,
+                                    priority=qd.get("priority", 2),
+                                    is_fork=qd.get("is_fork", False),
+                                )
+                            )
+                        return result
+        except Exception as e:
+            logger.warning("LLM clarification generation failed: %s — using fallback", e)
+        return []
+
+    def analyze(
+        self,
+        prompt: str,
+        parsed_params: dict,
+        confidence: float = 0.5,
+        llm_service_url: str = "",
+    ) -> ClarificationResult:
         """
         Анализирует параметры и решает, нужны ли уточнения.
 
@@ -152,6 +239,11 @@ class ClarificationEngine:
 
         # Ограничиваем до3 вопросов (не перегружать пользователя)
         questions = questions[:3]
+
+        # Try LLM-generated questions first
+        llm_questions = self.generate_llm_questions(prompt, parsed_params, confidence, llm_service_url)
+        if llm_questions:
+            questions = llm_questions
 
         return ClarificationResult(
             needs_clarification=len(questions) > 0,

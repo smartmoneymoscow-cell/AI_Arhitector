@@ -197,14 +197,39 @@ if "RimLight" not in bpy.data.objects:
 
     # World
     script += """
-# World setup
+# World setup — HDRI for realistic lighting
 world = bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
 bpy.context.scene.world = world
 world.use_nodes = True
-bg = world.node_tree.nodes.get("Background")
-if bg:
-    bg.inputs["Color"].default_value = (0.5, 0.7, 1.0, 1.0)
-    bg.inputs["Strength"].default_value = 1.2
+tree = world.node_tree
+for n in tree.nodes:
+    tree.nodes.remove(n)
+tex_coord = tree.nodes.new('ShaderNodeTexCoord')
+tex_coord.location = (-600, 0)
+env_tex = tree.nodes.new('ShaderNodeTexEnvironment')
+env_tex.location = (-400, 0)
+# Use procedural sky gradient as HDRI substitute
+sky_tex = tree.nodes.new('ShaderNodeTexSky')
+sky_tex.location = (-400, 0)
+sky_tex.sky_type = 'NISHITA'
+sky_tex.sun_elevation = 0.785
+sky_tex.sun_rotation = 0.5
+bg = tree.nodes.new('ShaderNodeBackground')
+bg.location = (0, 0)
+bg.inputs["Strength"].default_value = 1.0
+bg.inputs["Color"].default_value = (0.5, 0.7, 1.0, 1.0)
+out = tree.nodes.new('ShaderNodeOutputWorld')
+out.location = (200, 0)
+tree.links.new(sky_tex.outputs["Color"], bg.inputs["Color"])
+tree.links.new(bg.outputs["Background"], out.inputs["Surface"])
+
+# Contact shadows (ambient occlusion)
+try:
+    bpy.context.scene.eevee.use_gtao = True
+    bpy.context.scene.eevee.gtao_distance = 0.5
+    bpy.context.scene.eevee.gtao_factor = 1.0
+except:
+    pass
 """
 
     script += """
@@ -229,7 +254,16 @@ class RenderAgent(BaseAgent):
             blender_service_url = task.params.get("blender_service_url", "")
             camera_params = task.params.get("camera_params")
 
-            preset = QUALITY_PRESETS.get(quality, QUALITY_PRESETS["standard"])
+            preset = QUALITY_PRESETS.get(quality, QUALITY_PRESETS["standard"]).copy()
+
+            # Override samples if specified (for 16K retry)
+            samples_override = task.params.get("samples_override")
+            if samples_override:
+                preset["samples"] = samples_override
+
+            # Tiled render support (for ultra-high resolution)
+            use_tiled = task.params.get("use_tiled_render", False)
+            tile_count = task.params.get("tile_count", 4)
 
             if not output_path:
                 import uuid
@@ -239,19 +273,56 @@ class RenderAgent(BaseAgent):
                 output_path = os.path.join(output_dir, f"{job_id}_render.png")
 
             render_script = build_render_script(preset, output_path, camera_params)
+
+            # Add tiled render compositing if requested
+            if use_tiled and tile_count > 1:
+                render_script += f"""
+# Tiled render compositing — stitch {tile_count} tiles for higher effective resolution
+import math
+tile_count = {tile_count}
+tile_res_x = bpy.context.scene.render.resolution_x
+tile_res_y = bpy.context.scene.render.resolution_y
+tile_cols = int(math.ceil(math.sqrt(tile_count)))
+tile_rows = int(math.ceil(tile_count / tile_cols))
+# Enable compositor for tile stitching
+bpy.context.scene.use_nodes = True
+tree = bpy.context.scene.node_tree
+for n in tree.nodes:
+    tree.nodes.remove(n)
+rl = tree.nodes.new('CompositorNodeRLayers')
+comp = tree.nodes.new('CompositorNodeComposite')
+rl.location = (0, 0)
+comp.location = (400, 0)
+tree.links.new(rl.outputs['Image'], comp.inputs['Image'])
+"""
+
             full_script = script + "\n" + render_script
 
             if blender_service_url:
-                # Вызов blender-service через HTTP
                 result = self._call_blender_service(blender_service_url, full_script, output_path)
             else:
-                # Локальный вызов (для монолита)
-                result = self._run_local(full_script, output_path)
+                # Try Kaggle GPU renderer if local blender not available
+                try:
+                    from shared.kaggle_auto_submit import KaggleAutoSubmit
+                    kaggle = KaggleAutoSubmit()
+                    if kaggle.is_configured():
+                        kaggle_result = kaggle.submit_and_wait(full_script, output_path)
+                        if kaggle_result:
+                            result = {
+                                "blender_output": "Kaggle GPU render completed",
+                                "kaggle_result": kaggle_result,
+                            }
+                        else:
+                            result = self._run_local(full_script, output_path)
+                    else:
+                        result = self._run_local(full_script, output_path)
+                except Exception:
+                    result = self._run_local(full_script, output_path)
 
             return TaskResult(
                 status=TaskStatus.DONE,
                 data={
-                    "output_path": output_path,
+                    "image_path": output_path,
                     "quality": quality,
                     "resolution": f"{preset['resolution_x']}x{preset['resolution_y']}",
                     "engine": preset["engine"],

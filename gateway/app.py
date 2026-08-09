@@ -725,6 +725,72 @@ async def compliance_check(
 
 
 # ═══════════════════════════════════════════════════════════════
+# PDF / DWG ANALYSIS — файловый анализ
+# ═══════════════════════════════════════════════════════════════
+
+import tempfile
+import shutil
+from fastapi import UploadFile, File as FastAPIFile
+
+
+@app.post("/api/v1/analyze/pdf")
+async def analyze_pdf_endpoint(
+    file: UploadFile = FastAPIFile(...),
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Upload PDF and get structured architectural analysis."""
+    from shared.agents.pdf_analysis_agent import analyze_pdf
+
+    # Save uploaded file
+    suffix = os.path.splitext(file.filename or "upload.pdf")[1] or ".pdf"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        shutil.copyfileobj(file.file, tmp)
+        tmp.close()
+        result = analyze_pdf(tmp.name)
+        return result.to_dict()
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+
+
+@app.post("/api/v1/analyze/dwg")
+async def analyze_dwg_endpoint(
+    file: UploadFile = FastAPIFile(...),
+    api_key: str = Depends(get_api_key_required),
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """Upload DWG/DXF and get structured architectural analysis."""
+    from shared.agents.dwg_analysis_agent import analyze_dxf, convert_dwg_to_dxf
+
+    suffix = os.path.splitext(file.filename or "upload.dxf")[1] or ".dxf"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        shutil.copyfileobj(file.file, tmp)
+        tmp.close()
+        file_path = tmp.name
+
+        # Convert DWG to DXF if needed
+        if suffix.lower() == ".dwg":
+            dxf_path = convert_dwg_to_dxf(tmp.name)
+            if dxf_path:
+                file_path = dxf_path
+            else:
+                return {"error": "Cannot convert DWG to DXF. Install ODA File Converter."}
+
+        result = analyze_dxf(file_path)
+        return result.to_dict()
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+
+
+# ═══════════════════════════════════════════════════════════════
 # VARIANTS — варианты реализации
 # ═══════════════════════════════════════════════════════════════
 
