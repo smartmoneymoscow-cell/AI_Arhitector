@@ -338,6 +338,62 @@
 
 ## 5. Руководство по настройке
 
+### Живая конфигурация ключей (v11.1.0)
+
+**Живой LLM Service:** `https://architect-llm-1s1j.onrender.com` (Render Account #4)
+
+| # | Провайдер | Переменная | Кол-во ключей | Статус |
+|---|-----------|-----------|---------------|--------|
+| 1 | OpenRouter | `OPENROUTER_API_KEY` | 1 | ✅ alive |
+| 2 | OpenRouter | `OPENROUTER_FALLBACK_KEYS` | 2 | ✅ alive |
+| 3 | Gemini | `GOOGLE_API_KEY` | 1 | ✅ alive |
+| 4 | Gemini | `GOOGLE_FALLBACK_KEYS` | 7 | ✅ alive |
+| | | **Итого** | **11** | **все alive** |
+
+**НЕ живой** (старый деплой): `ai-arch-llmproxy.onrender.com` — 1 OR ключ, 0 Gemini. Не использовать.
+
+### Render Accounts
+
+| # | Аккаунт | URL | Что работает | LLM-ключей |
+|---|---------|-----|-------------|------------|
+| 1 | Render #1 | `ai-arch-blender3d.onrender.com` | Blender CLI, EEVEE 4K | — |
+| 4 | Render #4 | `architect-gateway.onrender.com` | Gateway (фронтенд + прокси) | — |
+| 4 | Render #4 | `architect-llm-1s1j.onrender.com` | LLM Service (парсинг промтов) | 11 |
+| 4 | Render #4 | `architect-blender.onrender.com` | Blender Service | — |
+
+### Каскад перебора (11 аккаунтов)
+
+```
+Промт пользователя
+    ↓
+1. Google Gemini (8 ключей, round-robin)
+   gem-key-1 → gem-key-2 → ... → gem-key-8
+   При 429: cooldown 60 сек → следующий ключ
+   При 402/quota: cooldown 24ч → следующий ключ
+    ↓ если все 8 исчерпаны
+2. OpenRouter Free Models (3 ключа, round-robin)
+   or-key-1 → or-key-2 → or-key-3
+   Auto-discovery: 8+ бесплатных моделей, обновление каждый час
+   При 404 модели → invalidate discovery + следующая модель
+    ↓ если все 3 ключа × N моделей исчерпаны
+3. Ollama (локальный, если настроен)
+    ↓ если не настроен
+4. Regex fallback (крайний случай)
+```
+
+### Мониторинг
+
+```bash
+# Сколько ключей настроено и живых
+curl https://architect-llm-1s1j.onrender.com/api/v1/keys/status
+
+# Статистика discovery бесплатных моделей
+curl https://architect-llm-1s1j.onrender.com/api/v1/cache/stats
+
+# Ручное обновление списка моделей
+curl -X POST https://architect-llm-1s1j.onrender.com/api/v1/models/refresh
+```
+
 ### Переменные окружения (.env)
 
 #### Основные

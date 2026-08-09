@@ -38,13 +38,33 @@ docker-compose up -d
               (Three.js 3D)
 ```
 
+### 🔑 Ключи LLM — живая конфигурация
+
+**Живой LLM Service:** `https://architect-llm-1s1j.onrender.com`
+
+| # | Провайдер | Переменная | Кол-во | Статус |
+|---|-----------|-----------|--------|--------|
+| 1 | OpenRouter | `OPENROUTER_API_KEY` | 1 | ✅ alive |
+| 2 | OpenRouter | `OPENROUTER_FALLBACK_KEYS` | 2 | ✅ alive |
+| 3 | Gemini | `GOOGLE_API_KEY` | 1 | ✅ alive |
+| 4 | Gemini | `GOOGLE_FALLBACK_KEYS` | 7 | ✅ alive |
+| | | **Итого** | **11** | **все alive** |
+
+**НЕ живой** (старый деплой, не трогать): `ai-arch-llmproxy.onrender.com` — 1 OR ключ, 0 Gemini
+
 ### LLM-цепочка (бесплатно)
 
 ```
-1. Google Gemini API  ← все ключи равноправны, round-robin + cooldown
-2. OpenRouter :free   ← автодисковери бесплатных моделей каждый час
-3. Ollama (local)     ← опционально
-4. Regex fallback     ← крайний случай
+1. Google Gemini API (8 ключей, round-robin)
+   ↓ если все 8 исчерпаны
+2. OpenRouter Free Models (3 ключа, round-robin)
+   ├── auto-discovery каждый час
+   ├── 8+ бесплатных моделей в каскаде
+   └── при 404 → invalidate discovery + следующая модель
+   ↓ если все модели/ключи недоступны
+3. Ollama (локальный, если настроен)
+   ↓ если не настроен
+4. Regex fallback (крайний случай)
 ```
 
 ### Key Rotation
@@ -54,6 +74,14 @@ docker-compose up -d
 - При 402/quota → ключ помечается на 24 часа
 - Cooldown дублируется в Redis — переживает рестарт контейнера
 - `GET /api/v1/keys/status` — мониторинг: сколько ключей настроено / живых
+
+### Render Accounts
+
+| # | Аккаунт | URL | Что работает | LLM-ключей |
+|---|---------|-----|-------------|------------|
+| 1 | Render #1 | `ai-arch-blender3d.onrender.com` | Blender | — |
+| 4 | Render #4 | `architect-gateway.onrender.com` | Gateway | — |
+| 4 | Render #4 | `architect-llm-1s1j.onrender.com` | LLM Service | 11 |
 
 ### Pipeline агентов
 
