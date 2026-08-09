@@ -43,6 +43,9 @@ _LAZY_IMPORTS = {
     "StructuralAnalysisAgent": "shared.agents.structural_analysis_agent",
     "FoundationAgent": "shared.agents.foundation_agent",
     "SeismicAgent": "shared.agents.seismic_agent",
+    # New (v11.0) — Document analysis agents
+    "PDFAnalysisAgent": "shared.agents.pdf_analysis_agent",
+    "DWGAnalysisAgent": "shared.agents.dwg_analysis_agent",
 }
 
 
@@ -90,6 +93,8 @@ __all__ = [
     "StructuralAnalysisAgent",
     "FoundationAgent",
     "SeismicAgent",
+    "PDFAnalysisAgent",
+    "DWGAnalysisAgent",
     "Orchestrator",
 ]
 
@@ -125,6 +130,8 @@ class _AgentRegistry:
         "structural_analysis",
         "foundation",
         "seismic",
+        "pdf_analysis",
+        "dwg_analysis",
     ]
 
     _class_map = {
@@ -155,6 +162,8 @@ class _AgentRegistry:
         "structural_analysis": "StructuralAnalysisAgent",
         "foundation": "FoundationAgent",
         "seismic": "SeismicAgent",
+        "pdf_analysis": "PDFAnalysisAgent",
+        "dwg_analysis": "DWGAnalysisAgent",
     }
 
     def __getitem__(self, name: str):

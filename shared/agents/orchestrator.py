@@ -103,6 +103,7 @@ PIPELINE_PROFILES = {
     "electrical": ["parser", "el", "compliance", "export"],
     "landscape": ["parser", "research", "landscape", "masterplan", "compliance", "export"],
     "mep_documentation": ["parser", "mep", "mep_bim", "compliance", "export"],
+    "document_analysis": ["parser", "pdf_analysis", "dwg_analysis", "compliance", "export"],
     "interior_full": [
         "parser",
         "concept",

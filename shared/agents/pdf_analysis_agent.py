@@ -353,3 +353,6 @@ class PDFAnalysisAgent(BaseAgent):
                 error=str(e),
                 duration_ms=(__import__("time").time() - start) * 1000,
             )
+
+# PEP 8 alias
+PdfAnalysisAgent = PDFAnalysisAgent
