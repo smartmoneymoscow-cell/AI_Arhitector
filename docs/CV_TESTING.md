@@ -185,6 +185,106 @@ bash ~/.openclaw/skills/mimo-omni/mimo_api.sh image screenshots/cv_test/bathroom
 
 ---
 
+## v11.0.0 — Расширенная методология верификации
+
+### Полный E2E сценарий: промт → 3D модель
+
+Для v11.0.0 тестируется полный pipeline:
+
+```
+Промт в чат → sendMessage()
+  → /api/v1/orchestrator/execute
+    → ParserAgent (Gemini/OpenRouter)
+    → ClarificationEngine.analyze()
+      → если clarification_needed → показать вопросы
+      → пользователь отвечает → /api/v1/orchestrator/resume
+    → Route → Pre-agents (concept, style, furniture, lighting)
+    → Geometry + Texture (parallel)
+    → Mid-agents (landscape, mep, structural)
+    → Render (Cycles CPU/HDRI)
+    → Quality check
+    → Export (GLB)
+    → Post-agents (compliance, financial)
+```
+
+### Тест-сьюты
+
+#### Suite 1: Chat Flow (промт → clarification → resume)
+
+| # | Тест | Промт | Ожидание | Проверка |
+|---|------|-------|----------|----------|
+| 1.1 | Простой промт | "Построй дом 2 этажа" | status=done, gen_type=building | API JSON |
+| 1.2 | Неоднозначный промт | "Построй дом" | clarification_needed, ≥2 вопроса | API JSON + скрин |
+| 1.3 | Интерьер | "Ванная 3x4 с джакузи" | status=done, gen_type=interior | API JSON |
+| 1.4 | Ландшафт | "Ландшафтный дизайн сада" | status=done, gen_type=landscape | API JSON |
+| 1.5 | Resume после clarification | 1.2 → ответы → resume | status=done | API JSON |
+| 1.6 | Skip clarification | "Построй дом" → Skip | status=done | API JSON |
+
+#### Suite 2: Visual Quality (CV-анализ рендеров)
+
+| # | Тест | Что проверяет CV | Критерий |
+|---|------|-----------------|----------|
+| 2.1 | Тип помещения | Ванная/кухня/гостиная соответствует промту | 100% match |
+| 2.2 | Объекты | Джакузи/окно/мебель присутствуют | 100% match |
+| 2.3 | Стиль | Минимализм/хайтек/классика визуально | >80% match |
+| 2.4 | Фотореализм | Тени, отражения, текстуры | >70% score |
+| 2.5 | Артефакты | Нет торчащих полигонов, дыр | 0 artifacts |
+| 2.6 | Разрешение | ≥ заявленного (4K/8K/16K) | 100% match |
+
+#### Suite 3: 3D Model Verification
+
+| # | Тест | Что проверяет | Критерий |
+|---|------|--------------|----------|
+| 3.1 | GLB загружается | Three.js viewer без ошибок | No JS errors |
+| 3.2 | Bounding box | Соответствует размерам из промта | ±10% |
+| 3.3 | Watertight | Нет дыр в меше | mesh.is_watertight=true |
+| 3.4 | Vertices count | >1000 для детализированной модели | >1000 |
+| 3.5 | Текстуры | UV-mapped, PBR материалы | Textures loaded |
+
+#### Suite 4: PDF/DWG Analysis
+
+| # | Тест | Что проверяет | Критерий |
+|---|------|--------------|----------|
+| 4.1 | PDF upload | API принимает файл, возвращает JSON | status=ok |
+| 4.2 | Комнаты найдены | Извлечены названия комнат | ≥1 room |
+| 4.3 | Размеры | Извлечены размеры в метрах | dimensions > 0 |
+| 4.4 | MEP системы | Вентиляция/отопление/водоснабжение | ≥1 system |
+| 4.5 | DXF upload | API принимает, возвращает слои | status=ok |
+
+#### Suite 5: Pipeline Profile Detection
+
+| # | Промт | Ожидаемый profile | Проверка |
+|---|-------|------------------|----------|
+| 5.1 | "Ванная с джакузи" | interior | API JSON |
+| 5.2 | "Ландшафт сада" | landscape | API JSON |
+| 5.3 | "Построить дом" | standard | API JSON |
+| 5.4 | "Электрика щиток" | electrical | API JSON |
+| 5.5 | "Полный дизайн интерьера" | interior_full | API JSON |
+
+### Защита от галлюцинаций
+
+**Ключевой принцип: каждый факт — с доказательством.**
+
+| Защита | Реализация |
+|--------|----------|
+| Логи API | Каждый HTTP-запрос/ответ логирую. Не "я проверил", а "вот JSON ответ" |
+| Скриншоты | Каждый шаг — скриншот. Не "выглядит хорошо", а "вот скрин, вот анализ vision" |
+| Автоматические asserts | `assert resolution >= 3840` — если не прошло, пишу ❌, не ✅ |
+| Vision-модель как судья | mimo-omni анализирует скриншот БЕЗ контекста — описывает что видит |
+| Публикация доказательств | Все скрины, логи, JSON — в TEST_REPORT.md |
+| Не доверяю себе | Если написал "✅" — требую лог/скрин. Нет доказательства = "⚠️ не проверено" |
+
+**Пример:**
+```
+❌ Вранье: "Джакузи присутствует на рендере"
+✅ Проверка:
+   1. Скриншот → /screenshots/render.png
+   2. Vision: "Ванная комната. Видна ванна белого цвета. Джакузи НЕ видно."
+   3. Вывод: ❌ Джакузи отсутствует. Нужно исправить furniture_agent.
+```
+
+---
+
 ## Ограничения
 
 | Ограничение | Описание |
