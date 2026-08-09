@@ -8,7 +8,7 @@ shared/agents/runner.py - Изолированное выполнение аге
     runner = AgentRunner(timeout=120)
     result = runner.run("geometry", task)
     if result.fallback:
-        print("Agent failed, using fallback")
+        logger.debug("Agent failed, using fallback")
 """
 
 import logging

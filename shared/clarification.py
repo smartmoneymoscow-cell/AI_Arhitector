@@ -11,7 +11,7 @@ shared/clarification.py — Система уточняющих вопросов
     result = engine.analyze("построй дом")
     if result.needs_clarification:
         for q in result.questions:
-            print(q.text)
+            logger.debug("Clarification question: %s", q.text)
 """
 
 import json

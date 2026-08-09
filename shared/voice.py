@@ -14,6 +14,9 @@ shared/voice.py — Голосовой ввод через Whisper.
 """
 
 import os
+import logging
+
+logger = logging.getLogger("archai.voice")
 import tempfile
 
 
@@ -62,10 +65,10 @@ def transcribe_audio(audio_bytes: bytes, language: str = "ru", api_key: str = ""
         if r.status_code == 200:
             return r.text.strip()
         else:
-            print(f"[voice] Whisper API error: {r.status_code} {r.text[:200]}")
+            logger.warning("Whisper API error: {r.status_code} {r.text[:200]}")
             return _transcribe_local(audio_bytes, language)
     except Exception as e:
-        print(f"[voice] Whisper API failed: {e}, trying local")
+        logger.warning("Whisper API failed: {e}, trying local")
         return _transcribe_local(audio_bytes, language)
 
 

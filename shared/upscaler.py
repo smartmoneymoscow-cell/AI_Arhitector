@@ -13,6 +13,9 @@ shared/upscaler.py — Апскейл изображений через Real-ESR
 """
 
 import os
+import logging
+
+logger = logging.getLogger("archai.upscaler")
 
 
 def upscale_image(input_path: str, output_path: str, scale: int = 4) -> str:
@@ -35,7 +38,7 @@ def upscale_image(input_path: str, output_path: str, scale: int = 4) -> str:
     except ImportError:
         pass
     except Exception as e:
-        print(f"[upscaler] Real-ESRGAN failed: {e}, falling back to PIL")
+        logger.warning(" Real-ESRGAN failed: {e}, falling back to PIL")
 
     # Попытка 2: PIL (базовый апскейл)
     return _upscale_pil(input_path, output_path, scale)
