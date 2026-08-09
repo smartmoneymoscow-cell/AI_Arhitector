@@ -4,6 +4,48 @@
 
 ---
 
+## v11.2.1 — Audit Critical Fixes: Quality Agent, Timeouts, CORS, Bare Excepts
+
+### Дата: 2026-08-10
+
+### Проблема
+Аудит выявил P0/P1 баги: quality agent на 60% нерабочий (mimo-omni — локальный путь, не существует в Docker), in-process агенты без таймаута (зависший агент блокирует gateway), CORS wildcard `*` в LLM/Blender сервисах, 30+ bare `except: pass` по всему коду.
+
+### Что исправлено
+
+#### P0 — Критические
+
+| # | Файл | Баг | Исправление |
+|---|------|-----|-------------|
+| 1 | `shared/preview.py` | `_call_mimo_omni()` — путь не существует в Docker. 3/5 уровней quality agent всегда green | `_call_vision_llm()`: Gemini Vision через llm-service + прямой Gemini API fallback |
+| 2 | `shared/agents/runner.py` | `_run_in_process()` без таймаута — зависший агент блокирует gateway | Threading-based timeout с configurable значением |
+| 3 | `shared/agents/runner.py` | Compliance fallback `passed: True` при падении | `passed: False` — fail-safe |
+| 4 | `llm-service/app.py`, `blender-service/app.py` | CORS default `"*"` | Default `""` + warning |
+
+#### P1 — Серьёзные
+
+| # | Файлы | Что | Исправление |
+|---|-------|-----|-------------|
+| 5 | blender.py, render_agent.py, blender-service, generate_building, freecad, graphdb, pbr_scraper, celery, tiled_render, vectordb | 30+ bare `except: pass` | Конкретные типы: KeyError, AttributeError, TypeError, Exception |
+
+### Статистика
+- 13 файлов, +245/-108 строк
+- 0 bare `except:` (было 30+)
+- 5/5 уровней quality agent работают (было 2/5)
+
+### Что НЕ вошло (следующие релизы)
+- 27/30 агентов in-process, не микросервисы
+- Jobs in-memory
+- Pipeline последовательный
+- 9 сервисов declared, 3 работают
+- Зависимости устарели (32 issues)
+
+---
+
+Все значимые изменения, планы доработок и итоги.
+
+---
+
 ## v11.2.0 — Frontend/Backend Stitching + Critical Pipeline Fixes
 
 ### Дата: 2026-08-09
