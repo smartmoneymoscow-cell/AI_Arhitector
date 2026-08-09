@@ -1429,7 +1429,7 @@ async function _resumeOrchestrator() {
   try {
     _ensureApiKey();
     const ctrl = new AbortController();
-    const tid = setTimeout(()=>ctrl.abort(), 300000);
+    const tid = setTimeout(()=>ctrl.abort(), 620000);
 
     const r = await fetch(API_BASE+'/api/v1/orchestrator/resume', {
       method:'POST',
