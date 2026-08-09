@@ -21,7 +21,7 @@ Pillow>=12.3.0
 ifcopenshell>=0.8.5
 
 # ═══ 3D mesh processing (fast GLB/DXF export) ═══
-trimesh>=4.12.2
+trimesh>=5.0.0
 numpy>=1.26.0
 
 # ═══ CAD (optional — OpenCascade) ═══
