@@ -101,7 +101,7 @@ MOCK_LLM_RESPONSES = {
         "confidence": 0.95,
     },
     "современная спальня 6×8 в стиле хайтек": {
-        "object_type": "room",
+        "object_type": "interior",
         "building_type": "house",
         "room_type": "bedroom",
         "floors": 1,
@@ -187,7 +187,7 @@ def test_llm_prompt_parsing():
     with patch("shared.parser._get_api_keys", return_value=["test-key"]), patch("shared.parser._call_openrouter", side_effect=_mock_call_openrouter):
         params = parse_prompt("современная спальня 6×8 в стиле хайтек")
 
-    assert params["object_type"] == "room", f"Expected room, got {params['object_type']}"
+    assert params["object_type"] == "interior", f"Expected interior, got {params['object_type']}"
     assert params["room_type"] == "bedroom", f"Expected bedroom, got {params['room_type']}"
     assert params["style"] == "hitech", f"Expected hitech, got {params['style']}"
     assert params["width_m"] == 6
@@ -399,7 +399,7 @@ def test_preview_render_config():
     assert standard["engine"] == "CYCLES"
     assert standard["resolution_x"] == 3840
     assert standard["resolution_y"] == 2160
-    assert standard["samples"] == 128
+    assert standard["samples"] == 256
 
     # Test 4c: High preset
     high = QUALITY_PRESETS["high"]
