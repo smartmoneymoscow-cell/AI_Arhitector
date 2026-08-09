@@ -20,7 +20,7 @@ from typing import Any
 import httpx
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 # ═══════════════════════════════════════════════════════════════
@@ -403,12 +403,28 @@ async def export_ifc(req: ExportRequest):
     
     async with httpx.AsyncClient(timeout=120) as client:
         try:
+            # FIX: real ifc-service route is /api/v1/ifc/generate (was calling
+            # the non-existent /generate-ifc, which always 404'd).
             resp = await client.post(
-                f"{IFC_SERVICE_URL}/generate-ifc",
-                json=building_params,
+                f"{IFC_SERVICE_URL}/api/v1/ifc/generate",
+                json={"building": building_params, "version": "IFC2X3"},
             )
             resp.raise_for_status()
-            return resp.json()
+            # FIX: ifc-service returns the generated .ifc file as a binary
+            # FileResponse, not JSON — resp.json() raised on every successful
+            # call. Pass the bytes straight through.
+            return Response(
+                content=resp.content,
+                media_type=resp.headers.get("content-type", "application/x-step"),
+                headers={
+                    "Content-Disposition": resp.headers.get(
+                        "content-disposition", 'attachment; filename="model.ifc"'
+                    )
+                },
+            )
+        except httpx.HTTPStatusError as e:
+            logger.error(f"IFC export failed: {e}")
+            raise HTTPException(status_code=502, detail=f"ifc-service error: {e.response.text[:300]}")
         except Exception as e:
             logger.error(f"IFC export failed: {e}")
             raise HTTPException(status_code=500, detail=f"IFC export failed: {str(e)}")
@@ -487,7 +503,7 @@ async def import_dxf(
     async with httpx.AsyncClient(timeout=60) as client:
         try:
             resp = await client.post(
-                f"{CAD_SERVICE_URL}/import-dxf",
+                f"{CAD_SERVICE_URL}/api/v1/cad/import-dxf",
                 content=content,
                 headers={"Content-Type": "application/octet-stream"},
                 params={
@@ -671,7 +687,7 @@ async def generate_parametric_wall(
     async with httpx.AsyncClient(timeout=60) as client:
         try:
             resp = await client.post(
-                f"{CAD_SERVICE_URL}/parametric-wall",
+                f"{CAD_SERVICE_URL}/api/v1/cad/parametric-wall",
                 json=params,
             )
             resp.raise_for_status()

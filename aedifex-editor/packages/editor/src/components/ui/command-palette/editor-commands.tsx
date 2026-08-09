@@ -38,6 +38,7 @@ import {
 import { useEffect } from 'react'
 import { runRedo, runUndo } from '../../../lib/history'
 import { deleteLevelWithFallbackSelection } from '../../../lib/level-selection'
+import { isBridgeConfigured, exportSceneToIfc } from '../../../lib/aedifex-bridge'
 import { useCommandRegistry } from '../../../store/use-command-registry'
 import type { StructureTool } from '../../../store/use-editor'
 import useEditor from '../../../store/use-editor'
@@ -380,6 +381,36 @@ export function EditorCommands() {
               icon: <Box className="h-4 w-4" />,
               keywords: ['export', 'glb', 'gltf', '3d', 'model', 'download'],
               execute: () => run(() => exportScene()),
+            },
+          ]
+        : []),
+      ...(isBridgeConfigured()
+        ? [
+            {
+              id: 'editor.export.ifc',
+              label: 'Export IFC (BIM)',
+              group: 'Export & Share',
+              icon: <Building2 className="h-4 w-4" />,
+              keywords: ['export', 'ifc', 'bim', 'download'],
+              execute: () =>
+                run(async () => {
+                  try {
+                    const { nodes, rootNodeIds } = useScene.getState()
+                    const blob = await exportSceneToIfc({ nodes, rootNodeIds })
+                    const url = URL.createObjectURL(blob)
+                    Object.assign(document.createElement('a'), {
+                      href: url,
+                      download: `scene_${new Date().toISOString().split('T')[0]}.ifc`,
+                    }).click()
+                    URL.revokeObjectURL(url)
+                  } catch (err) {
+                    // No toast/notification system is wired into this
+                    // package yet — window.alert is the honest minimum
+                    // rather than inventing a UI pattern that doesn't
+                    // exist elsewhere in the codebase.
+                    window.alert(err instanceof Error ? err.message : 'IFC export failed.')
+                  }
+                }),
             },
           ]
         : []),

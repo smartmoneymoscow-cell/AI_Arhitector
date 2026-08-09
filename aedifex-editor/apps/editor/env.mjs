@@ -25,6 +25,9 @@ export const env = createEnv({
     NEXT_PUBLIC_ASSETS_CDN_URL: z.string().optional(),
     NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: z.string().optional(),
     NEXT_PUBLIC_APP_URL: z.string().optional(),
+    // FIX: was passed by docker-compose but never declared here, so it was
+    // invisible to env validation and easy to forget existed at all.
+    NEXT_PUBLIC_API_URL: z.string().optional(),
   },
 
   /**
@@ -38,6 +41,7 @@ export const env = createEnv({
       process.env.NEXT_PUBLIC_ASSETS_CDN_URL ?? process.env.NEXT_PUBLIC_EDITOR_ASSETS_CDN_URL,
     NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
   },
 
   /**

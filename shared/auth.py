@@ -66,13 +66,23 @@ def get_api_key_required(api_key: str = Security(API_KEY_HEADER)) -> str:
 
 
 def get_api_key_optional(api_key: str | None = Security(API_KEY_HEADER)) -> str | None:
-    """Optional auth. Only used for endpoints that can be public."""
+    """Optional auth for public-facing endpoints (chat/parse/orchestrator/...).
+
+    FIX (2026-08): previously this behaved identically to get_api_key_required
+    whenever ARCH_API_KEYS was configured — it raised 401 on a missing header,
+    which made it impossible for a browser client (no way to obtain/enter a
+    key) to ever reach these routes. Now:
+      - no header + keys configured  -> anonymous access, returns None
+      - header present               -> must be valid, or 403
+      - no header + no keys configured -> returns None (unchanged)
+    This keeps ARCH_API_KEYS useful for trusted/partner callers (they can
+    still send X-API-Key and get authenticated identity back), without
+    blocking ordinary visitors who have no key to send.
+    """
     valid_keys = _load_api_keys()
-    if not valid_keys:
-        return None
     if not api_key:
-        raise HTTPException(status_code=401, detail="Missing API key.")
-    if api_key not in valid_keys:
+        return None
+    if valid_keys and api_key not in valid_keys:
         logger.warning("Invalid API key: %s", _mask_key(api_key))  # S3: masked
         raise HTTPException(status_code=403, detail="Invalid API key")
     return api_key
