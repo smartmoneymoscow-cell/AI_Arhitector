@@ -19,5 +19,5 @@ COPY blender-service/ /app/blender-service/
 COPY server.py /app/
 RUN mkdir -p /app/output
 EXPOSE 8082
-ENV PORT=8082 DISPLAY=:99 PYTHONUNBUFFERED=1 PATH="/app/venv/bin:$PATH"
+ENV PORT=8082 DISPLAY=:99 PYTHONUNBUFFERED=1 PYTHONPATH=/app PATH="/app/venv/bin:$PATH"
 CMD ["sh", "-c", "Xvfb :99 -screen 0 1920x1080x24 &>/dev/null & exec python3 blender-service/app.py"]

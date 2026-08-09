@@ -10,9 +10,7 @@ v6.0 — БЕЗ REGEX FALLBACK.
 import asyncio
 import logging
 import os
-import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import httpx
 from fastapi import FastAPI, HTTPException

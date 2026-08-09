@@ -623,17 +623,27 @@ class Orchestrator:
                 logger.info("SVG drawings generated: %s", list(drawings.keys()))
             except Exception as e:
                 logger.warning("SVG drawings generation failed: %s", e)
-            for agent_name in post_agents:
-                agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
-                result = self._run_agent(
-                    agent_name,
-                    {"name": agent_name, "agent": agent_name, "params": agent_params},
-                    timeout=60,
-                )
-                if result.status == TaskStatus.DONE and result.data:
-                    post_results[agent_name] = result.data
-                if result.fallback:
-                    job["fallback_agents"].append(agent_name)
+            # Post-agents are independent — run in parallel
+            if post_agents:
+                import concurrent.futures
+
+                def _run_post_agent(agent_name):
+                    agent_params = self._build_agent_params(agent_name, params, gen_type, building_params)
+                    result = self._run_agent(
+                        agent_name,
+                        {"name": agent_name, "agent": agent_name, "params": agent_params},
+                        timeout=60,
+                    )
+                    return agent_name, result
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(post_agents), 3)) as executor:
+                    futures = {executor.submit(_run_post_agent, a): a for a in post_agents}
+                    for future in concurrent.futures.as_completed(futures):
+                        agent_name, result = future.result()
+                        if result.status == TaskStatus.DONE and result.data:
+                            post_results[agent_name] = result.data
+                        if result.fallback:
+                            job["fallback_agents"].append(agent_name)
 
             # ═══ Collect results ═══
             streamer.emit(

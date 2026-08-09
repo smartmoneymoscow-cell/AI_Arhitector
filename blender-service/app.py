@@ -9,10 +9,8 @@ Tiled rendering для 16K.
 import logging
 import os
 import subprocess
-import sys
 import uuid
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import httpx
 from fastapi import FastAPI, HTTPException

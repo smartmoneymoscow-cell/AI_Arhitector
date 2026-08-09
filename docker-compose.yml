@@ -119,9 +119,9 @@ services:
       retries: 3
       start_period: 30s
 
-  # FIX: ifc-service and cad-service had code + Dockerfiles in the repo but
-  # were never added as compose services, so the hostnames aedifex-bridge
-  # references (ifc-service, cad-service) never resolved on the Docker network.
+  # NOTE: ifc-service and cad-service are ONLY used by aedifex-bridge (BIM editor).
+  # The chat pipeline (gateway → llm-service → blender-service) does NOT call them.
+  # If you don't use aedifex, comment out these 2 services + their depends_on in aedifex-bridge.
   ifc-service:
     build:
       context: ./ifc-service
