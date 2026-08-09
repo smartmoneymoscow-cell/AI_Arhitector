@@ -54,10 +54,10 @@ async def _mock_call_openrouter(model, prompt, timeout, api_key):
 
     for key, resp in MOCK_RESPONSES.items():
         if key in text or text in key:
-            return resp
-    return {"object_type": "building", "building_type": "house", "floors": 2,
+            return resp, 200, ""
+    return ({"object_type": "building", "building_type": "house", "floors": 2,
             "width_m": 10, "length_m": 12, "style": "modern", "material": "plaster",
-            "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.5}
+            "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.5}, 200, "")
 
 
 # ═══════════════════════════════════════════════════════════════

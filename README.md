@@ -1,4 +1,4 @@
-# Architect v11.0.0 — AI Architecture Generator
+# Architect v11.1.0 — AI Architecture Generator
 
 Генерация 3D-моделей зданий и интерьеров по текстовому описанию на русском языке.
 
@@ -13,8 +13,10 @@ cd AI_Arhitector
 cp .env.example .env
 
 # 3. Заполнить ключи в .env (минимум один):
-#    GOOGLE_API_KEY=AIzaSy-xxxx        ← бесплатно, https://aistudio.google.com/apikey
-#    OPENROUTER_API_KEY=sk-or-xxxx     ← бесплатные модели, https://openrouter.ai
+#    GOOGLE_API_KEY=AIzaSy-key1        ← бесплатно, https://aistudio.google.com/apikey
+#    GOOGLE_FALLBACK_KEYS=AIzaSy-key2,AIzaSy-key3  ← ротация
+#    OPENROUTER_API_KEY=sk-or-v1-aaaa   ← бесплатные модели, https://openrouter.ai
+#    OPENROUTER_FALLBACK_KEYS=sk-or-v1-bbbb,sk-or-v1-cccc  ← ротация
 
 # 4. Запуск
 docker-compose up -d
@@ -39,11 +41,19 @@ docker-compose up -d
 ### LLM-цепочка (бесплатно)
 
 ```
-1. Google Gemini API  ← основной, 4 ключа с ротацией
-2. OpenRouter :free   ← фолбэк, 8 моделей
+1. Google Gemini API  ← все ключи равноправны, round-robin + cooldown
+2. OpenRouter :free   ← автодисковери бесплатных моделей каждый час
 3. Ollama (local)     ← опционально
 4. Regex fallback     ← крайний случай
 ```
+
+### Key Rotation
+
+- Все ключи Gemini и OpenRouter равноправны (нет "основных" и "фолбэков")
+- При 429 (RPM) → ключ помечается на 60 сек, переход к следующему
+- При 402/quota → ключ помечается на 24 часа
+- Cooldown дублируется в Redis — переживает рестарт контейнера
+- `GET /api/v1/keys/status` — мониторинг: сколько ключей настроено / живых
 
 ### Pipeline агентов
 
@@ -54,6 +64,18 @@ docker-compose up -d
 
 20+ специализированных агентов: парсер, геометрия, текстуры, свет,
 конструктив, нормативы, рендер, качество, экспорт.
+
+## Что нового в v11.1.0
+
+- **Key Health Tracker** — единая система cooldown для Gemini и OpenRouter, дублирование в Redis
+- **Все ключи равноправны** — round-robin вместо "основной + фолбэк"
+- **Background discovery** — список бесплатных моделей OpenRouter обновляется каждый час
+- **Eager discovery** — обновление при старте сервиса, не при первом запросе
+- **Discovery → Redis** — список моделей共享 между воркерами и переживает рестарт
+- **chat_completions перебор** — все ключи пробуются автоматически при 429/402
+- **404 handling** — если модель удалена из OpenRouter → invalidate discovery + следующая модель
+- **GET /api/v1/keys/status** — endpoint мониторинга ключей
+- **KEY_COOLDOWN_RATE_LIMIT_SEC / KEY_COOLDOWN_QUOTA_SEC** — настраиваемые cooldown
 
 ## Что нового в v11.0.0
 

@@ -4,6 +4,79 @@
 
 ---
 
+## v11.1.0 — Key Rotation + Free Model Discovery + Cooldown
+
+### Дата: 2026-08-09
+
+### Проблема
+LLM-цепочка не использовала все доступные ключи:
+1. Gemini: `max_retries=3` — при 4 ключах четвёртый никогда не пробовался
+2. OpenRouter: при 429/402 ключ не помечался как исчерпанный — повторные запросы шли на тот же ключ
+3. Discovery бесплатных моделей вызывался только по HTTP и только один раз за жизнь процесса
+4. `chat_completions` endpoint использовал только один ключ
+5. Cooldown не переживал рестарт контейнера (in-memory only)
+
+### Что исправлено
+
+#### Key Health Tracker (`shared/parser.py`)
+- **Единая система cooldown** для Gemini и OpenRouter: `_KEY_COOLDOWN`, `_mark_key_dead()`, `_filter_alive()`, `_is_key_cooling()`
+- RPM-лимит (429) → короткий cooldown (60 сек)
+- Дневная квота / нет кредитов (402, quota) → длинный cooldown (24 часа)
+- Cooldown дублируется в **Redis** — переживает рестарт/передеплой контейнера
+- `_filter_alive()`: если ВСЕ ключи остывают — возвращает исходный список (лучше протухший, чем ничего)
+
+#### Gemini — все ключи равноправны (`shared/parser.py`)
+- Убран `max_retries=3` → `for attempt in range(len(keys))` — пробуем КАЖДЫЙ живой ключ
+- Round-robin через `_GEMINI_KEY_IDX`
+- На 429: `_mark_key_dead()` + мгновенный переход к следующему (вместо `asyncio.sleep`)
+- На 400/403: `_mark_key_dead(key, QUOTA_EXHAUSTED)` — невалидный ключ
+
+#### OpenRouter — ключ + статус ответа (`shared/parser.py`)
+- `_call_openrouter()` теперь возвращает `(dict|None, http_status, body_snippet)` вместо `dict|None`
+- 429/402 → `_mark_key_dead()` + `continue` (следующий ключ)
+- 404 → модель удалена из каталога → `invalidate_discovery()` + следующая модель
+- Re-filter `_filter_alive()` перед каждой моделью в каскаде
+
+#### Discovery бесплатных моделей
+- **Background loop** в `llm-service/app.py`: каждые 3600 сек ходит в OpenRouter `/models`
+- **Eager discovery при старте**: обновляем список СРАЗУ, не ждём первого запроса
+- **Redis persistence**: `_save_discovery_to_redis()` / `_load_discovery_from_redis()` —共享 между воркерами
+- **`_maybe_trigger_discovery()`**: lazy refresh при каждом запросе если список устарел
+- **Защита от пустого ответа**: если OpenRouter вернул 0 моделей — не затираем предыдущий список
+- **`_cascade_is_stale()`**: точечная проверка свежести кэша
+
+#### chat_completions — перебор всех ключей (`llm-service/app.py`)
+- Цикл по `_filter_alive(all_keys)` с автоматическим переключением при 429/402
+- Новый endpoint `GET /api/v1/keys/status` — мониторинг: сколько ключей настроено / живых
+
+#### Конфигурация
+- `.env.example`: добавлены `KEY_COOLDOWN_RATE_LIMIT_SEC`, `KEY_COOLDOWN_QUOTA_SEC`
+- `docker-compose.yml`: проброс `KEY_COOLDOWN_*` в llm-service
+- `render.yml`: добавлены `OPENROUTER_FALLBACK_KEYS`, `GOOGLE_FALLBACK_KEYS`, `KEY_COOLDOWN_*`
+
+#### Тесты
+- Все mock `_call_openrouter` обновлены: `return_value=dict` → `return_value=(dict, 200, "")`
+- `return_value=None` → `return_value=(None, 500, "boom")`
+- `_l1_get` / `_l2_get` моки остались `return_value=None` (не зависят от формата)
+
+### Сводная таблица
+
+| # | Задача | Статус |
+|---|--------|--------|
+| 1 | Gemini: все ключи вместо 3 попыток | ✅ Done |
+| 2 | Key Health Tracker (cooldown + Redis) | ✅ Done |
+| 3 | _call_openrouter → tuple (status, body) | ✅ Done |
+| 4 | 404 → invalidate discovery | ✅ Done |
+| 5 | Background discovery loop | ✅ Done |
+| 6 | Eager discovery at startup | ✅ Done |
+| 7 | Discovery → Redis persistence | ✅ Done |
+| 8 | chat_completions — перебор ключей | ✅ Done |
+| 9 | GET /api/v1/keys/status | ✅ Done |
+| 10 | .env + docker-compose + render.yml | ✅ Done |
+| 11 | Тесты обновлены | ✅ Done |
+
+---
+
 ## v11.0.1 — Pipeline Integration + Quality Fixes
 
 ### Исправления pipeline

@@ -76,10 +76,10 @@ async def _mock_call_openrouter(model, prompt, timeout, api_key):
 
     for key, resp in MOCK_RESPONSES.items():
         if key in text:
-            return resp
-    return {"object_type": "building", "building_type": "house", "floors": 2,
+            return resp, 200, ""
+    return ({"object_type": "building", "building_type": "house", "floors": 2,
             "width_m": 10, "length_m": 12, "style": "modern", "material": "plaster",
-            "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.5}
+            "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.5}, 200, "")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -140,7 +140,7 @@ test("Parser: empty prompt", test_parser_empty)
 
 def test_parser_all_models_failed():
     from shared.parser import parse_prompt, AllModelsFailedError
-    with patch("shared.parser._call_openrouter", return_value=None):
+    with patch("shared.parser._call_openrouter", return_value=(None, 500, "boom")):
         with patch("shared.parser._l2_get", return_value=None):
             try:
                 parse_prompt("test")

@@ -7,6 +7,7 @@ v6.0 — БЕЗ REGEX FALLBACK.
 Если все модели недоступны → HTTP 503.
 """
 
+import asyncio
 import logging
 import os
 import sys
@@ -35,6 +36,15 @@ from shared.parser import (
     get_active_cascade,
     get_discovery_stats,
     invalidate_discovery,
+    _get_api_keys,
+    _filter_alive,
+    _mark_key_dead,
+    _looks_like_quota_exhausted,
+    _mask_key,
+    _cascade_is_stale,
+    _COOLDOWN_RATE_LIMIT,
+    _COOLDOWN_QUOTA_EXHAUSTED,
+    _DISCOVER_TTL,
 )
 
 setup_logging("llm-service")
@@ -57,6 +67,64 @@ app.add_middleware(
 )
 
 
+# ═══════════════════════════════════════════════════════════════
+# Фоновое проактивное обновление списка бесплатных моделей.
+#
+# Раньше обновление списка бесплатных моделей OpenRouter случалось
+# только "по требованию" внутри пользовательского запроса — и то
+# из-за бага срабатывало лишь ОДИН раз за всё время жизни процесса.
+# Теперь отдельная фоновая корутина каждые _DISCOVER_TTL секунд сама
+# ходит в OpenRouter /models и обновляет кэш (в памяти + Redis), так
+# что пользовательские запросы почти всегда получают уже тёплый,
+# актуальный список и не платят задержкой за обновление.
+# ═══════════════════════════════════════════════════════════════
+
+_discovery_task: asyncio.Task | None = None
+
+
+async def _discovery_background_loop():
+    # Небольшая случайная задержка перед первым запуском, чтобы не
+    # штурмовать OpenRouter в момент старта, если поднимается сразу
+    # несколько инстансов сервиса.
+    await asyncio.sleep(5)
+    while True:
+        try:
+            api_key = os.environ.get("OPENROUTER_API_KEY", "") or (
+                _filter_alive(_get_api_keys())[0] if _get_api_keys() else ""
+            )
+            if api_key:
+                models = await discover_free_models(api_key)
+                logger.info("Background discovery: %d free models cached", len(models))
+            else:
+                logger.warning("Background discovery: no OPENROUTER_API_KEY, skipping")
+        except Exception as e:
+            logger.warning("Background discovery loop error: %s", e)
+        await asyncio.sleep(_DISCOVER_TTL)
+
+
+@app.on_event("startup")
+async def _on_startup():
+    global _discovery_task
+    # Eager discovery: обновляем список бесплатных моделей СРАЗУ при старте,
+    # а не ждём первого пользовательского запроса или первого тика фонового цикла.
+    try:
+        api_key = os.environ.get("OPENROUTER_API_KEY", "") or (
+            _filter_alive(_get_api_keys())[0] if _get_api_keys() else ""
+        )
+        if api_key:
+            models = await discover_free_models(api_key)
+            logger.info("Eager discovery at startup: %d free models", len(models))
+    except Exception as e:
+        logger.warning("Eager discovery at startup failed: %s", e)
+    _discovery_task = asyncio.create_task(_discovery_background_loop())
+
+
+@app.on_event("shutdown")
+async def _on_shutdown():
+    if _discovery_task:
+        _discovery_task.cancel()
+
+
 @app.get("/health")
 async def health():
     # Fast health check — don't wait for Redis
@@ -72,20 +140,14 @@ async def health():
 
 @app.post("/api/v1/chat/completions", response_model=ChatResponse)
 async def chat_completions(req: ChatRequest):
-    """Chat proxy to OpenRouter."""
-    headers = {
-        "Content-Type": "application/json; charset=utf-8",
-        "HTTP-Referer": "https://archai.app",
-        "X-Title": "Architect LLM",
-    }
-    if settings.OPENROUTER_API_KEY:
-        headers["Authorization"] = f"Bearer {settings.OPENROUTER_API_KEY}"
-    else:
-        # Fallback: read directly from env (settings may not pick up Render env vars)
-        import os
-        _key = os.environ.get("OPENROUTER_API_KEY", "")
-        if _key:
-            headers["Authorization"] = f"Bearer {_key}"
+    """Chat proxy to OpenRouter — перебирает ВСЕ аккаунты (primary + fallback),
+    автоматически пропуская те, что сейчас 'остывают' после 429/402,
+    и переключаясь на следующий при исчерпании текущего."""
+    all_keys = _get_api_keys()
+    if not all_keys:
+        raise HTTPException(503, "No OPENROUTER_API_KEY configured")
+
+    keys = _filter_alive(all_keys)
 
     payload = {
         "model": req.model or settings.LLM_MODEL,
@@ -94,23 +156,47 @@ async def chat_completions(req: ChatRequest):
         "temperature": req.temperature,
     }
 
-    try:
-        async with httpx.AsyncClient() as client:
-            r = await client.post(
-                f"{settings.OPENROUTER_BASE}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=60.0,
-            )
+    last_error: tuple[int, str] | None = None
+
+    for key in keys:
+        headers = {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": f"Bearer {key}",
+            "HTTP-Referer": "https://archai.app",
+            "X-Title": "Architect LLM",
+        }
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    f"{settings.OPENROUTER_BASE}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=60.0,
+                )
+        except httpx.TimeoutException:
+            last_error = (504, "OpenRouter timeout")
+            continue
+        except Exception as e:
+            last_error = (502, str(e))
+            continue
+
         if r.status_code == 200:
             return r.json()
+
+        if r.status_code in (429, 402):
+            if _looks_like_quota_exhausted(r.status_code, r.text):
+                _mark_key_dead(key, _COOLDOWN_QUOTA_EXHAUSTED, f"chat_http_{r.status_code}_quota")
+            else:
+                _mark_key_dead(key, _COOLDOWN_RATE_LIMIT, f"chat_http_{r.status_code}_rate_limit")
+            logger.warning("chat_completions: key %s exhausted, switching account", _mask_key(key))
+            last_error = (r.status_code, r.text)
+            continue
+
+        # Другая ошибка (400/500 и т.п.) — не проблема ключа, дальше пробовать бессмысленно
         raise HTTPException(status_code=r.status_code, detail=r.text)
-    except httpx.TimeoutException:
-        raise HTTPException(504, "OpenRouter timeout")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(502, str(e))
+
+    status, detail = last_error or (503, "No live OpenRouter keys")
+    raise HTTPException(status_code=status if status in (429, 402) else 503, detail=detail)
 
 
 @app.post("/api/v1/parse", response_model=ParsedParams)
@@ -141,6 +227,29 @@ async def parse_prompt_endpoint(req: ParseRequest):
                 "message": f"{type(e).__name__}: {str(e)[:500]}",
             },
         )
+
+
+@app.get("/api/v1/keys/status")
+async def keys_status():
+    """Сколько аккаунтов настроено / живо прямо сейчас (для мониторинга)."""
+    from shared.parser import _get_google_keys, _is_key_cooling
+
+    or_keys = _get_api_keys()
+    gm_keys = _get_google_keys()
+
+    def _status(keys):
+        return [
+            {"key": _mask_key(k), "alive": not _is_key_cooling(k)}
+            for k in keys
+        ]
+
+    or_status = _status(or_keys)
+    gm_status = _status(gm_keys)
+    return {
+        "openrouter": {"total": len(or_keys), "alive": sum(s["alive"] for s in or_status), "keys": or_status},
+        "gemini": {"total": len(gm_keys), "alive": sum(s["alive"] for s in gm_status), "keys": gm_status},
+        "total_accounts": len(or_keys) + len(gm_keys),
+    }
 
 
 @app.get("/api/v1/cache/stats")

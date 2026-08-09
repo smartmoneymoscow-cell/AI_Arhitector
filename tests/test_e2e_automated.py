@@ -136,13 +136,13 @@ MOCK_LLM_RESPONSES = {
 async def _mock_call_openrouter(model, prompt, timeout, api_key):
     for key, resp in MOCK_LLM_RESPONSES.items():
         if key in prompt:
-            return resp
-    return {
+            return resp, 200, ""
+    return ({
         "object_type": "building", "building_type": "house", "room_type": None,
         "floors": 2, "width_m": 10, "length_m": 12, "height_m": 3,
         "style": "modern", "material": "plaster", "roof_type": "gabled",
         "features": [], "furniture": [], "confidence": 0.5,
-    }
+    }, 200, "")
 
 _mock_call_llm = _mock_call_openrouter
 

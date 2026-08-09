@@ -670,7 +670,7 @@ def run_dry_test(prompt: str) -> TestReport:
         }
 
         async def mock_call_openrouter(model, prompt, timeout, api_key):
-            return mock_response
+            return mock_response, 200, ""
 
         with patch("shared.parser._get_api_keys", return_value=["fake-key"]),              patch("shared.parser._call_openrouter", side_effect=mock_call_openrouter):
             parsed = parse_prompt(prompt)

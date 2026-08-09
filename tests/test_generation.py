@@ -85,11 +85,11 @@ async def _mock_call_openrouter(model, prompt, timeout, api_key):
     """Мок _call_openrouter — возвращает предопределённый ответ."""
     for prompt_key, response in MOCK_LLM_RESPONSES.items():
         if prompt_key in prompt or prompt in prompt_key:
-            return response
+            return response, 200, ""
     # Дефолтный ответ
-    return {"object_type": "building", "building_type": "house", "floors": 2,
+    return ({"object_type": "building", "building_type": "house", "floors": 2,
             "width_m": 10, "length_m": 12, "style": "modern", "material": "plaster",
-            "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.5}
+            "roof_type": "gabled", "features": [], "furniture": [], "confidence": 0.5}, 200, "")
 
 # Backward compat alias
 _mock_call_llm = _mock_call_openrouter
@@ -180,13 +180,13 @@ class TestAllModelsFailed:
     """Тесты поведения при недоступности всех моделей."""
 
     @patch("shared.parser._l1_get", return_value=None)
-    @patch("shared.parser._call_openrouter", return_value=None)
+    @patch("shared.parser._call_openrouter", return_value=(None, 500, "boom"))
     @patch("shared.parser._l2_get", return_value=None)
     def test_raises_when_all_models_fail(self, mock_redis, mock_llm, mock_l1):
         with pytest.raises(AllModelsFailedError):
             parse_prompt("двухэтажный дом")
 
-    @patch("shared.parser._call_openrouter", return_value=None)
+    @patch("shared.parser._call_openrouter", return_value=(None, 500, "boom"))
     def test_uses_cache_when_models_fail(self, mock_llm):
         # Populate L1 cache
         _l1_set("test cached prompt", {"object_type": "building", "building_type": "house",

@@ -143,6 +143,92 @@ def _get_api_keys() -> list[str]:
 
 
 # ═══════════════════════════════════════════════════════════════
+# KEY HEALTH TRACKER — единый реестр "остывания" ключей
+# (общий для Gemini и OpenRouter, ключи различаются по префиксу,
+#  так что коллизий между провайдерами не будет).
+#
+# Логика:
+#   - RPM-лимит (429 без признаков дневной квоты)         → короткий cooldown (по умолчанию 60с)
+#   - Дневная квота / нет кредитов (402, "quota", "RESOURCE_EXHAUSTED") → длинный cooldown (по умолчанию 24ч)
+#   - Ключ помечается "мёртвым" сразу после ошибки и исключается
+#     из перебора в ЭТОМ и ВСЕХ СЛЕДУЮЩИХ запросах, пока не остынет.
+#   - Опционально дублируется в Redis, чтобы cooldown переживал
+#     рестарт/передеплой сервиса (важно на Render — контейнер часто
+#     пересоздаётся, а in-memory состояние теряется).
+# ═══════════════════════════════════════════════════════════════
+
+_KEY_COOLDOWN: dict[str, float] = {}          # key -> unix ts, до которого ключ не трогаем
+_KEY_COOLDOWN_LOCK = threading.Lock()
+
+_COOLDOWN_RATE_LIMIT = int(os.environ.get("KEY_COOLDOWN_RATE_LIMIT_SEC", "60"))
+_COOLDOWN_QUOTA_EXHAUSTED = int(os.environ.get("KEY_COOLDOWN_QUOTA_SEC", str(24 * 3600)))
+
+
+def _mask_key(key: str) -> str:
+    if len(key) <= 10:
+        return "***"
+    return f"{key[:6]}…{key[-4:]}"
+
+
+def _key_redis_field(key: str) -> str:
+    return f"keycd:{hashlib.sha256(key.encode()).hexdigest()[:16]}"
+
+
+def _is_key_cooling(key: str) -> bool:
+    """True если ключ сейчас 'остывает' и его нужно пропустить."""
+    now = time.time()
+    with _KEY_COOLDOWN_LOCK:
+        until = _KEY_COOLDOWN.get(key)
+    if until and now < until:
+        return True
+    # Проверяем Redis (переживает рестарт процесса)
+    r = _get_redis()
+    if r is not None:
+        try:
+            raw = r.get(_key_redis_field(key))
+            if raw and now < float(raw):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _mark_key_dead(key: str, seconds: int, reason: str) -> None:
+    """Помечает ключ как исчерпанный на `seconds` секунд."""
+    until = time.time() + seconds
+    with _KEY_COOLDOWN_LOCK:
+        _KEY_COOLDOWN[key] = until
+    r = _get_redis()
+    if r is not None:
+        try:
+            r.setex(_key_redis_field(key), seconds, str(until))
+        except Exception:
+            pass
+    logger.warning(
+        "Key %s marked EXHAUSTED (%s) for %ds (until %s)",
+        _mask_key(key), reason, seconds, time.strftime("%H:%M:%S", time.localtime(until)),
+    )
+
+
+def _filter_alive(keys: list[str]) -> list[str]:
+    """Возвращает ключи, которые сейчас не 'остывают'.
+    Если ВСЕ ключи остывают — возвращает исходный список целиком
+    (лучше попробовать 'протухший' ключ, чем не пробовать вообще)."""
+    alive = [k for k in keys if not _is_key_cooling(k)]
+    return alive if alive else keys
+
+
+def _looks_like_quota_exhausted(status_code: int, body: str) -> bool:
+    """Отличает 'подожди немного' (RPM) от 'на сегодня всё' (дневная квота/нет денег)."""
+    if status_code == 402:
+        return True
+    low = (body or "").lower()
+    return any(s in low for s in (
+        "resource_exhausted", "quota", "insufficient_quota", "daily limit", "no credits",
+    ))
+
+
+# ═══════════════════════════════════════════════════════════════
 # L4: OLLAMA LOCAL FALLBACK
 # ═══════════════════════════════════════════════════════════════
 
@@ -203,7 +289,9 @@ _PREFERRED = {
 
 
 async def discover_free_models(api_key: str) -> list[dict]:
-    """Query OpenRouter for available free models."""
+    """Query OpenRouter for available free models. Persists to Redis so
+    the freshly discovered list is shared across all worker processes /
+    service restarts, not just kept in this process's memory."""
     global _DISCOVERED_MODELS, _DISCOVER_TS
 
     with _DISCOVER_LOCK:
@@ -276,14 +364,25 @@ async def discover_free_models(api_key: str) -> list[dict]:
         # Limit to top 15 models to avoid cascade timeout
         free_models = free_models[:15]
 
+        if not free_models:
+            # OpenRouter вернул 200, но НИ ОДНОЙ подходящей бесплатной модели —
+            # не затираем предыдущий рабочий список (вдруг это временный глюк API).
+            logger.warning("OpenRouter /models returned 0 usable free models — keeping previous cascade")
+            return _DISCOVERED_MODELS
+
         with _DISCOVER_LOCK:
             _DISCOVERED_MODELS = free_models
             _DISCOVER_TS = time.time()
 
+        # Персистим в Redis, чтобы остальные воркеры/инстансы не долбили
+        # /models каждый по отдельности и переживали рестарт процесса.
+        _save_discovery_to_redis(free_models, _DISCOVER_TS)
+
         logger.info(
-            "Discovered %d free/cheap models from OpenRouter (was %d in cascade)",
+            "Discovered %d free/cheap models from OpenRouter (was %d in cascade): %s",
             len(free_models),
             len(LLM_CASCADE),
+            [m["model"] for m in free_models[:5]],
         )
         return free_models
 
@@ -292,17 +391,86 @@ async def discover_free_models(api_key: str) -> list[dict]:
         return []
 
 
+_DISCOVERY_REDIS_KEY = "or:discovered_models:v1"
+
+
+def _save_discovery_to_redis(models: list[dict], ts: float) -> None:
+    r = _get_redis()
+    if r is None:
+        return
+    try:
+        r.setex(_DISCOVERY_REDIS_KEY, _DISCOVER_TTL * 6, json.dumps({"models": models, "ts": ts}))
+    except Exception:
+        pass
+
+
+def _load_discovery_from_redis() -> tuple[list[dict], float] | None:
+    """Читает список, обнаруженный ДРУГИМ воркером/процессом, если он свежее нашего."""
+    r = _get_redis()
+    if r is None:
+        return None
+    try:
+        raw = r.get(_DISCOVERY_REDIS_KEY)
+        if not raw:
+            return None
+        data = json.loads(raw)
+        return data.get("models") or [], float(data.get("ts") or 0)
+    except Exception:
+        return None
+
+
+def _cascade_is_stale() -> bool:
+    with _DISCOVER_LOCK:
+        return (not _DISCOVERED_MODELS) or (time.time() - _DISCOVER_TS) >= _DISCOVER_TTL
+
+
 def get_active_cascade(api_key: str = "") -> list[dict]:
-    """Return the active cascade: discovered models + hardcoded fallback."""
+    """Return the active cascade: discovered models (preferred, even if
+    slightly stale) > another worker's fresher Redis snapshot > hardcoded
+    fallback (only if we've NEVER discovered anything, e.g. cold start
+    with OpenRouter unreachable)."""
     global _DISCOVERED_MODELS, _DISCOVER_TS
 
-    # If we have fresh discovered models, use them
     with _DISCOVER_LOCK:
-        if _DISCOVERED_MODELS and (time.time() - _DISCOVER_TS) < _DISCOVER_TTL:
-            return _DISCOVERED_MODELS
+        have_local = bool(_DISCOVERED_MODELS)
+        local_fresh = have_local and (time.time() - _DISCOVER_TS) < _DISCOVER_TTL
 
-    # Otherwise return hardcoded cascade
+    if local_fresh:
+        return _DISCOVERED_MODELS
+
+    # Наш локальный список устарел (или его ещё нет) — проверяем,
+    # не обновил ли его уже другой воркер через Redis.
+    remote = _load_discovery_from_redis()
+    if remote:
+        remote_models, remote_ts = remote
+        if remote_models and remote_ts > _DISCOVER_TS:
+            with _DISCOVER_LOCK:
+                _DISCOVERED_MODELS = remote_models
+                _DISCOVER_TS = remote_ts
+            if (time.time() - remote_ts) < _DISCOVER_TTL:
+                return remote_models
+            have_local = True  # remote тоже устарел, но лучше, чем совсем ничего
+
+    # Отдаём то, что есть (пусть и не первой свежести) — свежий список
+    # реальных free-моделей лучше жёстко зашитого хардкода. Обновление
+    # запустится отдельно (см. _maybe_trigger_discovery ниже).
+    if have_local:
+        return _DISCOVERED_MODELS
+
+    # Совсем ничего не находили ни разу — последний резерв.
     return LLM_CASCADE
+
+
+async def _maybe_trigger_discovery(api_key: str) -> None:
+    """Вызывать перед каждым обращением к каскаду: если список устарел —
+    обновляет его (не блокируя надолго, TTL/models запрос лёгкий)."""
+    if not api_key:
+        return
+    if _cascade_is_stale():
+        try:
+            await discover_free_models(api_key)
+        except Exception as e:
+            logger.warning("Discovery refresh failed, keeping current cascade: %s", e)
 
 
 def invalidate_discovery() -> None:
@@ -311,6 +479,12 @@ def invalidate_discovery() -> None:
     with _DISCOVER_LOCK:
         _DISCOVERED_MODELS = []
         _DISCOVER_TS = 0
+    r = _get_redis()
+    if r is not None:
+        try:
+            r.delete(_DISCOVERY_REDIS_KEY)
+        except Exception:
+            pass
 
 
 def get_discovery_stats() -> dict:
@@ -321,6 +495,7 @@ def get_discovery_stats() -> dict:
             "discovered_models": [m["model"] for m in _DISCOVERED_MODELS[:10]],
             "last_discover_ago": int(time.time() - _DISCOVER_TS) if _DISCOVER_TS else None,
             "ttl": _DISCOVER_TTL,
+            "is_stale": _cascade_is_stale(),
             "hardcoded_fallback": [m["model"] for m in LLM_CASCADE],
         }
 
@@ -494,8 +669,15 @@ def _validate_and_fix(result: dict | None, text: str) -> dict | str | None:
 # ═══════════════════════════════════════════════════════════════
 
 
-async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) -> dict | None:
-    """Call a single LLM model via OpenRouter with given key."""
+async def _call_openrouter(
+    model: str, prompt: str, timeout: int, api_key: str
+) -> tuple[dict | None, int | None, str]:
+    """Call a single LLM model via OpenRouter with given key.
+
+    Returns (parsed_json_or_None, http_status_or_None, raw_body_snippet).
+    Caller uses status/body to decide whether the KEY is exhausted
+    (→ cooldown + switch account) vs the MODEL is just bad for this prompt.
+    """
     base_url = os.environ.get("OPENROUTER_BASE", "https://openrouter.ai/api/v1")
 
     headers = {
@@ -525,16 +707,16 @@ async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) 
             )
 
         if r.status_code == 429:
-            logger.warning("LLM %s rate-limited, trying next key/model", model)
-            return None  # signal to try next key
+            logger.warning("LLM %s rate-limited (key %s), trying next key/model", model, _mask_key(api_key))
+            return None, 429, r.text[:300]
 
         if r.status_code == 402:
-            logger.error("LLM %s: 402 — key has no credits", model)
-            return None
+            logger.error("LLM %s: 402 — key %s has no credits", model, _mask_key(api_key))
+            return None, 402, r.text[:300]
 
         if r.status_code != 200:
             logger.warning("LLM %s returned %d: %s", model, r.status_code, r.text[:200])
-            return None
+            return None, r.status_code, r.text[:300]
 
         data = r.json()
         # Cost tracking: extract token usage
@@ -545,14 +727,14 @@ async def _call_openrouter(model: str, prompt: str, timeout: int, api_key: str) 
             _track_cost(model, tokens_in, tokens_out)
             logger.info("LLM %s tokens: %d in / %d out", model, tokens_in, tokens_out)
         content = data["choices"][0]["message"]["content"]
-        return _extract_json(content)
+        return _extract_json(content), 200, ""
 
     except httpx.TimeoutException:
         logger.warning("LLM %s timeout (%ds)", model, timeout)
-        return None
+        return None, None, "timeout"
     except Exception as e:
         logger.warning("LLM %s error: %s", model, e)
-        return None
+        return None, None, str(e)
 
 
 def _get_google_keys() -> list[str]:
@@ -573,12 +755,25 @@ def _get_google_keys() -> list[str]:
 _GEMINI_KEY_IDX = 0
 
 
-async def _call_gemini(prompt: str, timeout: int = 60, max_retries: int = 3) -> dict | None:
-    """Call Google Gemini API — БЕСПЛАТНО (free tier, 15 RPM per key, ротация ключей)."""
+async def _call_gemini(prompt: str, timeout: int = 60) -> dict | None:
+    """Call Google Gemini API — БЕСПЛАТНО (free tier, 15 RPM per key).
+
+    Перебирает ВСЕ живые (не остывающие) Gemini-ключи по кругу, начиная
+    со следующего после последнего использованного (round-robin), а не
+    ограничивается фиксированным числом попыток — раньше при 4 ключах и
+    max_retries=3 четвёртый ключ вообще никогда не пробовался.
+    Каждый исчерпанный ключ помечается через _mark_key_dead и пропускается
+    во всех следующих запросах, пока не остынет.
+    """
     global _GEMINI_KEY_IDX
-    keys = _get_google_keys()
-    if not keys:
+    all_keys = _get_google_keys()
+    if not all_keys:
         logger.warning("Gemini: NO GOOGLE_API_KEY configured!")
+        return None
+
+    keys = _filter_alive(all_keys)
+    if not keys:
+        logger.warning("Gemini: all %d keys are cooling down, skipping to OpenRouter", len(all_keys))
         return None
 
     payload = {
@@ -595,10 +790,12 @@ async def _call_gemini(prompt: str, timeout: int = 60, max_retries: int = 3) -> 
         }
     }
 
-    for attempt in range(max_retries):
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite-001")
+
+    # Пробуем КАЖДЫЙ живой ключ ровно один раз (round-robin), а не только 3.
+    for attempt in range(len(keys)):
         key = keys[_GEMINI_KEY_IDX % len(keys)]
         _GEMINI_KEY_IDX = (_GEMINI_KEY_IDX + 1) % len(keys)
-        model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite-001")
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={key}"
 
         try:
@@ -606,13 +803,26 @@ async def _call_gemini(prompt: str, timeout: int = 60, max_retries: int = 3) -> 
                 r = await client.post(url, json=payload, timeout=timeout)
 
             if r.status_code == 429:
-                wait = min(2 ** attempt * 3, 30)
-                logger.warning("Gemini rate-limited (key %d/%d), waiting %ds", attempt + 1, len(keys), wait)
-                await asyncio.sleep(wait)
+                body = r.text[:300]
+                if _looks_like_quota_exhausted(429, body):
+                    # Дневная бесплатная квота на этом аккаунте кончилась — сразу переключаемся
+                    _mark_key_dead(key, _COOLDOWN_QUOTA_EXHAUSTED, "gemini_quota_exhausted")
+                else:
+                    # Обычный RPM-лимит (15 req/min) — короткая пауза перед следующим ключом
+                    _mark_key_dead(key, _COOLDOWN_RATE_LIMIT, "gemini_rpm_limit")
+                logger.warning(
+                    "Gemini rate-limited (key %d/%d) — switching to next account", attempt + 1, len(keys)
+                )
+                continue
+
+            if r.status_code in (400, 403):
+                # Невалидный / заблокированный ключ — тоже переключаемся, но надолго
+                _mark_key_dead(key, _COOLDOWN_QUOTA_EXHAUSTED, f"gemini_http_{r.status_code}")
+                logger.error("Gemini key invalid/blocked (%d): %s", r.status_code, r.text[:300])
                 continue
 
             if r.status_code != 200:
-                logger.error("Gemini FAILED %d (key %d/%d): %s", r.status_code, attempt+1, len(keys), r.text[:300])
+                logger.error("Gemini FAILED %d (key %d/%d): %s", r.status_code, attempt + 1, len(keys), r.text[:300])
                 continue
 
             data = r.json()
@@ -620,13 +830,13 @@ async def _call_gemini(prompt: str, timeout: int = 60, max_retries: int = 3) -> 
             return _extract_json(content)
 
         except httpx.TimeoutException:
-            logger.warning("Gemini timeout (%ds)", timeout)
+            logger.warning("Gemini timeout (%ds) on key %d/%d", timeout, attempt + 1, len(keys))
             continue
         except Exception as e:
-            logger.warning("Gemini error: %s", e)
+            logger.warning("Gemini error on key %d/%d: %s", attempt + 1, len(keys), e)
             continue
 
-    logger.error("Gemini: ALL %d attempts FAILED for %d keys", max_retries, len(keys))
+    logger.error("Gemini: all %d live keys failed (of %d total)", len(keys), len(all_keys))
     return None
 
 
@@ -747,10 +957,15 @@ async def parse_prompt_async(text: str) -> dict:
         _l1_set(text, cached)
         return cached
 
-    # ═══ 0. Google Gemini — БЕСПЛАТНО ═══
-    google_keys = _get_google_keys()
-    or_keys = _get_api_keys()
-    logger.info("Parse: %d Google keys, %d OR keys", len(google_keys), len(or_keys))
+    # ═══ 0. Google Gemini — БЕСПЛАТНО (пробуем ВСЕ живые ключи) ═══
+    google_keys_all = _get_google_keys()
+    or_keys_all = _get_api_keys()
+    total_accounts = len(google_keys_all) + len(or_keys_all)
+    logger.info(
+        "Parse: key pool = %d Gemini + %d OpenRouter = %d accounts total (%d Gemini alive, %d OR alive)",
+        len(google_keys_all), len(or_keys_all), total_accounts,
+        len(_filter_alive(google_keys_all)), len(_filter_alive(or_keys_all)),
+    )
     gemini_result = await _call_gemini(text)
     if gemini_result:
         validated = _validate_and_fix(gemini_result, text)
@@ -760,8 +975,8 @@ async def parse_prompt_async(text: str) -> dict:
             logger.info("Gemini parsed successfully: %s", validated.get("building_type"))
             return validated
 
-    # L3: Get all available keys
-    api_keys = _get_api_keys()
+    # L3: Get all available keys, skip ones currently cooling down
+    api_keys = _filter_alive(_get_api_keys())
     if not api_keys:
         logger.error("No OPENROUTER_API_KEY configured")
         # L4: Try Ollama as last resort
@@ -772,16 +987,12 @@ async def parse_prompt_async(text: str) -> dict:
             return result
         raise AllModelsFailedError("No API keys configured and Ollama unavailable")
 
-    # Auto-discover free models from OpenRouter
+    # Auto-discover free models from OpenRouter (обновляем, если список устарел —
+    # не только если он пуст; раньше после первого протухания TTL кэш молча
+    # переставал обновляться и система навсегда откатывалась на хардкод).
+    if api_keys:
+        await _maybe_trigger_discovery(api_keys[0])
     cascade = get_active_cascade(api_keys[0] if api_keys else "")
-
-    # If cascade is empty or stale, trigger async discovery
-    if api_keys and not _DISCOVERED_MODELS:
-        try:
-            await discover_free_models(api_keys[0])
-            cascade = get_active_cascade(api_keys[0])
-        except Exception as e:
-            logger.warning("Discovery failed, using hardcoded cascade: %s", e)
 
     # LLM cascade with key rotation (L3) + Pydantic validation
     for model_config in cascade:
@@ -789,9 +1000,31 @@ async def parse_prompt_async(text: str) -> dict:
         timeout: int = model_config["timeout"]  # type: ignore[assignment]
         tier: int = model_config["tier"]  # type: ignore[assignment]
 
-        for key_idx, api_key in enumerate(api_keys):
-            logger.info("Trying LLM: %s (key %d/%d)", model, key_idx + 1, len(api_keys))
-            result = await _call_openrouter(model, text, timeout, api_key)
+        # Re-filter перед каждой моделью: за время предыдущих попыток
+        # какие-то ключи могли только что "умереть".
+        live_keys = _filter_alive(api_keys)
+        model_removed = False
+
+        for key_idx, api_key in enumerate(live_keys):
+            logger.info("Trying LLM: %s (key %d/%d)", model, key_idx + 1, len(live_keys))
+            result, status, body = await _call_openrouter(model, text, timeout, api_key)
+
+            if status == 404:
+                # OpenRouter больше не знает эту модель — её убрали из каталога.
+                # Это проблема МОДЕЛИ, а не ключа: не наказываем ключ, а форсируем
+                # обновление списка бесплатных моделей на следующий запрос и
+                # сразу переходим к следующей модели в каскаде.
+                logger.warning("Model %s no longer exists on OpenRouter (404) — invalidating discovery cache", model)
+                invalidate_discovery()
+                model_removed = True
+                break
+
+            if status in (429, 402) or (status is not None and status >= 500):
+                if _looks_like_quota_exhausted(status, body):
+                    _mark_key_dead(api_key, _COOLDOWN_QUOTA_EXHAUSTED, f"http_{status}_quota")
+                else:
+                    _mark_key_dead(api_key, _COOLDOWN_RATE_LIMIT, f"http_{status}_rate_limit")
+                continue  # switch to next account automatically
 
             if result:
                 # Level 1: Pydantic validation
@@ -805,7 +1038,12 @@ async def parse_prompt_async(text: str) -> dict:
                 # Level 2: Retry with fix prompt (one attempt)
                 if isinstance(validated, str) and tier <= 2:
                     logger.info("Retrying %s with fix prompt", model)
-                    fix_result = await _call_openrouter(model, validated, timeout, api_key)
+                    fix_result, fix_status, fix_body = await _call_openrouter(model, validated, timeout, api_key)
+                    if fix_status in (429, 402):
+                        if _looks_like_quota_exhausted(fix_status, fix_body):
+                            _mark_key_dead(api_key, _COOLDOWN_QUOTA_EXHAUSTED, f"http_{fix_status}_quota")
+                        else:
+                            _mark_key_dead(api_key, _COOLDOWN_RATE_LIMIT, f"http_{fix_status}_rate_limit")
                     if fix_result:
                         fix_validated = _validate_and_fix(fix_result, text)
                         if isinstance(fix_validated, dict):
@@ -817,6 +1055,9 @@ async def parse_prompt_async(text: str) -> dict:
             if result is not None:
                 # Got response but invalid — try next model, not next key
                 break
+
+        if model_removed:
+            continue  # к следующей модели каскада
 
     # L4: All OpenRouter models failed → try Ollama
     logger.warning("All %d OR models failed (keys: %d). Trying Ollama...", len(cascade), len(api_keys))

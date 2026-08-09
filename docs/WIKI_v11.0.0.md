@@ -1,6 +1,6 @@
-# 📖 AI_Arhitector v11.0.0 — Полная документация (Wiki)
+# 📖 AI_Arhitector v11.1.0 — Полная документация (Wiki)
 
-> Обновлено: 2026-08-09
+> Обновлено: 2026-08-09 (v11.1.0 — Key Rotation + Free Model Discovery + Cooldown)
 
 ---
 
@@ -252,18 +252,21 @@
 
 ```
 Уровень 1: Google Gemini API (БЕСПЛАТНО)
-    ├── 4 ключа с автоматической ротацией
-    ├── Rate limit: 15 RPM/ключ → 60 RPM суммарно
+    ├── ВСЕ ключи равноправны (round-robin, нет "основных")
+    ├── Rate limit: 15 RPM/ключ → 60+ RPM суммарно
     ├── Модель: gemini-2.0-flash-lite-001 (настраивается)
-    └── Прямой API (не через OpenRouter)
+    ├── Прямой API (не через OpenRouter)
+    └── Cooldown: RPM → 60 сек, quota → 24 часа
 
     ↓ если все ключи исчерпаны или ошибка
 
 Уровень 2: OpenRouter Free Models
-    ├── Auto-discovery: автоматический поиск бесплатных моделей
-    ├── 8+ моделей в каскаде (обновляется каждый час)
+    ├── Auto-discovery: обновление каждый час (background loop)
+    ├── Eager discovery: при старте сервиса
+    ├── Discovery → Redis:共享 между воркерами, переживает рестарт
+    ├── 8+ моделей в каскаде
     ├── Приоритеты: tier 1 → tier 2 → tier 3
-    ├── Ключи с ротацией (primary + fallback)
+    ├── ВСЕ ключи равноправны (round-robin + cooldown)
     └── Модели: Gemma, Nemotron, GPT-OSS, Llama, Qwen, DeepSeek
 
     ↓ если все модели недоступны
@@ -281,15 +284,41 @@
     └── Confidence: 0.1 (низкий)
 ```
 
+### Key Health Tracker (v11.1.0)
+
+Единая система управления ключами для Gemini и OpenRouter:
+
+| Ситуация | Код ответа | Cooldown | Действие |
+|----------|-----------|----------|----------|
+| RPM-лимит | 429 (без "quota") | 60 сек | Ключ помечается, переход к следующему |
+| Дневная квота | 402, "quota", "RESOURCE_EXHAUSTED" | 24 часа | Ключ помечается, переход к следующему |
+| Невалидный ключ | 400, 403 | 24 часа | Ключ помечается как невалидный |
+| Модель удалена | 404 | — | invalidate discovery, следующая модель |
+
+**Cooldown переживает рестарт** — дублируется в Redis (`keycd:<hash>`).
+
+**Endpoint мониторинга**: `GET /api/v1/keys/status`
+```json
+{
+  "openrouter": {"total": 3, "alive": 2, "keys": [...]},
+  "gemini": {"total": 4, "alive": 4, "keys": [...]},
+  "total_accounts": 7
+}
+```
+
 ### Auto-discovery бесплатных моделей
 
 Система автоматически запрашивает OpenRouter API (`/api/v1/models`) для поиска доступных бесплатных моделей:
 
 - **TTL**: 1 час (обновление каскада)
+- **Background loop**: обновление каждые 3600 сек в фоне
+- **Eager discovery**: обновление при старте сервиса
+- **Redis persistence**:共享 между воркерами
 - **Фильтры**: цена = 0, поддержка text generation
 - **Blocklist**: исключены музыкальные, vision, safety модели
 - **Preferred**: gemini-2.5-flash, llama-3.3-70b, qwen3-235b, deepseek-v3
 - **Лимит**: top 15 моделей
+- **Защита от пустого ответа**: если 0 моделей — не затираем предыдущий список
 
 ### Кеширование
 
@@ -315,11 +344,13 @@
 
 | Переменная | Обязательна | Описание | Пример |
 |-----------|-------------|----------|--------|
-| `GOOGLE_API_KEY` | Рекомендуется | Google Gemini API key (бесплатно) | `AIzaSy-xxxx` |
-| `GOOGLE_FALLBACK_KEYS` | Опционально | Доп. Gemini ключи (через запятую) | `key1,key2,key3` |
+| `GOOGLE_API_KEY` | Рекомендуется | Google Gemini API key (бесплатно, все ключи равноправны) | `AIzaSy-key1` |
+| `GOOGLE_FALLBACK_KEYS` | Опционально | Доп. Gemini ключи (round-robin) | `key2,key3` |
 | `GEMINI_MODEL` | Опционально | Модель Gemini | `gemini-2.0-flash-lite-001` |
-| `OPENROUTER_API_KEY` | Опционально | OpenRouter API key | `sk-or-xxxx` |
-| `OPENROUTER_FALLBACK_KEYS` | Опционально | Доп. OpenRouter ключи | `key1,key2` |
+| `OPENROUTER_API_KEY` | Опционально | OpenRouter API key (все ключи равноправны) | `sk-or-v1-aaaa` |
+| `OPENROUTER_FALLBACK_KEYS` | Опционально | Доп. OpenRouter ключи (round-robin) | `bbbb,cccc` |
+| `KEY_COOLDOWN_RATE_LIMIT_SEC` | Опционально | Cooldown при RPM-лимите (сек) | `60` |
+| `KEY_COOLDOWN_QUOTA_SEC` | Опционально | Cooldown при quota/402 (сек) | `86400` |
 
 #### Gateway
 

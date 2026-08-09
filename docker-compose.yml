@@ -72,6 +72,8 @@ services:
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash-lite-001}
       - REDIS_URL=redis://redis:6379/1
       - PORT=8081
+      - KEY_COOLDOWN_RATE_LIMIT_SEC=${KEY_COOLDOWN_RATE_LIMIT_SEC:-60}
+      - KEY_COOLDOWN_QUOTA_SEC=${KEY_COOLDOWN_QUOTA_SEC:-86400}
     depends_on:
       redis: {condition: service_healthy}
     restart: unless-stopped
