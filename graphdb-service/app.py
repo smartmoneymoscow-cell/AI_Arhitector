@@ -154,7 +154,7 @@ async def health():
         result = await neo4j_cypher("RETURN 1 as n")
         neo4j_ok = True
         version = "connected"
-    except:
+    except Exception:
         pass
 
     return {

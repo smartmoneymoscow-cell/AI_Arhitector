@@ -56,7 +56,9 @@ app = FastAPI(
     version="7.0.0",
 )
 
-_cors_origins = os.environ.get("CORS_ORIGINS", "*")
+_cors_origins = os.environ.get("CORS_ORIGINS", "")
+if not _cors_origins:
+    logger.warning("CORS_ORIGINS not set — defaulting to empty (no CORS). Set env var for production.")
 _origins_list = [o.strip() for o in _cors_origins.split(",") if o.strip()]
 
 app.add_middleware(

@@ -224,7 +224,7 @@ tex_albedo = nodes.new('ShaderNodeTexImage')
 tex_albedo.location = (-400, 200)
 try:
     tex_albedo.image = bpy.data.images.load("{_s(albedo)}")
-except:
+except Exception:
     pass
 links.new(mapping.outputs["Vector"], tex_albedo.inputs["Vector"])
 links.new(tex_albedo.outputs["Color"], bsdf.inputs["Base Color"])
@@ -238,7 +238,7 @@ tex_rough.location = (-400, 0)
 tex_rough.image.colorspace_settings.name = 'Non-Color'
 try:
     tex_rough.image = bpy.data.images.load("{_s(roughness)}")
-except:
+except Exception:
     pass
 links.new(mapping.outputs["Vector"], tex_rough.inputs["Vector"])
 links.new(tex_rough.outputs["Color"], bsdf.inputs["Roughness"])
@@ -252,7 +252,7 @@ tex_normal.location = (-400, -200)
 tex_normal.image.colorspace_settings.name = 'Non-Color'
 try:
     tex_normal.image = bpy.data.images.load("{_s(normal)}")
-except:
+except Exception:
     pass
 links.new(mapping.outputs["Vector"], tex_normal.inputs["Vector"])
 
@@ -270,7 +270,7 @@ tex_disp.location = (-400, -400)
 tex_disp.image.colorspace_settings.name = 'Non-Color'
 try:
     tex_disp.image = bpy.data.images.load("{_s(displacement)}")
-except:
+except Exception:
     pass
 links.new(mapping.outputs["Vector"], tex_disp.inputs["Vector"])
 
@@ -584,7 +584,7 @@ env_tex = nodes.new('ShaderNodeTexEnvironment')
 env_tex.location = (-300, 0)
 try:
     env_tex.image = bpy.data.images.load("{_s(hdri_path)}")
-except:
+except Exception:
     pass
 
 # Background

@@ -122,7 +122,7 @@ bpy.context.scene.cycles.device = 'CPU'
 bpy.context.scene.cycles.samples = 256
 bpy.context.scene.cycles.use_denoising = True
 try:bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
-except:pass
+except Exception:pass
 bpy.context.scene.cycles.use_adaptive_sampling = True
 bpy.context.scene.cycles.adaptive_threshold = 0.05
 bpy.context.scene.render.resolution_x = 3840

@@ -123,7 +123,7 @@ bpy.context.scene.cycles.samples = {samples}
 bpy.context.scene.cycles.use_denoising = {denoise}
 try:
     bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
-except:
+except (AttributeError, TypeError):
     pass
 bpy.context.scene.cycles.use_adaptive_sampling = {preset.get("use_adaptive_sampling", True)}
 bpy.context.scene.cycles.adaptive_threshold = {preset.get("adaptive_threshold", 0.01)}
@@ -143,21 +143,21 @@ bpy.context.scene.cycles.transparent_max_bounces = 8
 # EEVEE settings
 try:
     bpy.context.scene.eevee.taa_render_samples = {samples}
-except:
+except (AttributeError, TypeError):
     pass
 try:
     bpy.context.scene.eevee.use_gtao = True
     bpy.context.scene.eevee.gtao_distance = 0.5
-except:
+except (AttributeError, TypeError):
     pass
 try:
     bpy.context.scene.eevee.use_bloom = {preset.get("use_bloom", True)}
-except:
+except (AttributeError, TypeError):
     pass
 try:
     bpy.context.scene.eevee.use_ssr = True
     bpy.context.scene.eevee.use_ssr_refraction = True
-except:
+except (AttributeError, TypeError):
     pass
 """
 
@@ -264,7 +264,7 @@ try:
     bpy.context.scene.eevee.use_gtao = True
     bpy.context.scene.eevee.gtao_distance = 0.5
     bpy.context.scene.eevee.gtao_factor = 1.0
-except:
+except (AttributeError, TypeError):
     pass
 """
 

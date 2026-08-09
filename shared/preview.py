@@ -3,22 +3,28 @@ shared/preview.py — Модуль превью, анализа и провер�
 
 Функции:
     generate_preview()     — Генерация превью через Blender
-    analyze_render()       — Анализ рендера через mimo-omni
+    analyze_render()       — Анализ рендера через Gemini Vision (llm-service)
     check_quality_16k()    — Проверка разрешения ≥16K
-    detect_visual_bugs()   — Поиск визуальных багов
+    detect_visual_bugs()   — Поиск визуальных багов через Gemini Vision
     take_screenshot_of_render() — Скриншот с аннотацией
 """
 
+import base64
 import json
+import logging
 import os
 import re
 import subprocess
 import uuid
 
+import httpx
+
 from shared.blender import generate_bpy_script, generate_interior_script
 from shared.config import settings
 from shared.parser import AllModelsFailedError, get_generation_type, parse_prompt
 from shared.validation import DEFAULT_FURNITURE
+
+logger = logging.getLogger("archai.preview")
 
 
 def generate_preview(prompt: str, output_dir: str = "", quality: str = "preview") -> str:
@@ -68,8 +74,8 @@ def generate_preview(prompt: str, output_dir: str = "", quality: str = "preview"
         )
 
     presets = {
-        "preview": {"engine": "CYCLES", "device": "CPU", "samples": 16, "use_denoising": False, "res_x": 1920, "res_y": 1080, "samples": 32, "timeout": 60},
-        "standard": {"engine": "CYCLES", "device": "CPU", "samples": 16, "use_denoising": False, "res_x": 3840, "res_y": 2160, "samples": 128, "timeout": 120},
+        "preview": {"engine": "CYCLES", "device": "CPU", "samples": 32, "use_denoising": False, "res_x": 1920, "res_y": 1080, "timeout": 60},
+        "standard": {"engine": "CYCLES", "device": "CPU", "samples": 128, "use_denoising": False, "res_x": 3840, "res_y": 2160, "timeout": 120},
     }
     p = presets.get(quality, presets["preview"])
 
@@ -83,7 +89,7 @@ bpy.context.scene.render.resolution_x = {p["res_x"]}
 bpy.context.scene.render.resolution_y = {p["res_y"]}
 try:
     bpy.context.scene.eevee.taa_render_samples = {p["samples"]}
-except:
+except (AttributeError, TypeError):
     pass
 bpy.context.scene.render.image_settings.file_format = 'PNG'
 bpy.context.scene.render.filepath = r'{output_file}'
@@ -120,13 +126,13 @@ bpy.ops.render.render(write_still=True)
 
 
 # ═══════════════════════════════════════════════════════════════
-# ANALYSIS
+# ANALYSIS — Gemini Vision via llm-service
 # ═══════════════════════════════════════════════════════════════
 
 
 def analyze_render(image_path: str, question: str = "") -> dict:
     """
-    Анализирует рендер через mimo-omni.
+    Анализирует рендер через Gemini Vision (llm-service).
 
     Returns:
         {
@@ -137,7 +143,7 @@ def analyze_render(image_path: str, question: str = "") -> dict:
             "bugs": ["..."],
             "quality_ok": True/False,
             "resolution": "WxH",
-            "source": "mimo-omni" | "pil_info"
+            "source": "gemini_vision" | "pil_info"
         }
     """
     if not os.path.exists(image_path):
@@ -157,13 +163,12 @@ def analyze_render(image_path: str, question: str = "") -> dict:
 
     result = {"source": "none", "image": image_path}
 
-    # Try mimo-omni
-    parsed = _call_mimo_omni(image_path, analysis_prompt)
+    # Try Gemini Vision via llm-service
+    parsed = _call_vision_llm(image_path, analysis_prompt)
     if parsed:
         result.update(parsed)
-        result["source"] = "mimo-omni"
+        result["source"] = "gemini_vision"
 
-        # Добавляем PIL-инфо
         try:
             from PIL import Image
 
@@ -216,7 +221,7 @@ def check_quality_16k(image_path: str) -> dict:
 
 def detect_visual_bugs(image_path: str) -> dict:
     """
-    Определяет визуальные баги 3D-модели через mimo-omni.
+    Определяет визуальные баги 3D-модели через Gemini Vision.
 
     Ищет: clipping, missing textures, proportions, artifacts, z-fighting, black areas.
 
@@ -243,11 +248,11 @@ def detect_visual_bugs(image_path: str) -> dict:
         "}\n"
     )
 
-    parsed = _call_mimo_omni(image_path, bug_prompt)
+    parsed = _call_vision_llm(image_path, bug_prompt)
     if parsed:
         return parsed
 
-    return {"has_bugs": False, "details": "mimo-omni unavailable"}
+    return {"has_bugs": False, "details": "Vision LLM unavailable"}
 
 
 def validate_render_matches_prompt(image_path: str, prompt: str) -> dict:
@@ -274,11 +279,11 @@ def validate_render_matches_prompt(image_path: str, prompt: str) -> dict:
         "}\n"
     )
 
-    parsed = _call_mimo_omni(image_path, match_prompt)
+    parsed = _call_vision_llm(image_path, match_prompt)
     if parsed:
         return parsed
 
-    return {"matches_prompt": False, "details": "mimo-omni unavailable"}
+    return {"matches_prompt": False, "details": "Vision LLM unavailable"}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -320,32 +325,124 @@ def take_screenshot_of_render(render_path: str, output_path: str = "") -> str:
 
 
 # ═══════════════════════════════════════════════════════════════
-# INTERNAL HELPERS
+# INTERNAL HELPERS — Vision LLM (replaces mimo-omni)
 # ═══════════════════════════════════════════════════════════════
 
 
-def _call_mimo_omni(image_path: str, prompt: str) -> dict | None:
-    """Вызывает mimo-omni и парсит JSON ответ."""
-    try:
-        mimo_script = os.path.expanduser("~/.openclaw/skills/mimo-omni/mimo_api.sh")
-        if not os.path.exists(mimo_script):
-            return None
+def _image_to_base64(image_path: str, max_size: int = 1024) -> str:
+    """Read image, resize if needed, return base64-encoded JPEG string."""
+    from PIL import Image
+    import io
 
-        proc = subprocess.run(
-            ["bash", mimo_script, "image", image_path, prompt],
-            capture_output=True,
-            text=True,
-            timeout=60,
+    img = Image.open(image_path)
+    # Resize large images to save tokens (vision models have limits)
+    if max(img.size) > max_size:
+        img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, format="JPEG", quality=85)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def _call_vision_llm(image_path: str, prompt: str) -> dict | None:
+    """
+    Call a vision-capable LLM with an image + text prompt.
+
+    Strategy:
+      1. Try llm-service /api/v1/chat/completions (multimodal)
+      2. Fall back to direct Gemini API if llm-service unavailable
+    """
+    try:
+        b64 = _image_to_base64(image_path)
+    except Exception as e:
+        logger.warning("Cannot read image for vision analysis: %s", e)
+        return None
+
+    # Build multimodal message (OpenAI-compatible format)
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+                },
+            ],
+        }
+    ]
+
+    # Strategy 1: llm-service (has Gemini + OpenRouter vision models in cascade)
+    llm_url = os.environ.get("LLM_SERVICE_URL", "http://localhost:8081")
+    try:
+        resp = httpx.post(
+            f"{llm_url}/api/v1/chat/completions",
+            json={"messages": messages, "max_tokens": 1024, "temperature": 0.1},
+            timeout=45.0,
         )
-        if proc.returncode == 0:
-            return _parse_json_response(proc.stdout)
-    except Exception:
-        pass
+        if resp.status_code == 200:
+            data = resp.json()
+            content = ""
+            if isinstance(data, dict):
+                choices = data.get("choices", [])
+                if choices:
+                    content = choices[0].get("message", {}).get("content", "")
+            if content:
+                return _parse_json_response(content)
+        else:
+            logger.warning("Vision LLM returned %d: %s", resp.status_code, resp.text[:200])
+    except httpx.TimeoutException:
+        logger.warning("Vision LLM timeout via llm-service")
+    except httpx.ConnectError:
+        logger.debug("llm-service unreachable for vision, trying direct Gemini")
+    except Exception as e:
+        logger.warning("Vision LLM call failed: %s", e)
+
+    # Strategy 2: Direct Gemini API (fallback)
+    gemini_key = os.environ.get("GOOGLE_API_KEY", "")
+    if gemini_key:
+        try:
+            url = (
+                "https://generativelanguage.googleapis.com/v1beta/"
+                f"models/gemini-2.0-flash-lite-001:generateContent?key={gemini_key}"
+            )
+            resp = httpx.post(
+                url,
+                json={
+                    "contents": [
+                        {
+                            "parts": [
+                                {"text": prompt},
+                                {
+                                    "inline_data": {
+                                        "mime_type": "image/jpeg",
+                                        "data": b64,
+                                    }
+                                },
+                            ]
+                        }
+                    ],
+                    "generationConfig": {"temperature": 0.1, "maxOutputTokens": 1024},
+                },
+                timeout=45.0,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                candidates = data.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if parts:
+                        return _parse_json_response(parts[0].get("text", ""))
+            else:
+                logger.warning("Direct Gemini returned %d: %s", resp.status_code, resp.text[:200])
+        except Exception as e:
+            logger.warning("Direct Gemini vision call failed: %s", e)
+
+    logger.info("Vision LLM unavailable — all strategies exhausted")
     return None
 
 
 def _parse_json_response(response: str) -> dict:
-    """Извлекает JSON из ответа mimo-omni."""
+    """Извлекает JSON из ответа LLM."""
     try:
         json_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", response, re.DOTALL)
         if json_match:

@@ -71,7 +71,7 @@ async def health():
         result = await qdrant_request("GET", "/")
         qdrant_ok = True
         version = result.get("version", "unknown")
-    except:
+    except Exception:
         qdrant_ok = False
         version = "unavailable"
 

@@ -34,7 +34,9 @@ app = FastAPI(
     version="7.0.0",
 )
 
-_cors_origins = os.environ.get("CORS_ORIGINS", "*")
+_cors_origins = os.environ.get("CORS_ORIGINS", "")
+if not _cors_origins:
+    logger.warning("CORS_ORIGINS not set — defaulting to empty (no CORS). Set env var for production.")
 _origins_list = [o.strip() for o in _cors_origins.split(",") if o.strip()]
 
 app.add_middleware(
@@ -268,7 +270,7 @@ bpy.context.scene.cycles.device = 'CPU'
 bpy.context.scene.cycles.samples = 64
 bpy.context.scene.cycles.use_denoising = True
 try:bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
-except:pass
+except (AttributeError, TypeError):pass
 bpy.context.scene.render.resolution_x = 1920
 bpy.context.scene.render.resolution_y = 1080
 bpy.context.scene.render.image_settings.file_format = 'PNG'
@@ -504,7 +506,7 @@ bpy.context.scene.cycles.device = 'CPU'
 bpy.context.scene.cycles.samples = 128
 bpy.context.scene.cycles.use_denoising = True
 try:bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
-except:pass
+except (AttributeError, TypeError):pass
 bpy.context.scene.cycles.use_adaptive_sampling = True
 bpy.context.scene.cycles.adaptive_threshold = 0.05
 bpy.context.scene.render.resolution_x = 1920
@@ -563,7 +565,7 @@ bpy.context.scene.cycles.device = 'CPU'
 bpy.context.scene.cycles.samples = 256
 bpy.context.scene.cycles.use_denoising = True
 try:bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
-except:pass
+except (AttributeError, TypeError):pass
 bpy.context.scene.cycles.use_adaptive_sampling = True
 bpy.context.scene.cycles.adaptive_threshold = 0.05
 bpy.context.scene.render.resolution_x = 3840
@@ -585,7 +587,7 @@ bpy.context.scene.cycles.device = 'CPU'
 bpy.context.scene.cycles.samples = 256
 bpy.context.scene.cycles.use_denoising = True
 try:bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
-except:pass
+except (AttributeError, TypeError):pass
 bpy.context.scene.cycles.use_adaptive_sampling = True
 bpy.context.scene.cycles.adaptive_threshold = 0.05
 bpy.context.scene.render.resolution_x = 3840
@@ -639,7 +641,7 @@ bpy.context.scene.cycles.device = 'CPU'
 bpy.context.scene.cycles.samples = 256
 bpy.context.scene.cycles.use_denoising = True
 try:bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
-except:pass
+except (AttributeError, TypeError):pass
 bpy.context.scene.render.resolution_x = 3840
 bpy.context.scene.render.resolution_y = 2160
 bpy.ops.render.render(write_still=True)

@@ -13,6 +13,7 @@ shared/agents/runner.py - Изолированное выполнение аге
 
 import logging
 import multiprocessing
+import threading
 import time
 import traceback
 from dataclasses import dataclass
@@ -139,7 +140,7 @@ class AgentRunner:
         "furniture": {"items": [], "note": "Furniture placement skipped"},
         "mep": {"systems": {}, "note": "MEP skipped"},
         "structural": {"calculation": {}, "note": "Structural skipped"},
-        "compliance": {"passed": True, "issues": [], "note": "Compliance check skipped (assumed pass)"},
+        "compliance": {"passed": False, "issues": ["Compliance check skipped — agent unavailable"], "note": "Compliance agent failed"},
         "el": {"circuits": [], "note": "Electrical skipped"},
         "mep_bim": {"model": None, "note": "MEP BIM skipped"},
     }
@@ -200,58 +201,95 @@ class AgentRunner:
                 logger.warning("Subprocess failed for %s (%s), running in-process", agent_name, e)
                 return self._run_in_process(agent_name, agent_class, task_params)
         else:
-            return self._run_in_process(agent_name, agent_class, task_params)
+            return self._run_in_process(agent_name, agent_class, task_params, timeout)
 
-    def _run_in_process(self, agent_name: str, agent_class_path: str, task_params: dict) -> IsolatedResult:
-        """Fallback: run agent in current process (no isolation)."""
-        try:
-            import importlib
+    def _run_in_process(
+        self, agent_name: str, agent_class_path: str, task_params: dict, timeout: int = 120
+    ) -> IsolatedResult:
+        """Fallback: run agent in current process with threading-based timeout."""
+        import importlib
 
-            module_path, class_name = agent_class_path.rsplit(".", 1)
-            module = importlib.import_module(module_path)
-            agent_cls = getattr(module, class_name)
-            agent = agent_cls()
+        result_holder: dict = {}
 
-            task = Task(
-                name=task_params.get("name", ""),
-                agent=task_params.get("agent", ""),
-                params=task_params.get("params", {}),
-            )
+        def _target():
+            try:
+                module_path, class_name = agent_class_path.rsplit(".", 1)
+                module = importlib.import_module(module_path)
+                agent_cls = getattr(module, class_name)
+                agent = agent_cls()
 
-            start = time.time()
-            result = agent.process(task)
-            duration = (time.time() - start) * 1000
+                task = Task(
+                    name=task_params.get("name", ""),
+                    agent=task_params.get("agent", ""),
+                    params=task_params.get("params", {}),
+                )
 
-            if result.status == TaskStatus.FAILED:
-                if agent_name in self.CRITICAL_AGENTS:
-                    return IsolatedResult(
-                        status=TaskStatus.FAILED,
-                        error=result.error,
-                        duration_ms=duration,
-                        fallback=False,
-                        agent_name=agent_name,
-                    )
-                return self._fallback(agent_name, result.error or "Agent failed")
+                start = time.time()
+                result = agent.process(task)
+                duration = (time.time() - start) * 1000
+                result_holder["result"] = result
+                result_holder["duration_ms"] = duration
+            except Exception as e:
+                result_holder["error"] = e
 
-            return IsolatedResult(
-                status=result.status,
-                data=result.data,
-                error=result.error,
-                duration_ms=duration,
-                fallback=False,
-                agent_name=agent_name,
-            )
-        except Exception as e:
+        start = time.time()
+        worker = threading.Thread(target=_target, daemon=True)
+        worker.start()
+        worker.join(timeout=timeout)
+
+        if worker.is_alive():
+            logger.error("Agent %s TIMEOUT after %ds in in-process mode", agent_name, timeout)
+            # Thread is daemon — it will die when main process exits.
+            # We can't kill it, but we can abandon it and return fallback.
+            if agent_name in self.CRITICAL_AGENTS:
+                return IsolatedResult(
+                    status=TaskStatus.FAILED,
+                    error=f"Agent {agent_name} timed out after {timeout}s",
+                    duration_ms=(time.time() - start) * 1000,
+                    fallback=False,
+                    agent_name=agent_name,
+                )
+            return self._fallback(agent_name, f"Timeout after {timeout}s")
+
+        duration = (time.time() - start) * 1000
+
+        if "error" in result_holder:
+            e = result_holder["error"]
             logger.error("In-process %s failed: %s", agent_name, e)
             if agent_name in self.CRITICAL_AGENTS:
                 return IsolatedResult(
                     status=TaskStatus.FAILED,
                     error=str(e),
-                    duration_ms=0,
+                    duration_ms=duration,
                     fallback=False,
                     agent_name=agent_name,
                 )
             return self._fallback(agent_name, str(e))
+
+        result = result_holder.get("result")
+        if result is None:
+            logger.error("In-process %s produced no result", agent_name)
+            return self._fallback(agent_name, "Agent produced no result")
+
+        if result.status == TaskStatus.FAILED:
+            if agent_name in self.CRITICAL_AGENTS:
+                return IsolatedResult(
+                    status=TaskStatus.FAILED,
+                    error=result.error,
+                    duration_ms=duration,
+                    fallback=False,
+                    agent_name=agent_name,
+                )
+            return self._fallback(agent_name, result.error or "Agent failed")
+
+        return IsolatedResult(
+            status=result.status,
+            data=result.data,
+            error=result.error,
+            duration_ms=duration,
+            fallback=False,
+            agent_name=agent_name,
+        )
 
     def _run_subprocess(
         self, agent_name: str, agent_class_path: str, task_params: dict, timeout: int

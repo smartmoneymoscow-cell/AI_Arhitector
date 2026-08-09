@@ -56,9 +56,9 @@ if bsdf_{name}:
 """
     if emission > 0:
         code += f"""    try:bsdf_{name}.inputs["Emission Color"].default_value=({r},{g},{b},1.0)
-    except:pass
+    except KeyError:pass
     try:bsdf_{name}.inputs["Emission Strength"].default_value={emission}
-    except:pass
+    except KeyError:pass
 """
     return code
 
@@ -425,12 +425,10 @@ bpy.context.scene.cycles.samples = 256  # overridden by render_agent
 bpy.context.scene.cycles.use_denoising = True  # overridden by render_agent
 try:
     bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
-except:
-    pass
+except (AttributeError, TypeError):pass
 try:
     bpy.context.scene.eevee.taa_render_samples = 64
-except:
-    pass
+except (AttributeError, TypeError):pass
 """
 
     return script
@@ -906,11 +904,11 @@ if wbsdf:
     wbsdf.inputs["Roughness"].default_value=0.02
     wbsdf.inputs["Metallic"].default_value=0.0
     try:wbsdf.inputs["Transmission"].default_value=0.9
-    except:pass
+    except KeyError:pass
     try:wbsdf.inputs["IOR"].default_value=1.52
-    except:pass
+    except KeyError:pass
     try:wbsdf.inputs["Alpha"].default_value=0.85
-    except:pass
+    except KeyError:pass
 win.data.materials.append(win_mat)
 
 # Window frame
@@ -933,7 +931,7 @@ bpy.context.scene.cycles.device = 'CPU'
 bpy.context.scene.cycles.samples = 256
 bpy.context.scene.cycles.use_denoising = True
 try:bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
-except:pass
+except (AttributeError, TypeError):pass
 bpy.context.scene.cycles.use_adaptive_sampling = True
 bpy.context.scene.cycles.adaptive_threshold = 0.05
 """

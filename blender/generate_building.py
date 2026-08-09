@@ -227,7 +227,7 @@ def generate_building(params):
             pos = (x, -L / 2 - thick / 2, win_z)
             try:
                 cut_window(bpy.data.objects.get(f"Wall_F_{floor}") or all_objects[-4], pos, win_w, win_h, glass_mat)
-            except:
+            except Exception:
                 # Fallback: simple glass plane
                 bpy.ops.mesh.primitive_plane_add(size=1, location=pos)
                 g = bpy.context.active_object
@@ -375,7 +375,7 @@ def export_model(filepath, fmt="glb"):
         # IFC export requires BlenderBIM addon
         try:
             bpy.ops.export_ifc.bim(filepath=filepath)
-        except:
+        except Exception:
             print("IFC export requires BlenderBIM addon. Exporting as .blend instead.")
             bpy.ops.wm.save_as_mainfile(filepath=filepath.replace(ext, ".blend"))
 

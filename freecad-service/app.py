@@ -205,7 +205,7 @@ def execute_freecad_script(script: str) -> dict:
     finally:
         try:
             FreeCAD.closeDocument(doc.Name)
-        except:
+        except Exception:
             pass
 
 
@@ -219,7 +219,7 @@ async def health():
     if FREECAD_AVAILABLE:
         try:
             version = str(FreeCAD.Version())
-        except:
+        except Exception:
             version = "unknown"
     return {
         "status": "ok",
