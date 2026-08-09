@@ -10,7 +10,7 @@ services:
     dockerfilePath: ./gateway.Dockerfile
     rootDir: .
     region: oregon
-    plan: free
+    plan: starter
     healthCheckPath: /health
     envVars:
       - key: LLM_SERVICE_URL
@@ -19,14 +19,23 @@ services:
         value: https://ai-arch-blender3d.onrender.com
       - key: BLENDER_SERVICE_URL_2
         value: https://architect-blender.onrender.com
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: architect-redis
+          property: connectionString
       - key: FRONTEND_DIR
         value: /app/frontend
       - key: PORT
         value: "8080"
+      - key: ARCH_API_KEYS
+        value: "arch-prod-key-2024"
       - key: CORS_ORIGINS
         value: "https://smartmoneymoscow-cell.github.io"
       - key: KAGGLE_RENDERER_URL
         value: ""
+      - key: KAGGLE_API_KEY
+        sync: false
       - key: PYTHONUNBUFFERED
         value: "1"
 
@@ -41,12 +50,23 @@ services:
     envVars:
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: OPENROUTER_FALLBACK_KEYS
+        sync: false
       - key: GOOGLE_API_KEY
         sync: false
+      - key: GOOGLE_FALLBACK_KEYS
+        sync: false
       - key: REDIS_URL
-        value: redis://red-xxx:6379
+        fromService:
+          type: redis
+          name: architect-redis
+          property: connectionString
       - key: PORT
         value: "8081"
+      - key: KEY_COOLDOWN_RATE_LIMIT_SEC
+        value: "60"
+      - key: KEY_COOLDOWN_QUOTA_SEC
+        value: "86400"
 
   - type: web
     name: ai-arch-blender3d
@@ -66,7 +86,10 @@ services:
       - key: LLM_SERVICE_URL
         value: https://ai-arch-llmproxy.onrender.com
       - key: REDIS_URL
-        value: redis://red-xxx:6379
+        fromService:
+          type: redis
+          name: architect-redis
+          property: connectionString
 
   - type: redis
     name: architect-redis

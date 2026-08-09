@@ -602,10 +602,17 @@ def _l1_set(text: str, val: dict) -> None:
 
 
 _redis = None
+_redis_unavailable_until = 0.0  # unix ts; while now < this, skip retrying connection
+_REDIS_RETRY_COOLDOWN_SEC = 30  # how long to wait before trying again after a failed connect
 
 
 def _get_redis():
-    global _redis
+    global _redis, _redis_unavailable_until
+    now = time.time()
+    if now < _redis_unavailable_until:
+        # We already know Redis is unreachable — don't pay a fresh connect
+        # attempt (up to socket_connect_timeout=5s) on every single call.
+        return None
     if _redis is not None:
         return _redis
     try:
@@ -618,6 +625,7 @@ def _get_redis():
         _redis.ping()
         return _redis
     except Exception:
+        _redis_unavailable_until = now + _REDIS_RETRY_COOLDOWN_SEC
         _redis = None
         return None
 
