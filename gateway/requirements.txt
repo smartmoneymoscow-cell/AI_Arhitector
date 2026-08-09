@@ -1,14 +1,9 @@
-fastapi>=0.104.0
-uvicorn>=0.24.0
-httpx>=0.25.0
-pydantic>=2.5.0
-redis>=5.0.0
-# Geometry (легковесные)
-shapely>=2.0.0
+# Gateway requirements — updated 2026-08-10
+fastapi>=0.141.1
+uvicorn>=0.52.0
+httpx>=0.28.1
+pydantic>=2.13.4
+redis>=8.1.0
+shapely>=2.1.2
 networkx>=3.0
-# Image processing
-Pillow>=10.0.0
-# BIM — тяжёлый, ставим отдельно
-# ifcopenshell часто не ставится через pip на slim образах
-# Раскомментировать если нужен IFC:
-# ifcopenshell>=0.7.0
+Pillow>=12.3.0
