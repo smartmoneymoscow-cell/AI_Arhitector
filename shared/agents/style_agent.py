@@ -151,15 +151,43 @@ class StyleAgent(BaseAgent):
         }
 
     def _analyze_image_style(self, params: dict) -> dict:
-        """Анализ стиля из изображения (через LLM/mimo-omni)."""
-        # Базовая реализация — возвращаем general analysis
-        return {
-            "type": "style_from_image",
-            "detected_style": "modern",
-            "confidence": 0.5,
-            "note": "Для точного анализа изображений требуется интеграция с vision API",
-            "properties": self.STYLE_PROPERTIES["modern"],
-        }
+        """Анализ стиля из изображения через Gemini Vision."""
+        image_path = params.get("image_path", "")
+        if not image_path:
+            return {"type": "style_from_image", "detected_style": "modern", "confidence": 0.2,
+                    "note": "No image path provided", "properties": self.STYLE_PROPERTIES["modern"]}
+
+        try:
+            from shared.preview import _call_vision_llm
+            prompt = (
+                "Определи архитектурный стиль этого изображения. "
+                "Ответь СТРОГО в JSON: "
+                '{"style": "название стиля", "confidence": 0.0-1.0, '
+                '"materials": ["материал1", "материал2"], "palette": ["#hex1", "#hex2"]}'
+            )
+            parsed = _call_vision_llm(image_path, prompt)
+            if parsed:
+                detected = parsed.get("style", "modern").lower()
+                # Match to known styles
+                for known in self.STYLE_KEYWORDS:
+                    if known in detected or detected in known:
+                        detected = known
+                        break
+                properties = self.STYLE_PROPERTIES.get(detected, self.STYLE_PROPERTIES["modern"])
+                return {
+                    "type": "style_from_image",
+                    "detected_style": detected,
+                    "confidence": parsed.get("confidence", 0.7),
+                    "materials": parsed.get("materials", []),
+                    "palette_override": parsed.get("palette", []),
+                    "properties": properties,
+                    "source": "gemini_vision",
+                }
+        except Exception as e:
+            logger.warning("Vision style analysis failed: %s", e)
+
+        return {"type": "style_from_image", "detected_style": "modern", "confidence": 0.3,
+                "note": "Vision analysis unavailable", "properties": self.STYLE_PROPERTIES["modern"]}
 
     def _match_reference(self, params: dict) -> dict:
         """Подобрать стиль по референсному описанию."""
