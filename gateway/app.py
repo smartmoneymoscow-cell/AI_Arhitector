@@ -309,7 +309,7 @@ async def parse_proxy(
         "post",
         f"{settings.LLM_SERVICE_URL}/api/v1/parse",
         json={"text": text},
-        timeout=60,
+        timeout=120,
     )
     return r.json()
 
@@ -961,6 +961,18 @@ async def kaggle_health():
         "completed_results": len(_kaggle_results),
         "blender_urls": _get_blender_urls(),
     }
+
+
+# Aliases for Kaggle notebook compatibility
+# (notebook uses /api/v1/orchestrator/pending-kaggle and /kaggle-result)
+@app.get("/api/v1/orchestrator/pending-kaggle")
+async def kaggle_pending_alias():
+    return await kaggle_pending()
+
+
+@app.post("/api/v1/orchestrator/kaggle-result")
+async def kaggle_result_alias(req: dict):
+    return await kaggle_result(req)
 
 
 # ═══════════════════════════════════════════════════════════════

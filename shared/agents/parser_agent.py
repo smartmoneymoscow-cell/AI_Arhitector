@@ -22,7 +22,7 @@ def _parse_via_llm_service(llm_service_url: str, prompt: str) -> dict:
     resp = httpx.post(
         f"{llm_service_url}/api/v1/parse",
         json={"text": prompt},
-        timeout=60,
+        timeout=120,
     )
     resp.raise_for_status()
     return resp.json()

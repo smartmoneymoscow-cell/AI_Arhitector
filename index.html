@@ -1194,7 +1194,7 @@ async function callOrchestratorAPI(prompt,parsed){
       method:'POST',
       headers:_apiHeaders(),
       signal:ctrl.signal,
-      body:JSON.stringify({prompt:prompt,quality:'standard',pipeline_profile:parsed.object_type==='interior'?'interior':'standard',skip_clarification:false,export_formats:['glb']})
+      body:JSON.stringify({prompt:prompt,quality:'fast',pipeline_profile:parsed.object_type==='interior'?'interior':'standard',skip_clarification:false,export_formats:['glb']})
     });
     clearTimeout(tid);
     if(r.ok) return await r.json();
@@ -1305,7 +1305,7 @@ async function sendMessage() {
       signal:orchCtrl.signal,
       body:JSON.stringify({
         prompt: text,
-        quality: 'standard',
+        quality: 'fast',
         pipeline_profile: profile,
         skip_clarification: false,
         export_formats: ['glb']
@@ -1438,7 +1438,7 @@ async function _resumeOrchestrator() {
       body:JSON.stringify({
         job_id: jobId,
         answers: _orchAnswers,
-        quality: 'standard',
+        quality: 'fast',
         pipeline_profile: _orchPipelineProfile,
         export_formats: ['glb']
       })

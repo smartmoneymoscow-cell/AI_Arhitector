@@ -5,6 +5,7 @@ shared/agents/render_agent.py — Агент рендеринга.
 Поддерживает качество до 16K (15360×8640).
 """
 
+import logging
 import os
 import time
 
@@ -12,8 +13,24 @@ import httpx
 
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
+logger = logging.getLogger("archai.render_agent")
+
 # Пресеты качества рендера
 QUALITY_PRESETS = {
+    "fast": {
+        "engine": "CYCLES", "device": "CPU",
+        "resolution_x": 640,
+        "resolution_y": 480,
+        "samples": 16,
+        "use_denoising": False,
+        "tile_size": 64,
+        "use_adaptive_sampling": True,
+        "adaptive_threshold": 0.1,
+        "max_bounces": 4,
+        "diffuse_bounces": 2,
+        "glossy_bounces": 2,
+        "transmission_bounces": 4,
+    },
     "preview": {
         "engine": "CYCLES", "device": "CPU",
         "resolution_x": 1280,
@@ -159,10 +176,37 @@ cam_obj.location = ({camera_params.get("x", 0)}, {camera_params.get("y", -20)}, 
 cam_obj.rotation_euler = ({camera_params.get("rx", 1.1)}, {camera_params.get("ry", 0)}, {camera_params.get("rz", 0)})
 """
 
-    # Lighting
-    script += """
+    # Lighting — simplified for fast preset, full for others
+    if preset.get("samples", 16) <= 32:
+        # Fast: single sun light, no HDRI
+        script += """
+# Simple lighting (fast mode)
+if "Sun" not in bpy.data.objects:
+    sun = bpy.data.lights.new("Sun", "SUN")
+    sun.energy = 3
+    sun_obj = bpy.data.objects.new("Sun", sun)
+    bpy.context.collection.objects.link(sun_obj)
+    sun_obj.rotation_euler = (0.785, 0.262, 0.524)
+
+# Simple world background
+world = bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
+bpy.context.scene.world = world
+world.use_nodes = True
+tree = world.node_tree
+for n in tree.nodes:
+    tree.nodes.remove(n)
+bg = tree.nodes.new('ShaderNodeBackground')
+bg.location = (0, 0)
+bg.inputs["Strength"].default_value = 1.0
+bg.inputs["Color"].default_value = (0.6, 0.75, 1.0, 1.0)
+out = tree.nodes.new('ShaderNodeOutputWorld')
+out.location = (200, 0)
+tree.links.new(bg.outputs["Background"], out.inputs["Surface"])
+"""
+    else:
+        # Full: 3 lights + HDRI
+        script += """
 # Enhanced lighting
-# Key light (Sun)
 if "Sun" not in bpy.data.objects:
     sun = bpy.data.lights.new("Sun", "SUN")
     sun.energy = 5
@@ -172,7 +216,6 @@ if "Sun" not in bpy.data.objects:
     bpy.context.collection.objects.link(sun_obj)
     sun_obj.rotation_euler = (0.785, 0.262, 0.524)
 
-# Fill light (Area)
 if "FillLight" not in bpy.data.objects:
     fill = bpy.data.lights.new("Fill", "AREA")
     fill.energy = 300
@@ -183,7 +226,6 @@ if "FillLight" not in bpy.data.objects:
     fill_obj.location = (-15, 15, 20)
     fill_obj.rotation_euler = (1.047, 0, -2.356)
 
-# Rim light
 if "RimLight" not in bpy.data.objects:
     rim = bpy.data.lights.new("Rim", "AREA")
     rim.energy = 150
@@ -193,11 +235,7 @@ if "RimLight" not in bpy.data.objects:
     bpy.context.collection.objects.link(rim_obj)
     rim_obj.location = (10, -10, 12)
     rim_obj.rotation_euler = (0.785, 0, 0.785)
-"""
 
-    # World
-    script += """
-# World setup — HDRI for realistic lighting
 world = bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
 bpy.context.scene.world = world
 world.use_nodes = True
@@ -208,7 +246,6 @@ tex_coord = tree.nodes.new('ShaderNodeTexCoord')
 tex_coord.location = (-600, 0)
 env_tex = tree.nodes.new('ShaderNodeTexEnvironment')
 env_tex.location = (-400, 0)
-# Use procedural sky gradient as HDRI substitute
 sky_tex = tree.nodes.new('ShaderNodeTexSky')
 sky_tex.location = (-400, 0)
 sky_tex.sky_type = 'NISHITA'
@@ -223,7 +260,6 @@ out.location = (200, 0)
 tree.links.new(sky_tex.outputs["Color"], bg.inputs["Color"])
 tree.links.new(bg.outputs["Background"], out.inputs["Surface"])
 
-# Contact shadows (ambient occlusion)
 try:
     bpy.context.scene.eevee.use_gtao = True
     bpy.context.scene.eevee.gtao_distance = 0.5
@@ -298,26 +334,49 @@ tree.links.new(rl.outputs['Image'], comp.inputs['Image'])
 
             full_script = script + "\n" + render_script
 
-            if blender_service_url:
-                result = self._call_blender_service(blender_service_url, full_script, output_path)
-            else:
-                # Try Kaggle GPU renderer if local blender not available
-                try:
-                    from shared.kaggle_auto_submit import KaggleAutoSubmit
-                    kaggle = KaggleAutoSubmit()
-                    if kaggle.is_configured():
-                        kaggle_result = kaggle.submit_and_wait(full_script, output_path)
-                        if kaggle_result:
+            # Priority: Kaggle GPU (T4) → Blender service (Render) → local
+            result = None
+
+            # 1. Try Kaggle GPU renderer first (fastest, free T4 GPU)
+            try:
+                from shared.kaggle_auto_submit import KaggleAutoSubmit
+                kaggle = KaggleAutoSubmit()
+                if kaggle.is_configured():
+                    logger.info("Trying Kaggle GPU renderer...")
+                    kaggle_result = kaggle.submit_and_wait(full_script, output_path)
+                    if kaggle_result:
+                        # Kaggle returns base64 GLB — decode and save
+                        import base64
+                        glb_b64 = kaggle_result.get("result", "")
+                        if glb_b64:
+                            glb_path = output_path.replace(".png", ".glb")
+                            os.makedirs(os.path.dirname(glb_path) or ".", exist_ok=True)
+                            with open(glb_path, "wb") as f:
+                                f.write(base64.b64decode(glb_b64))
                             result = {
                                 "blender_output": "Kaggle GPU render completed",
-                                "kaggle_result": kaggle_result,
+                                "image_path": glb_path,
+                                "glb_path": glb_path,
                             }
+                            logger.info("Kaggle GPU render succeeded: %s", glb_path)
                         else:
-                            result = self._run_local(full_script, output_path)
-                    else:
-                        result = self._run_local(full_script, output_path)
-                except Exception:
-                    result = self._run_local(full_script, output_path)
+                            logger.warning("Kaggle returned empty result")
+            except Exception as e:
+                logger.warning("Kaggle GPU render failed: %s", e)
+
+            # 2. Fallback: Blender service on Render
+            if result is None and blender_service_url:
+                try:
+                    logger.info("Trying Blender service at %s...", blender_service_url)
+                    result = self._call_blender_service(blender_service_url, full_script, output_path)
+                    logger.info("Blender service render succeeded")
+                except Exception as e:
+                    logger.warning("Blender service render failed: %s", e)
+
+            # 3. Last resort: local Blender
+            if result is None:
+                logger.info("Trying local Blender...")
+                result = self._run_local(full_script, output_path)
 
             return TaskResult(
                 status=TaskStatus.DONE,

@@ -71,17 +71,17 @@ if bsdf_{name}:
 def _window_code(x: str, z: str, floor: str, idx: str, wall_y: str, thick: str) -> str:
     """Генерирует окно с рамой, стеклом и подоконником (8-space indent для вставки в цикл)."""
     return f"""
-        # Window {{floor}}_{{idx}}
+        # Window {floor}_{idx}
         bpy.ops.mesh.primitive_cube_add(size=1,location=({x},{wall_y},{z}))
-        wf=bpy.context.active_object;wf.name=f"WindowFrame_{{floor}}_{{idx}}"
+        wf=bpy.context.active_object;wf.name=f"WindowFrame_{floor}_{idx}"
         wf.scale=(1.3,0.06,1.6);bpy.ops.object.transform_apply(scale=True)
         wf.data.materials.append(mat_frame)
         bpy.ops.mesh.primitive_cube_add(size=1,location=({x},{wall_y},{z}))
-        wg=bpy.context.active_object;wg.name=f"WindowGlass_{{floor}}_{{idx}}"
+        wg=bpy.context.active_object;wg.name=f"WindowGlass_{floor}_{idx}"
         wg.scale=(1.1,0.02,1.4);bpy.ops.object.transform_apply(scale=True)
         wg.data.materials.append(mat_glass)
         bpy.ops.mesh.primitive_cube_add(size=1,location=({x},{wall_y},{z}-0.85))
-        ws=bpy.context.active_object;ws.name=f"WindowSill_{{floor}}_{{idx}}"
+        ws=bpy.context.active_object;ws.name=f"WindowSill_{floor}_{idx}"
         ws.scale=(1.4,0.12,0.05);bpy.ops.object.transform_apply(scale=True)
         ws.data.materials.append(mat_concrete)
 """
@@ -423,7 +423,10 @@ bpy.context.scene.render.engine = 'CYCLES'
 bpy.context.scene.cycles.device = 'CPU'
 bpy.context.scene.cycles.samples = 256  # overridden by render_agent
 bpy.context.scene.cycles.use_denoising = True  # overridden by render_agent
-bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'  # overridden by render_agent
+try:
+    bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'
+except:
+    pass
 try:
     bpy.context.scene.eevee.taa_render_samples = 64
 except:
