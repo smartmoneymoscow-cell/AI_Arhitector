@@ -119,6 +119,49 @@ services:
       retries: 3
       start_period: 30s
 
+  # FIX: ifc-service and cad-service had code + Dockerfiles in the repo but
+  # were never added as compose services, so the hostnames aedifex-bridge
+  # references (ifc-service, cad-service) never resolved on the Docker network.
+  ifc-service:
+    build:
+      context: ./ifc-service
+      dockerfile: Dockerfile
+    expose: ["8084"]
+    environment:
+      - OUTPUT_DIR=/app/output
+    volumes: [./output:/app/output]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8084/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  cad-service:
+    build:
+      context: ./cad-service
+      dockerfile: Dockerfile
+    expose: ["8087"]
+    environment:
+      - OUTPUT_DIR=/app/output
+    volumes: [./output:/app/output]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8087/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   redis:
     image: redis:7-alpine
     expose: ["6379"]
@@ -161,12 +204,14 @@ services:
     environment:
       - GATEWAY_URL=http://gateway:8080
       - LLM_SERVICE_URL=http://llm-service:8081
-      - IFC_SERVICE_URL=http://ifc-service:8083
+      - IFC_SERVICE_URL=http://ifc-service:8084
       - CAD_SERVICE_URL=http://cad-service:8087
       - BLENDER_SERVICE_URL=http://blender-service:8082
       - BRIDGE_PORT=8085
     depends_on:
       gateway: {condition: service_healthy}
+      ifc-service: {condition: service_healthy}
+      cad-service: {condition: service_healthy}
     restart: unless-stopped
     deploy:
       resources:

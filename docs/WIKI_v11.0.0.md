@@ -1,6 +1,6 @@
-# 📖 AI_Arhitector v11.1.0 — Полная документация (Wiki)
+# 📖 AI_Arhitector v11.2.0 — Полная документация (Wiki)
 
-> Обновлено: 2026-08-09 (v11.1.0 — Key Rotation + Free Model Discovery + Cooldown)
+> Обновлено: 2026-08-09 (v11.2.0 — Frontend/Backend Stitching + Critical Pipeline Fixes)
 
 ---
 

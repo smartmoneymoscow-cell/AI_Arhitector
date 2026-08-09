@@ -93,6 +93,15 @@ docker-compose up -d
 20+ специализированных агентов: парсер, геометрия, текстуры, свет,
 конструктив, нормативы, рендер, качество, экспорт.
 
+## Что нового в v11.2.0
+
+- **Frontend/Backend stitching** — исправлены все критические баги сшивки: 3D-модель теперь загружается в viewer, clarification flow работает корректно
+- **Единый source HTML** — 3 копии index.html → 1 (`frontend/index.html`), gateway и GitHub Pages используют единый файл
+- **File proxy** — `GET /api/v1/files/{path}` в gateway для отдачи GLB/PNG с blender-service
+- **Публичные эндпоинты** — chat-эндпоинты больше не требуют `ARCH_API_KEYS`
+- **ifc-service + cad-service** — добавлены в docker-compose, hostnames теперь резолвятся
+- **Nginx** — отдельные location-блоки для `/api/v1/files/` и `/api/v1/analyze/`
+
 ## Что нового в v11.1.0
 
 - **Key Health Tracker** — единая система cooldown для Gemini и OpenRouter, дублирование в Redis

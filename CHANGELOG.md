@@ -4,6 +4,62 @@
 
 ---
 
+## v11.2.0 — Frontend/Backend Stitching + Critical Pipeline Fixes
+
+### Дата: 2026-08-09
+
+### Проблема
+Система не работала end-to-end: фронтенд и бэкенд были рассшиты на нескольких уровнях.
+Генерация 3D-моделей не запускалась, clarification flow ломался, файлы не загружались.
+
+### Что исправлено
+
+#### Критические исправления (pipeline)
+
+| # | Файл | Баг | Исправление |
+|---|------|-----|-------------|
+| 1 | `index.html` | `ReferenceError: t is not defined` — regex pipeline profile падал до отправки запроса | Добавлен `const t = text.toLowerCase()` |
+| 2 | `index.html` | `orchResult.exports.formats.glb` — такого поля нет, бэкенд возвращает `exports.output_path` | Исправлено на `exports.output_path` |
+| 3 | `gateway/app.py` | Нет роута `GET /api/v1/files/{path}` — gateway отдавал index.html вместо GLB/PNG | Добавлен file proxy endpoint |
+| 4 | `index.html` | `data-orch-q` атрибут не проставлялся → resume после 1-го вопроса вместо всех | Добавлен атрибут на каждый блок вопроса |
+| 5 | `index.html` | `quality.score` не существует → quality строка не показывалась | Переписано под `{passed, checks, issues, severity}` |
+| 6 | `index.html` | AbortController timeout 300s < nginx 600s → обрыв на холодном старте | Поднято до 620s |
+
+#### Архитектурные исправления
+
+| # | Файл | Что | Исправление |
+|---|------|-----|-------------|
+| 7 | `frontend/index.html`, `gateway/frontend/index.html` | 3 копии HTML рассинхронизированы | Единый source: `frontend/index.html`, остальные удалены |
+| 8 | `gateway/app.py` | `ARCH_API_KEYS` блокировал публичный чат | Убран `Depends(get_api_key_required)` с 5 публичных эндпоинтов |
+| 9 | `docker-compose.yml` | ifc-service и cad-service не объявлены → hostnames не резолвились | Добавлены оба сервиса с healthcheck |
+| 10 | `docker-compose.yml` | IFC_SERVICE_URL порт 8083 вместо реального 8084 | Исправлено на 8084 |
+| 11 | `nginx.conf` | `/api/v1/files/` и `/api/v1/analyze/` падали в catch-all с 30s timeout | Добавлены отдельные location-блоки |
+
+#### Что НЕ вошло (осознанно)
+
+- `shared/blender.py`, отдельные агенты (structural/compliance/furniture/…)
+- `shared/celery_app.py`
+- `tests/`
+- Удаление regex pipeline profile из фронта (оставлен как fallback, LLM-детекция работает корректно)
+
+### Сводная таблица
+
+| # | Задача | Статус |
+|---|--------|--------|
+| 1 | ReferenceError `t` не определена | ✅ Done |
+| 2 | 3D-модель не загружалась (exports.formats.glb) | ✅ Done |
+| 3 | File proxy для GLB/PNG | ✅ Done |
+| 4 | Clarification resume после всех вопросов | ✅ Done |
+| 5 | Quality score отображение | ✅ Done |
+| 6 | AbortController timeout | ✅ Done |
+| 7 | Единый source HTML (3→1) | ✅ Done |
+| 8 | Публичные эндпоинты без API key | ✅ Done |
+| 9 | ifc-service + cad-service в compose | ✅ Done |
+| 10 | IFC port 8083→8084 | ✅ Done |
+| 11 | Nginx location для files/analyze | ✅ Done |
+
+---
+
 ## v11.1.0 — Key Rotation + Free Model Discovery + Cooldown
 
 ### Дата: 2026-08-09

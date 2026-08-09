@@ -1129,10 +1129,9 @@ let _backendOk = null;
 function _getApiKey(){ try{ return localStorage.getItem('arch_api_key')||''; }catch(e){ return ''; } }
 function _setApiKey(k){ try{ localStorage.setItem('arch_api_key',k); }catch(e){} }
 function _ensureApiKey(){
-  const k=_getApiKey();
-  if(k) return k;
-  // Don't block — gateway may be in open mode
-  return '';
+  // Public chat endpoints (parse/orchestrator/analyze) no longer require X-API-Key —
+  // ARCH_API_KEYS now only guards direct programmatic API access (see gateway/app.py).
+  return _getApiKey();
 }
 function _apiHeaders(extra){
   const h={'Content-Type':'application/json'};
@@ -1189,7 +1188,7 @@ async function callParseAPI(msg){
 async function callOrchestratorAPI(prompt,parsed){
   _ensureApiKey();
   const ctrl=new AbortController();
-  const tid=setTimeout(()=>ctrl.abort(),300000);
+  const tid=setTimeout(()=>ctrl.abort(),620000);
   try{
     const r=await fetch(API_BASE+'/api/v1/orchestrator/execute',{
       method:'POST',
@@ -1288,11 +1287,12 @@ async function sendMessage() {
 
     _ensureApiKey();
     const orchCtrl = new AbortController();
-    const orchTid = setTimeout(()=>orchCtrl.abort(), 300000);
+    const orchTid = setTimeout(()=>orchCtrl.abort(), 620000);
 
     // Determine pipeline profile — prefer LLM-determined, fallback to regex
     let profile = 'standard';
     // Regex fallback for pipeline profile
+    const t = text.toLowerCase();
     if(/ванн|кухн|спальн|детск|гостин|интерьер|дизайн|комнат/.test(t)) profile = 'interior';
     if(/ландшафт|сад|двор|участок/.test(t)) profile = 'landscape';
     _orchPipelineProfile = profile;
@@ -1370,7 +1370,7 @@ function showOrchestratorClarification(questions, params) {
   html += '<div style="font-weight:700;color:#92400e;margin-bottom:10px">💬 '+(currentLang==='en'?'I need to clarify a few things':'Нужно уточнить несколько деталей')+'</div>';
 
   questions.forEach((q,i) => {
-    html += '<div style="margin-bottom:12px"><div style="font-size:13px;color:#78350f;margin-bottom:6px;font-weight:600">'+esc(q.text)+'</div>';
+    html += '<div data-orch-q="'+i+'" style="margin-bottom:12px"><div style="font-size:13px;color:#78350f;margin-bottom:6px;font-weight:600">'+esc(q.text)+'</div>';
     if(q.visual_options && q.visual_options.length) {
       // Visual options with pros/cons
       html += '<div style="display:flex;flex-direction:column;gap:6px">';
@@ -1482,11 +1482,13 @@ function _handleOrchestratorResult(orchResult, prompt) {
     addMessage('assistant', '<div style="font-size:11px;color:#64748b;padding:4px 0">'+summary+'</div>');
   }
 
-  // Show quality score
-  if(orchResult.quality && orchResult.quality.score !== undefined) {
-    const score = orchResult.quality.score;
-    const color = score >= 8 ? '#16a34a' : score >= 5 ? '#f59e0b' : '#dc2626';
-    addMessage('assistant', '<div style="font-size:12px;color:'+color+';font-weight:600">🎯 '+(currentLang==='en'?'Quality score: ':'Оценка качества: ')+score+'/10</div>');
+  // Show quality result — backend (quality_agent) returns {passed, checks, issues, severity},
+  // there is no numeric "score" field, so render from what actually exists.
+  if(orchResult.quality && orchResult.quality.passed !== undefined) {
+    const q = orchResult.quality;
+    const color = q.passed ? '#16a34a' : (q.severity==='critical' ? '#dc2626' : '#f59e0b');
+    const label = q.passed ? (currentLang==='en'?'Quality check passed':'Проверка качества пройдена') : (currentLang==='en'?'Quality issues found: ':'Найдены замечания: ')+((q.issues||[]).join(', ')||'—');
+    addMessage('assistant', '<div style="font-size:12px;color:'+color+';font-weight:600">🎯 '+esc(label)+'</div>');
   }
 
   // Show duration
@@ -1496,8 +1498,8 @@ function _handleOrchestratorResult(orchResult, prompt) {
   }
 
   // Load 3D model
-  if(orchResult.exports && orchResult.exports.formats) {
-    const glbPath = orchResult.exports.formats.glb || orchResult.exports.formats.GLB;
+  if(orchResult.exports && orchResult.exports.output_path) {
+    const glbPath = orchResult.exports.output_path;
     if(glbPath) {
       const url = glbPath.startsWith('http') ? glbPath : API_BASE + '/api/v1/files/' + glbPath;
       loadGLBModel(url);

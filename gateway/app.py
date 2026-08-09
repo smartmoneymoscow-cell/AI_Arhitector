@@ -298,7 +298,6 @@ async def health():
 @app.post("/api/v1/parse")
 async def parse_proxy(
     req: dict,
-    api_key: str = Depends(get_api_key_required),
     _rl: None = Depends(rate_limit_middleware),
 ):
     """Proxy parse request to LLM Service."""
@@ -386,7 +385,6 @@ async def chat_proxy(
 @app.post("/api/v1/orchestrator/execute")
 async def orchestrator_execute(
     req: dict,
-    api_key: str = Depends(get_api_key_required),
     _rl: None = Depends(rate_limit_middleware),
 ):
     from shared.agents import Orchestrator
@@ -455,7 +453,6 @@ async def orchestrator_execute(
 @app.post("/api/v1/orchestrator/resume")
 async def orchestrator_resume(
     req: dict,
-    api_key: str = Depends(get_api_key_required),
     _rl: None = Depends(rate_limit_middleware),
 ):
     """Resume a clarification-needed job with user answers."""
@@ -736,7 +733,6 @@ from fastapi import UploadFile, File as FastAPIFile
 @app.post("/api/v1/analyze/pdf")
 async def analyze_pdf_endpoint(
     file: UploadFile = FastAPIFile(...),
-    api_key: str = Depends(get_api_key_required),
     _rl: None = Depends(rate_limit_middleware),
 ):
     """Upload PDF and get structured architectural analysis."""
@@ -760,7 +756,6 @@ async def analyze_pdf_endpoint(
 @app.post("/api/v1/analyze/dwg")
 async def analyze_dwg_endpoint(
     file: UploadFile = FastAPIFile(...),
-    api_key: str = Depends(get_api_key_required),
     _rl: None = Depends(rate_limit_middleware),
 ):
     """Upload DWG/DXF and get structured architectural analysis."""
@@ -966,6 +961,29 @@ async def kaggle_health():
         "completed_results": len(_kaggle_results),
         "blender_urls": _get_blender_urls(),
     }
+
+
+# ═══════════════════════════════════════════════════════════════
+# FILE PROXY — serve rendered/exported files from Blender service
+# The actual files (GLB, PNG) are written on the blender-service
+# container's disk, not the gateway's. The frontend only talks to
+# the gateway (API_BASE), so without this proxy any file the
+# orchestrator points to (exports.output_path, render.image_path)
+# is unreachable and 3D models / renders never load in the UI.
+# ═══════════════════════════════════════════════════════════════
+from fastapi.responses import Response as _RawResponse
+
+
+@app.get("/api/v1/files/{file_path:path}")
+async def proxy_output_file(file_path: str):
+    filename = os.path.basename(file_path)
+    if not filename:
+        raise HTTPException(404, "File not found")
+    r = await blender_request_with_fallback("get", f"/api/v1/files/{filename}", timeout=60)
+    if r.status_code != 200:
+        raise HTTPException(r.status_code, "File not found on Blender service")
+    media_type = r.headers.get("content-type", "application/octet-stream")
+    return _RawResponse(content=r.content, media_type=media_type)
 
 
 # ═══════════════════════════════════════════════════════════════
