@@ -1,11 +1,10 @@
 """
 shared/agents/runner.py - Выполнение агентов с fallback.
 
-По умолчанию агенты выполняются in-process (FORCE_SUBPROCESS не задан).
-Каждый агент имеет threading-based timeout — зависший агент не блокирует gateway.
-Если агент падает — НЕ роняет pipeline, возвращает fallback.
-
-FORCE_SUBPROCESS=1 включает multiprocessing-изоляцию (для контейнеров с >512MB RAM).
+Порядок попыток:
+  1. AGENT_POOL_URL задан → HTTP-вызов в agent-pool сервис (настоящая микросервисная изоляция)
+  2. FORCE_SUBPROCESS=1 → multiprocessing в отдельном процессе
+  3. Иначе → in-process с threading timeout
 
 Использование:
     runner = AgentRunner(timeout=120)
@@ -16,11 +15,14 @@ FORCE_SUBPROCESS=1 включает multiprocessing-изоляцию (для к�
 
 import logging
 import multiprocessing
+import os
 import threading
 import time
 import traceback
 from dataclasses import dataclass
 from typing import Any
+
+import httpx
 
 from shared.agents.base import Task, TaskStatus
 
@@ -44,12 +46,8 @@ def _run_agent_in_subprocess(
     task_params: dict,
     result_queue: multiprocessing.Queue,
 ):
-    """
-    Выполняет агента в отдельном процессе.
-    Изоляция: crash агента НЕ влияет на родительский процесс.
-    """
+    """Выполняет агента в отдельном процессе."""
     try:
-        # Импортируем агента внутри процесса (изоляция)
         import importlib
 
         module_path, class_name = agent_class_path.rsplit(".", 1)
@@ -91,12 +89,7 @@ class AgentRunner:
     """
     Запускает агентов с fallback-поведением.
 
-    По умолчанию — in-process с threading timeout.
-    При FORCE_SUBPROCESS=1 — multiprocessing с join(timeout).
-    Если агент падает:
-    - Логирует ошибку
-    - Возвращает fallback результат (для некритичных агентов)
-    - Pipeline продолжает работу
+    Порядок: agent-pool HTTP → subprocess → in-process.
     """
 
     # Fallback данные для каждого типа агента
@@ -153,7 +146,7 @@ class AgentRunner:
     # Агенты, которые КРИТИЧНЫ - pipeline не может продолжить без них
     CRITICAL_AGENTS = {"parser", "geometry"}
 
-    # Agent class paths for import
+    # Agent class paths for import (fallback to in-process)
     AGENT_CLASSES = {
         "parser": "shared.agents.parser_agent.ParserAgent",
         "dialog": "shared.agents.dialog_agent.DialogAgent",
@@ -188,8 +181,7 @@ class AgentRunner:
         """
         Запускает агента с timeout и fallback.
 
-        По умолчанию: in-process + threading timeout.
-        FORCE_SUBPROCESS=1: multiprocessing + join(timeout).
+        Порядок: agent-pool HTTP → subprocess → in-process.
         """
         timeout = timeout or self.default_timeout
         agent_class = self.AGENT_CLASSES.get(agent_name)
@@ -198,17 +190,71 @@ class AgentRunner:
             logger.error("Unknown agent: %s", agent_name)
             return self._fallback(agent_name, f"Unknown agent: {agent_name}")
 
-        # v10.3: Skip subprocess on constrained environments (Render free tier)
-        # Multiprocessing on 512MB containers causes hangs — run in-process directly
-        import os
+        # Priority 1: Agent Pool microservice (real isolation via HTTP)
+        agent_pool_url = os.environ.get("AGENT_POOL_URL", "")
+        if agent_pool_url:
+            result = self._run_via_agent_pool(agent_name, task_params, agent_pool_url, timeout)
+            if result is not None:
+                return result
+            logger.warning("Agent pool unavailable for %s, falling back", agent_name)
+
+        # Priority 2: Subprocess isolation
         if os.environ.get("FORCE_SUBPROCESS", "") == "1":
             try:
                 return self._run_subprocess(agent_name, agent_class, task_params, timeout)
             except (OSError, PermissionError, RuntimeError) as e:
                 logger.warning("Subprocess failed for %s (%s), running in-process", agent_name, e)
                 return self._run_in_process(agent_name, agent_class, task_params)
-        else:
-            return self._run_in_process(agent_name, agent_class, task_params, timeout)
+
+        # Priority 3: In-process with threading timeout
+        return self._run_in_process(agent_name, agent_class, task_params, timeout)
+
+    def _run_via_agent_pool(
+        self, agent_name: str, task_params: dict, pool_url: str, timeout: int
+    ) -> IsolatedResult | None:
+        """Call agent-pool microservice via HTTP. Returns None if unavailable."""
+        try:
+            payload = {
+                "name": task_params.get("name", agent_name),
+                "agent": task_params.get("agent", agent_name),
+                "params": task_params.get("params", {}),
+                "timeout": timeout,
+            }
+            with httpx.Client(timeout=float(timeout + 10)) as client:
+                resp = client.post(
+                    f"{pool_url}/api/v1/agents/{agent_name}/run",
+                    json=payload,
+                )
+            if resp.status_code == 200:
+                data = resp.json()
+                status_str = data.get("status", "failed")
+                if status_str == "done":
+                    status = TaskStatus.DONE
+                elif status_str == "timeout":
+                    status = TaskStatus.FAILED
+                else:
+                    status = TaskStatus.FAILED
+
+                return IsolatedResult(
+                    status=status,
+                    data=data.get("data"),
+                    error=data.get("error"),
+                    duration_ms=data.get("duration_ms", 0),
+                    fallback=False,
+                    agent_name=agent_name,
+                )
+            else:
+                logger.warning("Agent pool returned %d for %s", resp.status_code, agent_name)
+                return None
+        except httpx.TimeoutException:
+            logger.warning("Agent pool timeout for %s", agent_name)
+            return None
+        except httpx.ConnectError:
+            logger.debug("Agent pool unreachable")
+            return None
+        except Exception as e:
+            logger.warning("Agent pool call failed for %s: %s", agent_name, e)
+            return None
 
     def _run_in_process(
         self, agent_name: str, agent_class_path: str, task_params: dict, timeout: int = 120
@@ -246,8 +292,6 @@ class AgentRunner:
 
         if worker.is_alive():
             logger.error("Agent %s TIMEOUT after %ds in in-process mode", agent_name, timeout)
-            # Thread is daemon — it will die when main process exits.
-            # We can't kill it, but we can abandon it and return fallback.
             if agent_name in self.CRITICAL_AGENTS:
                 return IsolatedResult(
                     status=TaskStatus.FAILED,

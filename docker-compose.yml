@@ -33,6 +33,7 @@ services:
     environment:
       - LLM_SERVICE_URL=http://llm-service:8081
       - BLENDER_SERVICE_URL=http://blender-service:8082
+      - AGENT_POOL_URL=http://agent-pool:8083
       - REDIS_URL=redis://redis:6379/0
       - OUTPUT_DIR=/app/output
       - PORT=8080
@@ -46,6 +47,7 @@ services:
     depends_on:
       redis: {condition: service_healthy}
       llm-service: {condition: service_healthy}
+      agent-pool: {condition: service_healthy}
     restart: unless-stopped
     deploy:
       resources:
@@ -57,6 +59,31 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  agent-pool:
+    build:
+      context: .
+      dockerfile: agent-pool.Dockerfile
+    expose: ["8083"]
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - PORT=8083
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+    depends_on:
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; r=httpx.get('http://localhost:8083/health'); assert r.status_code==200"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   llm-service:
     build:
