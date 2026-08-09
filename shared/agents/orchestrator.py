@@ -461,6 +461,20 @@ class Orchestrator:
                     "mid_pipeline", "done", progress=65, message=f"{len(mid_results)}/{len(mid_agents)} agents complete"
                 )
 
+            # ═══ Collect mid-pipeline bpy scripts for render ═══
+            mid_scripts = []
+            for _mid_agent in ("lighting", "furniture", "landscape", "mep", "structural"):
+                _mid_data = mid_results.get(_mid_agent)
+                if _mid_data:
+                    _mid_bpy = _mid_data.get("bpy_script", "")
+                    if _mid_bpy:
+                        mid_scripts.append(_mid_bpy)
+                        logger.info("Including %s bpy_script in render (%d chars)", _mid_agent, len(_mid_bpy))
+
+            combined_script = geometry_script + "\n" + texture_script
+            if mid_scripts:
+                combined_script += "\n" + "\n".join(mid_scripts)
+
             # ═══ Render (non-critical, uses Blender service) ═══
             streamer.emit("render", "running", progress=70, message="Rendering...")
             render_result = self._run_agent(
@@ -469,7 +483,7 @@ class Orchestrator:
                     "name": "render",
                     "agent": "render",
                     "params": {
-                        "script": geometry_script + "\n" + texture_script,
+                        "script": combined_script,
                         "blender_service_url": self.blender_service_url,
                         "quality": quality,
                         "output_path": os.path.join(self.output_dir, f"{job_id}_render.png"),
@@ -529,7 +543,7 @@ class Orchestrator:
                             "name": "render",
                             "agent": "render",
                             "params": {
-                                "script": geometry_script + "\n" + texture_script,
+                                "script": combined_script,
                                 "blender_service_url": self.blender_service_url,
                                 "quality": "16k_force",
                                 "samples_override": 4096,
@@ -954,6 +968,20 @@ class Orchestrator:
                             job["fallback_agents"].append(an)
             streamer.emit("mid_pipeline", "done", progress=65, message=f"{len(mid_results)}/{len(mid_agents)} agents complete")
 
+        # ═══ Collect mid-pipeline bpy scripts for render ═══
+        mid_scripts = []
+        for _mid_agent in ("lighting", "furniture", "landscape", "mep", "structural"):
+            _mid_data = mid_results.get(_mid_agent)
+            if _mid_data:
+                _mid_bpy = _mid_data.get("bpy_script", "")
+                if _mid_bpy:
+                    mid_scripts.append(_mid_bpy)
+                    logger.info("Including %s bpy_script in render (%d chars)", _mid_agent, len(_mid_bpy))
+
+        combined_script = geometry_script + "\n" + texture_script
+        if mid_scripts:
+            combined_script += "\n" + "\n".join(mid_scripts)
+
         # Render
         streamer.emit("render", "running", progress=70, message="Rendering...")
         render_result = self._run_agent(
@@ -962,7 +990,7 @@ class Orchestrator:
                 "name": "render",
                 "agent": "render",
                 "params": {
-                    "script": geometry_script + "\n" + texture_script,
+                    "script": combined_script,
                     "blender_service_url": self.blender_service_url,
                     "quality": quality,
                     "output_path": os.path.join(self.output_dir, f"{job_id}_render.png"),

@@ -421,8 +421,9 @@ bpy.context.scene.render.resolution_y = 2160
 bpy.context.scene.render.resolution_percentage = 100
 bpy.context.scene.render.engine = 'CYCLES'
 bpy.context.scene.cycles.device = 'CPU'
-bpy.context.scene.cycles.samples = 16
-bpy.context.scene.cycles.use_denoising = False
+bpy.context.scene.cycles.samples = 256  # overridden by render_agent
+bpy.context.scene.cycles.use_denoising = True  # overridden by render_agent
+bpy.context.scene.cycles.denoiser = 'OPENIMAGEDENOISE'  # overridden by render_agent
 try:
     bpy.context.scene.eevee.taa_render_samples = 64
 except:

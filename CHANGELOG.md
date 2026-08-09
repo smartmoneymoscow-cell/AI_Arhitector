@@ -4,6 +4,45 @@
 
 ---
 
+## v11.0.1 — Pipeline Integration + Quality Fixes
+
+### Исправления pipeline
+
+#### Mid-pipeline агенты теперь влияют на рендер
+- **`shared/agents/orchestrator.py`**: bpy-скрипты от lighting, furniture, landscape, mep, structural агентов теперь **интегрируются** в render script
+- Ранее агенты выполнялись, но их output **игнорировался** при рендеринге
+- Исправлено в обоих методах: `execute()` и `resume_with_answers()`
+
+#### Качество рендера зданий
+- **`shared/blender.py`**: Building generator — samples 16→256, denoiser включён (OPENIMAGEDENOISE)
+- Ранее building script содержал `samples=16, denoising=False` — теперь согласован с render_agent presets
+
+#### IFC генератор (BIM)
+- **`shared/ifc_generator.py`**: Исправлен и расширен:
+  - Roof теперь агрегируется к Building через IfcRelAggregates
+  - Все элементы содержатся в IfcRelContainedInSpatialStructure по этажам
+  - Добавлен IfcSlab типа BASESLAB для пола
+  - Добавлены PropertySets: Pset_WallCommon, Pset_WindowCommon, Pset_DoorCommon, Pset_SlabCommon
+  - Отдельные материалы для стекла (окна) и дерева (двери)
+  - Комнаты генерируются для всех этажей (не только 1-2)
+- **`requirements.txt`**: ifcopenshell разблокирован (>=0.7.0 вместо ==0.8.0)
+
+#### PDF/DWG агенты
+- **Алиасы + реестр**: PdfAnalysisAgent/DwgAnalysisAgent зарегистрированы в AGENT_REGISTRY
+- **Pipeline profile**: добавлен `document_analysis`
+
+### Сводная таблица
+
+| # | Задача | Статус |
+|---|--------|--------|
+| 1 | Lighting/furniture bpy → render script | ✅ Done |
+| 2 | Building samples 16→256 + denoiser | ✅ Done |
+| 3 | IFC generator: spatial structure + property sets | ✅ Done |
+| 4 | ifcopenshell в requirements | ✅ Done |
+| 5 | PDF/DWG agents в orchestrator registry | ✅ Done |
+
+---
+
 ## v11.0.0 — PDF/DWG Analysis + 3D Quality + Pipeline Fixes
 
 ### Новые возможности

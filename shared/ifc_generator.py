@@ -112,9 +112,12 @@ def generate_ifc_building(params: dict, output_path: str, schema: str = "IFC2X3"
 
     # === Materials ===
     material = model.createIfcMaterial(mat.title())
+    glass_material = model.createIfcMaterial("Glass")
+    wood_material = model.createIfcMaterial("Wood")
 
     # === Этажи и стены ===
     all_storeys = []
+    all_roof_elements = []
 
     for floor_idx in range(floors):
         z = floor_idx * fH
@@ -134,6 +137,8 @@ def generate_ifc_building(params: dict, output_path: str, schema: str = "IFC2X3"
         )
         all_storeys.append(storey)
 
+        storey_elements = []  # Все элементы для spatial containment
+
         # Стены (4 штуки)
         walls_data = [
             ("Front", (0, -L / 2), W, "Y"),
@@ -143,7 +148,7 @@ def generate_ifc_building(params: dict, output_path: str, schema: str = "IFC2X3"
         ]
 
         for wall_name, (cx, cy), length, orientation in walls_data:
-            _create_wall(
+            wall = _create_wall(
                 model,
                 owner_history,
                 storey,
@@ -157,17 +162,18 @@ def generate_ifc_building(params: dict, output_path: str, schema: str = "IFC2X3"
                 thick,
                 orientation,
             )
+            storey_elements.append(wall)
 
         # Окна (передняя и задняя стены)
         n_win = max(2, W // 3)
         for i in range(n_win):
             x = -W / 2 + (i + 1) * W / (n_win + 1)
             for wy, wall_dir in [(-L / 2 - thick / 2, "Front"), (L / 2 + thick / 2, "Back")]:
-                _create_window(
+                window = _create_window(
                     model,
                     owner_history,
                     storey,
-                    material,
+                    glass_material,
                     f"Window_{wall_dir}_{floor_idx}_{i}",
                     x,
                     wy,
@@ -175,14 +181,15 @@ def generate_ifc_building(params: dict, output_path: str, schema: str = "IFC2X3"
                     1.2,
                     1.5,
                 )
+                storey_elements.append(window)
 
         # Дверь (первый этаж, передняя стена)
         if floor_idx == 0:
-            _create_door(
+            door = _create_door(
                 model,
                 owner_history,
                 storey,
-                material,
+                wood_material,
                 "MainDoor",
                 0,
                 -L / 2 - thick / 2,
@@ -190,10 +197,28 @@ def generate_ifc_building(params: dict, output_path: str, schema: str = "IFC2X3"
                 0.9,
                 2.1,
             )
+            storey_elements.append(door)
 
-        # Плита перекрытия (не на первом этаже)
-        if floor_idx > 0:
-            _create_slab(
+        # Плита перекрытия (на всех этажах кроме первого, плюс ground slab)
+        if floor_idx == 0:
+            # Ground slab
+            slab = _create_slab(
+                model,
+                owner_history,
+                storey,
+                material,
+                "GroundSlab",
+                0,
+                0,
+                z,
+                W,
+                L,
+                0.2,
+                predefined_type="BASESLAB",
+            )
+            storey_elements.append(slab)
+        else:
+            slab = _create_slab(
                 model,
                 owner_history,
                 storey,
@@ -206,6 +231,16 @@ def generate_ifc_building(params: dict, output_path: str, schema: str = "IFC2X3"
                 L,
                 0.2,
             )
+            storey_elements.append(slab)
+
+        # Привязать все элементы к этажу через spatial containment
+        if storey_elements:
+            model.createIfcRelContainedInSpatialStructure(
+                ifcopenshell.guid.new(),
+                OwnerHistory=owner_history,
+                RelatingStructure=storey,
+                RelatedElements=storey_elements,
+            )
 
     # Привязать этажи к зданию
     model.createIfcRelAggregates(
@@ -216,11 +251,19 @@ def generate_ifc_building(params: dict, output_path: str, schema: str = "IFC2X3"
     )
 
     # === Помещения (IfcSpace) ===
-    _create_rooms(model, owner_history, all_storeys, W, L, fH, params)
+    _create_rooms(model, owner_history, all_storeys, W, L, fH, floors, params)
 
     # === Кровля ===
     total_h = floors * fH
-    _create_roof(model, owner_history, building, material, W, L, total_h, roof_type)
+    roof = _create_roof(model, owner_history, building, material, W, L, total_h, roof_type)
+
+    # Привязать кровлю к зданию
+    model.createIfcRelAggregates(
+        ifcopenshell.guid.new(),
+        OwnerHistory=owner_history,
+        RelatingObject=building,
+        RelatedObjects=[roof],
+    )
 
     # Сохранение
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
@@ -230,7 +273,7 @@ def generate_ifc_building(params: dict, output_path: str, schema: str = "IFC2X3"
 
 
 def _create_wall(model, owner_history, storey, material, name, cx, cy, z, length, height, thick, orientation):
-    """Создаёт IfcWall с позиционированием."""
+    """Создаёт IfcWall с позиционированием и property set."""
     placement = model.createIfcLocalPlacement(
         storey.ObjectPlacement,
         model.createIfcAxis2Placement3D(model.createIfcCartesianPoint((cx, cy, z + height / 2))),
@@ -278,9 +321,31 @@ def _create_wall(model, owner_history, storey, material, name, cx, cy, z, length
         RelatingMaterial=material,
     )
 
+    # Property set с размерами стены
+    pset = model.createIfcPropertySet(
+        ifcopenshell.guid.new(),
+        OwnerHistory=owner_history,
+        Name="Pset_WallCommon",
+        HasProperties=[
+            model.createIfcPropertySingleValue("Thick", "LengthMeasure", thick),
+            model.createIfcPropertySingleValue("Height", "LengthMeasure", height),
+            model.createIfcPropertySingleValue("Length", "LengthMeasure", length),
+            model.createIfcPropertySingleValue("Area", "AreaMeasure", length * height),
+            model.createIfcPropertySingleValue("Volume", "VolumeMeasure", length * height * thick),
+        ],
+    )
+    model.createIfcRelDefinesByProperties(
+        ifcopenshell.guid.new(),
+        OwnerHistory=owner_history,
+        RelatedObjects=[wall],
+        RelatingPropertyDefinition=pset,
+    )
+
+    return wall
+
 
 def _create_window(model, owner_history, storey, material, name, x, y, z, width, height):
-    """Создаёт IfcWindow."""
+    """Создаёт IfcWindow с property set."""
     placement = model.createIfcLocalPlacement(
         storey.ObjectPlacement,
         model.createIfcAxis2Placement3D(model.createIfcCartesianPoint((x, y, z + height / 2))),
@@ -323,9 +388,29 @@ def _create_window(model, owner_history, storey, material, name, x, y, z, width,
         RelatingMaterial=material,
     )
 
+    # Property set
+    pset = model.createIfcPropertySet(
+        ifcopenshell.guid.new(),
+        OwnerHistory=owner_history,
+        Name="Pset_WindowCommon",
+        HasProperties=[
+            model.createIfcPropertySingleValue("OverallWidth", "LengthMeasure", width),
+            model.createIfcPropertySingleValue("OverallHeight", "LengthMeasure", height),
+            model.createIfcPropertySingleValue("Area", "AreaMeasure", width * height),
+        ],
+    )
+    model.createIfcRelDefinesByProperties(
+        ifcopenshell.guid.new(),
+        OwnerHistory=owner_history,
+        RelatedObjects=[window],
+        RelatingPropertyDefinition=pset,
+    )
+
+    return window
+
 
 def _create_door(model, owner_history, storey, material, name, x, y, z, width, height):
-    """Создаёт IfcDoor."""
+    """Создаёт IfcDoor с property set."""
     placement = model.createIfcLocalPlacement(
         storey.ObjectPlacement,
         model.createIfcAxis2Placement3D(model.createIfcCartesianPoint((x, y, z + height / 2))),
@@ -368,9 +453,29 @@ def _create_door(model, owner_history, storey, material, name, x, y, z, width, h
         RelatingMaterial=material,
     )
 
+    # Property set
+    pset = model.createIfcPropertySet(
+        ifcopenshell.guid.new(),
+        OwnerHistory=owner_history,
+        Name="Pset_DoorCommon",
+        HasProperties=[
+            model.createIfcPropertySingleValue("OverallWidth", "LengthMeasure", width),
+            model.createIfcPropertySingleValue("OverallHeight", "LengthMeasure", height),
+            model.createIfcPropertySingleValue("Area", "AreaMeasure", width * height),
+        ],
+    )
+    model.createIfcRelDefinesByProperties(
+        ifcopenshell.guid.new(),
+        OwnerHistory=owner_history,
+        RelatedObjects=[door],
+        RelatingPropertyDefinition=pset,
+    )
 
-def _create_slab(model, owner_history, storey, material, name, x, y, z, width, length, thickness):
-    """Создаёт IfcSlab (плита перекрытия)."""
+    return door
+
+
+def _create_slab(model, owner_history, storey, material, name, x, y, z, width, length, thickness, predefined_type="FLOOR"):
+    """Создаёт IfcSlab (плита перекрытия или базовая плита)."""
     placement = model.createIfcLocalPlacement(
         storey.ObjectPlacement,
         model.createIfcAxis2Placement3D(model.createIfcCartesianPoint((x, y, z))),
@@ -402,7 +507,7 @@ def _create_slab(model, owner_history, storey, material, name, x, y, z, width, l
         Name=name,
         ObjectPlacement=placement,
         Representation=model.createIfcProductDefinitionShape(None, None, [rep]),
-        PredefinedType="FLOOR",
+        PredefinedType=predefined_type,
     )
 
     model.createIfcRelAssociatesMaterial(
@@ -412,9 +517,29 @@ def _create_slab(model, owner_history, storey, material, name, x, y, z, width, l
         RelatingMaterial=material,
     )
 
+    # Property set
+    pset = model.createIfcPropertySet(
+        ifcopenshell.guid.new(),
+        OwnerHistory=owner_history,
+        Name="Pset_SlabCommon",
+        HasProperties=[
+            model.createIfcPropertySingleValue("Thick", "LengthMeasure", thickness),
+            model.createIfcPropertySingleValue("Area", "AreaMeasure", width * length),
+            model.createIfcPropertySingleValue("Volume", "VolumeMeasure", width * length * thickness),
+        ],
+    )
+    model.createIfcRelDefinesByProperties(
+        ifcopenshell.guid.new(),
+        OwnerHistory=owner_history,
+        RelatedObjects=[slab],
+        RelatingPropertyDefinition=pset,
+    )
+
+    return slab
+
 
 def _create_roof(model, owner_history, building, material, W, L, total_h, roof_type):
-    """Создаёт IfcRoof."""
+    """Создаёт IfcRoof и возвращает его."""
     placement = model.createIfcLocalPlacement(
         building.ObjectPlacement,
         model.createIfcAxis2Placement3D(model.createIfcCartesianPoint((0.0, 0.0, total_h))),
@@ -477,15 +602,17 @@ def _create_roof(model, owner_history, building, material, W, L, total_h, roof_t
         RelatingMaterial=material,
     )
 
+    return roof
 
-def _create_rooms(model, owner_history, storeys, W, L, fH, params):
+
+def _create_rooms(model, owner_history, storeys, W, L, fH, floors, params):
     """Создаёт IfcSpace (помещения) на каждом этаже."""
     rooms_data = _get_default_rooms(params)
 
     for floor_idx, storey in enumerate(storeys):
         floor_rooms = [r for r in rooms_data if r.get("floor", 1) == floor_idx + 1]
-        if not floor_rooms and floor_idx == 0:
-            # Дефолтные помещения для первого этажа
+        if not floor_rooms:
+            # Дефолтные помещения для любого этажа
             floor_rooms = [
                 {"name": "Living Room", "x": -W / 4, "y": 0, "w": W / 2, "d": L / 2},
                 {"name": "Kitchen", "x": W / 4, "y": 0, "w": W / 2, "d": L / 2},
@@ -552,14 +679,32 @@ def _create_rooms(model, owner_history, storeys, W, L, fH, params):
 
 
 def _get_default_rooms(params: dict) -> list:
-    """Возвращает список помещений по умолчанию."""
+    """Возвращает список помещений по умолчанию для всех этажей."""
     W = params.get("width", 10)
     L = params.get("length", 12)
-    return [
+    floors = params.get("floors", 2)
+
+    rooms = [
+        # Floor 1
         {"name": "Living Room", "floor": 1, "x": -W / 4, "y": 0, "w": W / 2, "d": L / 2},
         {"name": "Kitchen", "floor": 1, "x": W / 4, "y": 0, "w": W / 2, "d": L / 2},
         {"name": "Hallway", "floor": 1, "x": 0, "y": -L / 4, "w": W / 3, "d": L / 4},
-        {"name": "Master Bedroom", "floor": 2, "x": -W / 4, "y": 0, "w": W / 2, "d": L / 2},
-        {"name": "Bedroom 2", "floor": 2, "x": W / 4, "y": 0, "w": W / 2, "d": L / 2},
-        {"name": "Bathroom", "floor": 2, "x": 0, "y": -L / 4, "w": W / 4, "d": L / 4},
     ]
+
+    # Floor 2
+    if floors >= 2:
+        rooms += [
+            {"name": "Master Bedroom", "floor": 2, "x": -W / 4, "y": 0, "w": W / 2, "d": L / 2},
+            {"name": "Bedroom 2", "floor": 2, "x": W / 4, "y": 0, "w": W / 2, "d": L / 2},
+            {"name": "Bathroom", "floor": 2, "x": 0, "y": -L / 4, "w": W / 4, "d": L / 4},
+        ]
+
+    # Floors 3+: repeat a generic layout
+    for f in range(3, floors + 1):
+        rooms += [
+            {"name": f"Bedroom {f}", "floor": f, "x": -W / 4, "y": 0, "w": W / 2, "d": L / 2},
+            {"name": f"Room {f}", "floor": f, "x": W / 4, "y": 0, "w": W / 2, "d": L / 2},
+            {"name": f"Bathroom {f}", "floor": f, "x": 0, "y": -L / 4, "w": W / 4, "d": L / 4},
+        ]
+
+    return rooms

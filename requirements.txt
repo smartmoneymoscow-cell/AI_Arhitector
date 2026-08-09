@@ -22,8 +22,8 @@ redis==5.1.0
 # ═══ Image processing ═══
 Pillow==10.4.0
 
-# ═══ BIM (optional — C++ build) ═══
-# ifcopenshell==0.8.0  # Uncomment when CI supports C++ builds
+# ═══ BIM ═══
+ifcopenshell>=0.7.0
 
 # ═══ 3D mesh processing (fast GLB/DXF export) ═══
 trimesh==4.4.0
