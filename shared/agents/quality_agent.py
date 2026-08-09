@@ -11,8 +11,11 @@ v9.0 — Жёсткий контроль 16K, детекция арматуры/
 5. Geometry sanity — проверка на торчащие элементы
 """
 
+import logging
 import os
 import time
+
+logger = logging.getLogger("archai.quality_agent")
 
 from shared.agents.base import BaseAgent, Task, TaskResult, TaskStatus
 
@@ -179,25 +182,32 @@ class QualityAgent(BaseAgent):
             from shared.preview import detect_visual_bugs
 
             bugs = detect_visual_bugs(image_path)
+            vision_ok = bugs.get("vision_available", True)
             return {
-                "passed": not bugs.get("has_bugs", False),
+                "passed": not bugs.get("has_bugs", False) and vision_ok,
                 "required": False,
                 "has_bugs": bugs.get("has_bugs", False),
                 "bugs": bugs.get("bugs", []),
                 "overall_quality": bugs.get("overall_quality", "unknown"),
+                "vision_available": vision_ok,
             }
-        except Exception:
-            # AI check is supplementary — don't fail on errors
+        except Exception as e:
+            logger.warning("Visual bugs check failed: %s", e)
             return {
-                "passed": True,
+                "passed": False,
                 "required": False,
-                "note": "AI visual check unavailable",
+                "has_bugs": False,
+                "bugs": [],
+                "note": "Vision check failed — cannot verify quality",
             }
 
     def _check_prompt_match(self, image_path: str, prompt: str, gen_type: str) -> dict:
         """Проверка соответствия рендера промту."""
         try:
             from shared.preview import analyze_render
+
+            if not os.path.exists(image_path):
+                return {"passed": False, "required": True, "issue": "Render file not found"}
 
             analysis = analyze_render(image_path)
             description = analysis.get("description", "").lower()
@@ -232,12 +242,16 @@ class QualityAgent(BaseAgent):
                     }
 
             return {"passed": True, "required": True}
-        except Exception:
-            return {"passed": True, "required": False, "note": "Prompt match check unavailable"}
+        except Exception as e:
+            logger.warning("Prompt match check failed: %s", e)
+            return {"passed": False, "required": False, "note": "Vision check failed — cannot verify prompt match"}
 
     def _check_geometry_sanity(self, image_path: str, gen_type: str) -> dict:
         """Проверка геометрии на аномалии (торчащие элементы)."""
         try:
+            if not os.path.exists(image_path):
+                return {"passed": False, "required": False, "has_anomalies": False, "anomalies": [], "note": "Render file not found"}
+
             from shared.preview import detect_visual_bugs
 
             result = detect_visual_bugs(image_path)
@@ -259,5 +273,6 @@ class QualityAgent(BaseAgent):
                 "has_anomalies": len(anomalies) > 0,
                 "anomalies": anomalies,
             }
-        except Exception:
-            return {"passed": True, "required": False, "note": "Geometry sanity check unavailable"}
+        except Exception as e:
+            logger.warning("Geometry sanity check failed: %s", e)
+            return {"passed": False, "required": False, "has_anomalies": False, "anomalies": [], "note": "Vision check failed — cannot verify geometry"}

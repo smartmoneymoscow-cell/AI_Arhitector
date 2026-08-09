@@ -233,7 +233,7 @@ def detect_visual_bugs(image_path: str) -> dict:
         }
     """
     if not os.path.exists(image_path):
-        return {"has_bugs": False, "error": "Image not found"}
+        return {"has_bugs": False, "vision_available": False, "error": "Image not found"}
 
     bug_prompt = (
         "Найди визуальные баги на этом архитектурном рендере. Ответь СТРОГО в JSON:\n"
@@ -250,9 +250,10 @@ def detect_visual_bugs(image_path: str) -> dict:
 
     parsed = _call_vision_llm(image_path, bug_prompt)
     if parsed:
+        parsed.setdefault("vision_available", True)
         return parsed
 
-    return {"has_bugs": False, "details": "Vision LLM unavailable"}
+    return {"has_bugs": False, "vision_available": False, "details": "Vision LLM unavailable — cannot verify"}
 
 
 def validate_render_matches_prompt(image_path: str, prompt: str) -> dict:
