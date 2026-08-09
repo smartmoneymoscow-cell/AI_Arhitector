@@ -34,6 +34,8 @@
 | 9 | `docker-compose.yml` | ifc-service и cad-service не объявлены → hostnames не резолвились | Добавлены оба сервиса с healthcheck |
 | 10 | `docker-compose.yml` | IFC_SERVICE_URL порт 8083 вместо реального 8084 | Исправлено на 8084 |
 | 11 | `nginx.conf` | `/api/v1/files/` и `/api/v1/analyze/` падали в catch-all с 30s timeout | Добавлены отдельные location-блоки |
+| 12 | `shared/agents/orchestrator.py` | `q.field` — атрибута нет, `ClarificationQuestion` использует `field_name` | Исправлено на `q.field_name` |
+| 13 | `tests/test_generation.py` | Тест ожидал 7 моделей в каскаде, фактически 8 | Обновлено на 8 |
 
 #### Что НЕ вошло (осознанно)
 
