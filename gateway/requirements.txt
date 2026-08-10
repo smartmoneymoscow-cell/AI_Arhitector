@@ -5,5 +5,5 @@ httpx>=0.28.1
 pydantic>=2.13.4
 redis>=8.1.0
 shapely>=2.1.2
-networkx>=3.0
+networkx>=3.6.1
 Pillow>=12.3.0
