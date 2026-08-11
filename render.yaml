@@ -1,7 +1,7 @@
-# ════════════════════════════════════════════════════════════
-# Render.com deployment — Architect v7.1
-# Only active services (3 + Redis)
-# ════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════
+# Render.com deployment — Architect v11.3.0
+# Matches actual deployed service names on Render
+# ════════════════════════════════════════════════════════════════
 
 services:
   - type: web
@@ -19,11 +19,12 @@ services:
         value: https://ai-arch-blender3d.onrender.com
       - key: BLENDER_SERVICE_URL_2
         value: https://architect-blender.onrender.com
+      - key: AGENT_POOL_URL
+        value: ""
+      - key: KAGGLE_RENDERER_URL
+        value: ""
       - key: REDIS_URL
-        fromService:
-          type: redis
-          name: architect-redis
-          property: connectionString
+        value: ""
       - key: FRONTEND_DIR
         value: /app/frontend
       - key: PORT
@@ -32,15 +33,11 @@ services:
         value: "arch-prod-key-2024"
       - key: CORS_ORIGINS
         value: "https://smartmoneymoscow-cell.github.io"
-      - key: KAGGLE_RENDERER_URL
-        value: ""
-      - key: KAGGLE_API_KEY
-        sync: false
       - key: PYTHONUNBUFFERED
         value: "1"
 
   - type: web
-    name: ai-arch-llmproxy
+    name: architect-llm
     runtime: docker
     dockerfilePath: ./llm.Dockerfile
     rootDir: .
@@ -57,10 +54,7 @@ services:
       - key: GOOGLE_FALLBACK_KEYS
         sync: false
       - key: REDIS_URL
-        fromService:
-          type: redis
-          name: architect-redis
-          property: connectionString
+        value: ""
       - key: PORT
         value: "8081"
       - key: KEY_COOLDOWN_RATE_LIMIT_SEC
@@ -69,7 +63,7 @@ services:
         value: "86400"
 
   - type: web
-    name: ai-arch-blender3d
+    name: architect-blender
     runtime: docker
     dockerfilePath: ./blender.Dockerfile
     rootDir: .
@@ -84,15 +78,6 @@ services:
       - key: OUTPUT_DIR
         value: /app/output
       - key: LLM_SERVICE_URL
-        value: https://ai-arch-llmproxy.onrender.com
+        value: https://architect-llm-1s1j.onrender.com
       - key: REDIS_URL
-        fromService:
-          type: redis
-          name: architect-redis
-          property: connectionString
-
-  - type: redis
-    name: architect-redis
-    plan: starter
-    ipAllowList: []
-    maxmemoryPolicy: allkeys-lru
+        value: ""
