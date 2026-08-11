@@ -2,12 +2,12 @@
 # ONLY copies: proto/ (shared types) + gateway/ (own code)
 # Does NOT copy: llm-service/, blender-service/, orchestrator/agents/
 
-FROM python:3.13-slim AS builder
+FROM python:3.12-slim AS builder
 WORKDIR /build
 COPY gateway/requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-FROM python:3.13-slim
+FROM python:3.12-slim
 WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY proto/ /app/proto/
