@@ -1,5 +1,38 @@
 # CHANGELOG — AI_Arhitector
 
+## v11.3.2 — Gemini Direct Integration + Proactive Health Check
+
+### Дата: 2026-08-12
+
+### Проблема
+
+- Модель `gemini-2.0-flash-lite-001` удалена из Google API (404)
+- 7 из 8 Gemini ключей (`AQ.Ab8...`) нерабочие из-за известного бага Google ([ACCESS_TOKEN_TYPE_UNSUPPORTED](https://discuss.ai.google.dev/t/account-restricted-to-aq-keys-all-return-401-access-token-type-unsupported-on-generativelanguage-googleapis-com-requesting-fix-aiza-restoration/175424))
+- Не было проактивной проверки ключей — мёртвый ключ обнаруживался только при реальном запросе
+
+### Что исправлено
+
+| # | Файл | Что | Исправление |
+|---|------|-----|-------------|
+| 1 | `shared/parser.py` | Модель Gemini удалена из API | `gemini-2.0-flash-lite-001` → `gemini-3.1-flash-lite` |
+| 2 | `shared/parser.py` | Нет проактивной проверки ключей | Добавлен `proactive_health_loop()` — каждые 30 мин проверяет все ключи |
+| 3 | `llm-service/app.py` | Health check не запускался | Добавлен `proactive_health_loop()` в startup/shutdown |
+| 4 | `.env.example` | Устаревшие имена моделей | Обновлены на `gemini-3.1-flash-lite` и `gemini-2.5-flash` |
+| 5 | Render env vars | `GOOGLE_API_KEY` = мёртвый key 1 | Заменён на key 8 (рабочий) |
+
+### Статус ключей
+
+| Провайдер | Рабочие | Итого | Примечание |
+|-----------|---------|-------|------------|
+| OpenRouter | ✅ 5/5 | 5 | Все free tier |
+| Gemini | ✅ 1/8 | 8 | Key 8 работает, 1-7 — Google AQ bug |
+| Render | ✅ 8/8 | 8 | |
+
+### Known Issues
+
+- Ключи Gemini 1-7 нерабочие (Google AQ bug). Обход: OpenRouter для Gemini моделей
+- Redis не настроен в Gateway (`redis: not_configured`)
+
 ## v11.3.1 — Gateway Fix: GEOS libs + Frontend Cleanup
 
 ### Дата: 2026-08-11
