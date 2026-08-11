@@ -10,7 +10,7 @@ services:
     dockerfilePath: ./gateway.Dockerfile
     rootDir: .
     region: oregon
-    plan: starter
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: LLM_SERVICE_URL
@@ -42,7 +42,7 @@ services:
     dockerfilePath: ./llm.Dockerfile
     rootDir: .
     region: oregon
-    plan: starter
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: OPENROUTER_API_KEY
@@ -68,7 +68,7 @@ services:
     dockerfilePath: ./blender.Dockerfile
     rootDir: .
     region: oregon
-    plan: standard
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: PORT
