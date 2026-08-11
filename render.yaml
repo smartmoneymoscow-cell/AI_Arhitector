@@ -1,42 +1,16 @@
-# ════════════════════════════════════════════════════════════════
-# Render.com deployment — Architect v11.3.0
-# 8 free accounts + Kaggle GPU
-# ════════════════════════════════════════════════════════════════
-#
-# АККАУНТ 1: Gateway + Redis (ядро системы)
-# АККАУНТ 2: LLM Service (Gemini/OpenRouter)
-# АККАУНТ 3: Agent Pool (31 агент in-process)
-# АККАУНТ 4: Blender #1 (fallback, plan: standard)
-# АККАУНТ 5: Blender #2 (failover, plan: standard)
-# АККАУНТ 6: IFC + CAD (BIM, только для Aedifex)
-# АККАУНТ 7: Aedifex Bridge + Editor
-# АККАУНТ 8: Blender #3 (16K tiled, plan: standard)
-#
-# Kaggle T4 GPU: основной рендер (бесплатно, 16GB VRAM)
-# GitHub Pages: фронтенд
-# GitHub Actions: keep-alive + CI/CD
-# ════════════════════════════════════════════════════════════════
-
-# ════════════════════════════════════════════════════════════════
-# АККАУНТ 1 — Gateway + Redis
-# ════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
+# Render.com deployment — Architect v7.1
+# Only active services (3 + Redis)
+# ════════════════════════════════════════════════════════════
 
 services:
-  # --- Redis (managed, free) ---
-  - type: redis
-    name: architect-redis
-    plan: free
-    ipAllowList: []
-    maxmemoryPolicy: allkeys-lru
-
-  # --- Gateway (web, free) ---
   - type: web
     name: architect-gateway
     runtime: docker
     dockerfilePath: ./gateway.Dockerfile
     rootDir: .
     region: oregon
-    plan: free
+    plan: starter
     healthCheckPath: /health
     envVars:
       - key: LLM_SERVICE_URL
@@ -45,12 +19,6 @@ services:
         value: https://ai-arch-blender3d.onrender.com
       - key: BLENDER_SERVICE_URL_2
         value: https://architect-blender.onrender.com
-      - key: BLENDER_SERVICE_URL_3
-        value: https://arch-blender-3.onrender.com
-      - key: AGENT_POOL_URL
-        value: https://arch-agent-pool.onrender.com
-      - key: KAGGLE_RENDERER_URL
-        value: ""  # Заполнить когда Kaggle notebook запущен
       - key: REDIS_URL
         fromService:
           type: redis
@@ -61,23 +29,23 @@ services:
       - key: PORT
         value: "8080"
       - key: ARCH_API_KEYS
-        sync: false
+        value: "arch-prod-key-2024"
       - key: CORS_ORIGINS
         value: "https://smartmoneymoscow-cell.github.io"
+      - key: KAGGLE_RENDERER_URL
+        value: ""
+      - key: KAGGLE_API_KEY
+        sync: false
       - key: PYTHONUNBUFFERED
         value: "1"
 
-# ════════════════════════════════════════════════════════════════
-# АККАУНТ 2 — LLM Service
-# ════════════════════════════════════════════════════════════════
-
   - type: web
-    name: architect-llm
+    name: ai-arch-llmproxy
     runtime: docker
     dockerfilePath: ./llm.Dockerfile
     rootDir: .
     region: oregon
-    plan: free
+    plan: starter
     healthCheckPath: /health
     envVars:
       - key: OPENROUTER_API_KEY
@@ -88,48 +56,17 @@ services:
         sync: false
       - key: GOOGLE_FALLBACK_KEYS
         sync: false
-      - key: GEMINI_MODEL
-        value: gemini-2.0-flash-lite-001
       - key: REDIS_URL
-        value: ""  # Без Redis на free — cooldown in-memory
+        fromService:
+          type: redis
+          name: architect-redis
+          property: connectionString
       - key: PORT
         value: "8081"
       - key: KEY_COOLDOWN_RATE_LIMIT_SEC
         value: "60"
       - key: KEY_COOLDOWN_QUOTA_SEC
         value: "86400"
-      - key: PYTHONUNBUFFERED
-        value: "1"
-
-# ════════════════════════════════════════════════════════════════
-# АККАУНТ 3 — Agent Pool (31 агент)
-# ════════════════════════════════════════════════════════════════
-
-  - type: web
-    name: arch-agent-pool
-    runtime: docker
-    dockerfilePath: ./agent-pool.Dockerfile
-    rootDir: .
-    region: oregon
-    plan: free
-    healthCheckPath: /health
-    envVars:
-      - key: REDIS_URL
-        value: ""
-      - key: PORT
-        value: "8083"
-      - key: CORS_ORIGINS
-        value: ""
-      - key: GOOGLE_API_KEY
-        sync: false
-      - key: OPENROUTER_API_KEY
-        sync: false
-      - key: PYTHONUNBUFFERED
-        value: "1"
-
-# ════════════════════════════════════════════════════════════════
-# АККАУНТ 4 — Blender #1 (plan: standard, 8GB RAM)
-# ════════════════════════════════════════════════════════════════
 
   - type: web
     name: ai-arch-blender3d
@@ -147,133 +84,15 @@ services:
       - key: OUTPUT_DIR
         value: /app/output
       - key: LLM_SERVICE_URL
-        value: https://architect-llm-1s1j.onrender.com
-      - key: KAGGLE_RENDERER_URL
-        value: ""
-      - key: PYTHONUNBUFFERED
-        value: "1"
+        value: https://ai-arch-llmproxy.onrender.com
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: architect-redis
+          property: connectionString
 
-# ════════════════════════════════════════════════════════════════
-# АККАУНТ 5 — Blender #2 (failover)
-# ════════════════════════════════════════════════════════════════
-
-  - type: web
-    name: architect-blender
-    runtime: docker
-    dockerfilePath: ./blender.Dockerfile
-    rootDir: .
-    region: oregon
-    plan: standard
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: "8082"
-      - key: BLENDER_PATH
-        value: blender
-      - key: OUTPUT_DIR
-        value: /app/output
-      - key: LLM_SERVICE_URL
-        value: https://architect-llm-1s1j.onrender.com
-      - key: PYTHONUNBUFFERED
-        value: "1"
-
-# ════════════════════════════════════════════════════════════════
-# АККАУНТ 6 — IFC + CAD (free, BIM)
-# ════════════════════════════════════════════════════════════════
-
-  - type: web
-    name: arch-ifc-service
-    runtime: docker
-    dockerfilePath: ./ifc-service/Dockerfile
-    rootDir: ./ifc-service
-    region: oregon
-    plan: free
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: "8084"
-      - key: OUTPUT_DIR
-        value: /app/output
-      - key: PYTHONUNBUFFERED
-        value: "1"
-
-  - type: web
-    name: arch-cad-service
-    runtime: docker
-    dockerfilePath: ./cad-service/Dockerfile
-    rootDir: ./cad-service
-    region: oregon
-    plan: free
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: "8087"
-      - key: OUTPUT_DIR
-        value: /app/output
-      - key: PYTHONUNBUFFERED
-        value: "1"
-
-# ════════════════════════════════════════════════════════════════
-# АККАУНТ 7 — Aedifex Bridge + Editor (free)
-# ════════════════════════════════════════════════════════════════
-
-  - type: web
-    name: arch-aedifex-bridge
-    runtime: docker
-    dockerfilePath: ./aedifex-bridge/Dockerfile
-    rootDir: ./aedifex-bridge
-    region: oregon
-    plan: free
-    healthCheckPath: /health
-    envVars:
-      - key: GATEWAY_URL
-        value: https://architect-gateway.onrender.com
-      - key: LLM_SERVICE_URL
-        value: https://architect-llm-1s1j.onrender.com
-      - key: IFC_SERVICE_URL
-        value: https://arch-ifc-service.onrender.com
-      - key: CAD_SERVICE_URL
-        value: https://arch-cad-service.onrender.com
-      - key: BLENDER_SERVICE_URL
-        value: https://ai-arch-blender3d.onrender.com
-      - key: BRIDGE_PORT
-        value: "8085"
-      - key: PYTHONUNBUFFERED
-        value: "1"
-
-  - type: web
-    name: arch-aedifex-editor
-    runtime: docker
-    dockerfilePath: ./aedifex-editor/Dockerfile
-    rootDir: ./aedifex-editor
-    region: oregon
-    plan: free
-    envVars:
-      - key: NEXT_PUBLIC_API_URL
-        value: https://arch-aedifex-bridge.onrender.com
-      - key: PORT
-        value: "3002"
-
-# ════════════════════════════════════════════════════════════════
-# АККАУНТ 8 — Blender #3 (16K tiled render)
-# ════════════════════════════════════════════════════════════════
-
-  - type: web
-    name: arch-blender-3
-    runtime: docker
-    dockerfilePath: ./blender.Dockerfile
-    rootDir: .
-    region: oregon
-    plan: standard
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: "8082"
-      - key: BLENDER_PATH
-        value: blender
-      - key: OUTPUT_DIR
-        value: /app/output
-      - key: LLM_SERVICE_URL
-        value: https://architect-llm-1s1j.onrender.com
-      - key: PYTHONUNBUFFERED
-        value: "1"
+  - type: redis
+    name: architect-redis
+    plan: starter
+    ipAllowList: []
+    maxmemoryPolicy: allkeys-lru
