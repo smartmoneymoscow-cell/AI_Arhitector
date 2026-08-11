@@ -34,6 +34,7 @@ from shared.parser import (
     get_active_cascade,
     get_discovery_stats,
     invalidate_discovery,
+    proactive_health_loop,
     _get_api_keys,
     _filter_alive,
     _mark_key_dead,
@@ -80,6 +81,7 @@ app.add_middleware(
 # ═══════════════════════════════════════════════════════════════
 
 _discovery_task: asyncio.Task | None = None
+_health_check_task: asyncio.Task | None = None
 
 
 async def _discovery_background_loop():
@@ -104,7 +106,7 @@ async def _discovery_background_loop():
 
 @app.on_event("startup")
 async def _on_startup():
-    global _discovery_task
+    global _discovery_task, _health_check_task
     # Eager discovery: обновляем список бесплатных моделей СРАЗУ при старте,
     # а не ждём первого пользовательского запроса или первого тика фонового цикла.
     try:
@@ -117,12 +119,16 @@ async def _on_startup():
     except Exception as e:
         logger.warning("Eager discovery at startup failed: %s", e)
     _discovery_task = asyncio.create_task(_discovery_background_loop())
+    _health_check_task = asyncio.create_task(proactive_health_loop())
+    logger.info("Proactive key health check started")
 
 
 @app.on_event("shutdown")
 async def _on_shutdown():
     if _discovery_task:
         _discovery_task.cancel()
+    if _health_check_task:
+        _health_check_task.cancel()
 
 
 @app.get("/health")

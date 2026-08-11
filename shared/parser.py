@@ -798,7 +798,7 @@ async def _call_gemini(prompt: str, timeout: int = 60) -> dict | None:
         }
     }
 
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite-001")
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
     # Пробуем КАЖДЫЙ живой ключ ровно один раз (round-robin), а не только 3.
     for attempt in range(len(keys)):
@@ -1163,6 +1163,120 @@ def parse_prompt_sync(text: str) -> dict:
         return loop.run_until_complete(parse_prompt_async(text))
     except RuntimeError:
         return asyncio.run(parse_prompt_async(text))
+
+
+# ═══════════════════════════════════════════════════════════════
+# PROACTIVE KEY HEALTH CHECK — фоновая проверка всех ключей
+# Раз в _HEALTH_CHECK_INTERVAL секунд проходит по ВСЕМ ключам
+# (Google + OpenRouter) через дешёвые эндпоинты, обновляет
+# состояние cooldown в Redis. Если ключ восстановился — снимает
+# cooldown раньше срока.
+# ═══════════════════════════════════════════════════════════════
+
+_HEALTH_CHECK_INTERVAL = int(os.environ.get("KEY_HEALTH_CHECK_INTERVAL_SEC", "1800"))
+
+
+async def _check_openrouter_key_health(api_key: str) -> tuple[str, str]:
+    """Проверка OpenRouter ключа через бесплатный /auth/key endpoint."""
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                "https://openrouter.ai/api/v1/auth/key",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=10,
+            )
+        if r.status_code == 200:
+            data = r.json().get("data", {})
+            return "ok", f"usage={data.get('usage')} free_tier={data.get('is_free_tier')}"
+        if r.status_code == 401:
+            return "invalid", "401"
+        if r.status_code == 402:
+            return "quota_exhausted", "402"
+        if r.status_code == 429:
+            return "rate_limit", "429"
+        return "error", f"HTTP {r.status_code}"
+    except Exception as e:
+        return "error", str(e)[:80]
+
+
+async def _check_gemini_key_health(api_key: str) -> tuple[str, str]:
+    """Проверка Gemini ключа через минимальный generateContent."""
+    model = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    payload = {
+        "contents": [{"parts": [{"text": "hi"}]}],
+        "generationConfig": {"maxOutputTokens": 1},
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(
+                url, json=payload,
+                headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+                timeout=15,
+            )
+        if r.status_code == 200:
+            return "ok", "200"
+        if r.status_code in (400, 403):
+            return "invalid", str(r.status_code)
+        if r.status_code == 404:
+            return "error", f"404 — model {model}"
+        if r.status_code == 429:
+            body = r.text.lower()
+            if "quota" in body or "daily" in body:
+                return "quota_exhausted", "429 quota"
+            return "rate_limit", "429 rpm"
+        return "error", f"HTTP {r.status_code}"
+    except Exception as e:
+        return "error", str(e)[:80]
+
+
+async def proactive_health_loop():
+    """Фоновый цикл проверки всех ключей. Запускать как asyncio.create_task()."""
+    await asyncio.sleep(10)
+    while True:
+        try:
+            logger.info("Proactive health check: starting...")
+            or_keys = _get_api_keys()
+            gm_keys = _get_google_keys()
+
+            for key in or_keys:
+                was_alive = not _is_key_cooling(key)
+                kind, detail = await _check_openrouter_key_health(key)
+                if kind == "ok":
+                    if not was_alive:
+                        _mark_key_dead(key, 0, "health_check_recovered")
+                        logger.info("OR key %s RECOVERED", _mask_key(key))
+                elif kind == "invalid":
+                    _mark_key_dead(key, 30 * 24 * 3600, f"health_check_{kind}")
+                    if was_alive:
+                        logger.warning("OR key %s → DEAD: %s", _mask_key(key), detail)
+                elif kind in ("rate_limit", "quota_exhausted"):
+                    sec = _COOLDOWN_QUOTA_EXHAUSTED if kind == "quota_exhausted" else _COOLDOWN_RATE_LIMIT
+                    _mark_key_dead(key, sec, f"health_check_{kind}")
+                await asyncio.sleep(0.3)
+
+            for key in gm_keys:
+                was_alive = not _is_key_cooling(key)
+                kind, detail = await _check_gemini_key_health(key)
+                if kind == "ok":
+                    if not was_alive:
+                        _mark_key_dead(key, 0, "health_check_recovered")
+                        logger.info("Gemini key %s RECOVERED", _mask_key(key))
+                elif kind == "invalid":
+                    _mark_key_dead(key, 30 * 24 * 3600, f"health_check_{kind}")
+                    if was_alive:
+                        logger.warning("Gemini key %s → DEAD: %s", _mask_key(key), detail)
+                elif kind in ("rate_limit", "quota_exhausted"):
+                    sec = _COOLDOWN_QUOTA_EXHAUSTED if kind == "quota_exhausted" else _COOLDOWN_RATE_LIMIT
+                    _mark_key_dead(key, sec, f"health_check_{kind}")
+                await asyncio.sleep(0.3)
+
+            or_alive = sum(1 for k in or_keys if not _is_key_cooling(k))
+            gm_alive = sum(1 for k in gm_keys if not _is_key_cooling(k))
+            logger.info("Health check done: OR %d/%d, Gemini %d/%d", or_alive, len(or_keys), gm_alive, len(gm_keys))
+        except Exception as e:
+            logger.warning("Health check error: %s", e)
+        await asyncio.sleep(_HEALTH_CHECK_INTERVAL)
 
 
 # ═══════════════════ BACKWARD COMPAT ALIASES ═══════════════════
