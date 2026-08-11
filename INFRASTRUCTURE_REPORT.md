@@ -1,10 +1,34 @@
 # Architect AI — Full Infrastructure Report
 
-**Date:** 2026-08-11 10:00 (Asia/Shanghai)
+**Date:** 2026-08-12 07:55 (Asia/Shanghai)
 
 ---
 
-## Account #2 (rnd_SUdnZ8…) — 11 Services, 8 LIVE ✅
+## Summary: 8 LLM instances + 11 support services = 19 LIVE ✅
+
+| Account | LLM | Gateway | Blender | Data/DB | Other | Total |
+|---------|:---:|:-------:|:-------:|:-------:|:-----:|:-----:|
+| #1 smart.money.moscow | ✅ | — | — | — | — | 1 |
+| #2 xhungerrr | ✅ | — | ✅ | 6 | — | 8 |
+| #3 rrrhunger | ✅ | — | — | — | — | 1 |
+| #4 fdegegvf | ✅ | ✅ | ✅ | — | — | 3 |
+| #5 k25334003 | ✅ | — | — | — | — | 1 |
+| #6 ror577282 | ✅ | — | — | — | — | 1 |
+| #7 argo7075 | ✅ | — | — | — | 1 | 2 |
+| #8 vietnamsk064 | ✅ | — | — | — | — | 1 |
+| **Total** | **8** | **1** | **2** | **6** | **1** | **18** |
+
+---
+
+## Account #1 (smart.money.moscow@gmail.com)
+
+| Service | Deploy | Health | URL |
+|---------|:------:|:------:|-----|
+| architect-llm | ✅ live | ✅ | architect-llm-s5q7.onrender.com |
+
+---
+
+## Account #2 (xhungerrr@gmail.com) — 11 Services
 
 | Service | Deploy | Health | URL |
 |---------|:------:|:------:|-----|
@@ -22,26 +46,106 @@
 
 ---
 
-## Account #4 (rnd_CqhN6e…) — 3 Architect Services
+## Account #3 (rrrhunger@gmail.com)
 
-| Service | Deploy | Health | Version | URL |
-|---------|:------:|:------:|:-------:|-----|
-| architect-gateway | update_failed | ✅ ok | v8.2.0 | architect-gateway.onrender.com |
-| architect-llm | ✅ live | ✅ ok | v8.0.0 | architect-llm-1s1j.onrender.com |
-| architect-blender | build_failed | ✅ ok | v6.0.0 | architect-blender.onrender.com |
+| Service | Deploy | Health | URL |
+|---------|:------:|:------:|-----|
+| architect-llm | ✅ live | ✅ | architect-llm-zczl.onrender.com |
 
 ---
 
-## Other Accounts
+## Account #4 (fdegegvf@gmail.com) — Gateway + LLM + Blender
 
-| Account | Services | Status |
-|---------|----------|--------|
-| #1 | chat-monitor-bot | Separate project |
-| #3 | (empty) | Can't create — need ownerID via dashboard |
-| #5 | carwash-bot | Separate project |
-| #6 | hotel-ai (3 services) | Separate project |
-| #7 | chat-monitor-bot | Separate project |
-| #8 | (empty) | Can't create — need ownerID via dashboard |
+| Service | Deploy | Health | Version | URL |
+|---------|:------:|:------:|:-------:|-----|
+| architect-gateway | ✅ live | ✅ | v8.2.0 | architect-gateway.onrender.com |
+| architect-llm | ✅ live | ✅ | v8.0.0 | architect-llm-1s1j.onrender.com |
+| architect-blender | ✅ live | ✅ | v6.0.0 | architect-blender.onrender.com |
+
+---
+
+## Account #5 (k25334003@gmail.com)
+
+| Service | Deploy | Health | URL |
+|---------|:------:|:------:|-----|
+| architect-llm | ✅ live | ✅ | architect-llm-2pmo.onrender.com |
+
+---
+
+## Account #6 (ror577282@gmail.com)
+
+| Service | Deploy | Health | URL |
+|---------|:------:|:------:|-----|
+| architect-llm | ✅ live | ✅ | architect-llm-5mdk.onrender.com |
+
+---
+
+## Account #7 (argo7075@gmail.com)
+
+| Service | Deploy | Health | URL |
+|---------|:------:|:------:|-----|
+| architect-llm | ✅ live | ✅ | architect-llm-sdrh.onrender.com |
+| chat-monitor-bot | ✅ live | — | youdo-photo.onrender.com (other project) |
+
+---
+
+## Account #8 (vietnamsk064@gmail.com)
+
+| Service | Deploy | Health | URL |
+|---------|:------:|:------:|-----|
+| architect-llm | ✅ live | ✅ | architect-llm-qarj.onrender.com |
+
+---
+
+## OpenRouter Keys — 8 Accounts, 400 requests/day
+
+| # | Key suffix | Primary on | Status |
+|---|-----------|------------|:------:|
+| 1 | …88f4 | Acc1 | ✅ alive |
+| 2 | …09d3 | Acc2 | ✅ alive |
+| 3 | …8ef8 | Acc3 | ✅ alive |
+| 4 | …9396 | Acc4 | ✅ alive |
+| 5 | …836d | Acc5 | ✅ alive |
+| 6 | …4437 | Acc6 | ✅ alive |
+| 7 | …00ab | Acc7 | ✅ alive |
+| 8 | …43a9 | Acc8 | ✅ alive |
+
+**Each service has ALL 8 keys** (1 primary + 7 fallback). Cascade switching on 429/402.
+
+---
+
+## Google Gemini Keys — 8 Accounts
+
+| # | Key suffix | Primary on |
+|---|-----------|------------|
+| 1 | …oNWQ | Acc1 |
+| 2 | …dBhA | Acc2 |
+| 3 | …LHPQ | Acc3 |
+| 4 | …ODWw | Acc4 |
+| 5 | …akRg | Acc5 |
+| 6 | …gPBQ | Acc6 |
+| 7 | …FUrw | Acc7 |
+| 8 | …KroA | Acc8 |
+
+---
+
+## Key Rotation Logic
+
+```
+Request → _get_api_keys() → [primary] + [7 fallbacks]
+    ↓
+_filter_alive() → skip keys on cooldown
+    ↓
+Try key → OpenRouter API
+    ↓
+429 (rate limit) → cooldown 60s → next key
+402 (quota)      → cooldown 24h → next key
+200 (ok)         → return response
+    ↓
+All keys exhausted → HTTP 503
+```
+
+Cooldown persists in Redis (survives container restarts).
 
 ---
 
@@ -51,12 +155,3 @@
 "дом 2 этажа кирпич 10x12"
 → object_type: building, floors: 2, material: brick
 ```
-
----
-
-## Total: 16 LIVE services across 2 accounts
-
-- **Account #2:** 8 live (graphdb, vectordb, freecad, cad, data, ifc, blender3d, llmproxy)
-- **Account #4:** 3 live (gateway, llm, blender)
-- **LLM new code:** ✅ deployed (31 agents, duct_analysis)
-- **Repo:** public, auto-deploy enabled

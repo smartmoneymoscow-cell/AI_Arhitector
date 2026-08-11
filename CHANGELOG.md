@@ -1,5 +1,58 @@
 # CHANGELOG — AI_Arhitector
 
+## v11.4.0 — 8-Account OpenRouter Cascade + Full Infrastructure Update
+
+### Дата: 2026-08-12
+
+### Что сделано
+
+| # | Задача | Детали |
+|---|--------|--------|
+| 1 | OpenRouter: 5 → 8 ключей | Добавлены 3 новых ключа (…4437, …00ab, …43a9) во все 8 LLM-сервисов |
+| 2 | Каскад между аккаунтами | Каждый сервис: 1 unique primary + 7 fallback = все 8 ключей |
+| 3 | Деплой всех сервисов | 8/8 LLM-сервисов задеплоены и healthy |
+| 4 | RENDER_ACCOUNTS.md | Полностью переписан: 8 аккаунтов, все URL, все ключи |
+| 5 | INFRASTRUCTURE_REPORT.md | Обновлён: 18 живых сервисов на 8 аккаунтах |
+| 6 | .env.example | Обновлён: примеры 8 OpenRouter + 8 Google ключей |
+
+### Архитектура ключей
+
+```
+Каждый LLM-сервис (8 штук):
+  OPENROUTER_API_KEY        = уникальный primary (Acc1→…88f4, Acc2→…09d3, ...)
+  OPENROUTER_FALLBACK_KEYS  = 7 остальных ключей через запятую
+
+Каскад при исчерпании:
+  429 (rate limit) → cooldown 60с → следующий ключ
+  402 (quota)      → cooldown 24ч → следующий ключ
+  Redis-дублирование → переживает рестарт контейнера
+```
+
+### Статус инфраструктуры
+
+| Провайдер | Ключей | Статус |
+|-----------|:------:|:------:|
+| OpenRouter | 8/8 | ✅ все alive |
+| Google Gemini | 8/8 | ✅ все настроены |
+| Render | 8/8 | ✅ все сервисы live |
+
+**Итого: 8 × 50 = 400 запросов/сутки через OpenRouter**
+
+### Сервисы по аккаунтам
+
+| # | Сервисы | URL LLM |
+|---|---------|---------|
+| 1 | llm | architect-llm-s5q7.onrender.com |
+| 2 | llmproxy + blender + 6 data/DB + 3 legacy | ai-arch-llmproxy.onrender.com |
+| 3 | llm | architect-llm-zczl.onrender.com |
+| 4 | gateway + llm + blender | architect-llm-1s1j.onrender.com |
+| 5 | llm | architect-llm-2pmo.onrender.com |
+| 6 | llm | architect-llm-5mdk.onrender.com |
+| 7 | llm + chat-monitor-bot | architect-llm-sdrh.onrender.com |
+| 8 | llm | architect-llm-qarj.onrender.com |
+
+---
+
 ## v11.3.2 — Gemini Direct Integration + Proactive Health Check
 
 ### Дата: 2026-08-12
