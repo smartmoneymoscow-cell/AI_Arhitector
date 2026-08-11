@@ -79,6 +79,7 @@ AGENT_REGISTRY = {
     "dwg_analysis": "shared.agents.dwg_analysis_agent.DWGAnalysisAgent",
     "pdf_analysis": "shared.agents.pdf_analysis_agent.PDFAnalysisAgent",
     "structural_analysis": "shared.agents.structural_analysis_agent.StructuralAnalysisAgent",
+    "duct_analysis": "shared.agents.duct_analysis_agent.DuctAnalysisAgent",
 }
 
 # Cache loaded agent classes
