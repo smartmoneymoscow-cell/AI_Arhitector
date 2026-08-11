@@ -1,9 +1,6 @@
-# Gateway requirements — updated 2026-08-10
+# Gateway requirements — minimal (no native deps needed)
 fastapi>=0.141.1
 uvicorn>=0.52.0
 httpx>=0.28.1
 pydantic>=2.13.4
 redis>=8.1.0
-shapely>=2.1.2
-networkx>=3.0
-Pillow>=12.3.0
