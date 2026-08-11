@@ -95,7 +95,7 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         run: |
           for attempt in 1 2 3; do
-            HEALTH=$(curl -s "https://ai-arch-llmproxy.onrender.com/health" --max-time 60 || true)
+            HEALTH=$(curl -s "https://architect-llm-1s1j.onrender.com/health" --max-time 60 || true)
             if echo "$HEALTH" | python3 -c "
           import json, sys
           r = json.load(sys.stdin)
@@ -114,7 +114,7 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         run: |
           for attempt in 1 2 3; do
-            HEALTH=$(curl -s "https://ai-arch-blender3d.onrender.com/health" --max-time 60 || true)
+            HEALTH=$(curl -s "https://architect-blender.onrender.com/health" --max-time 60 || true)
             if echo "$HEALTH" | python3 -c "
           import json, sys
           r = json.load(sys.stdin)
