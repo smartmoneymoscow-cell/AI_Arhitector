@@ -180,3 +180,4 @@ docker-compose up -d
 | [ROADMAP.md](ROADMAP.md) | Дорожная карта на будущее |
 | [AUDIT.md](AUDIT.md) | Аудит безопасности |
 | [docs/KAGGLE_SETUP.md](docs/KAGGLE_SETUP.md) | Настройка Kaggle GPU рендера |
+# Deploy trigger Tue Aug 11 09:35:50 CST 2026
