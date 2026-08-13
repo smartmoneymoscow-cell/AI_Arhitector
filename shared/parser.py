@@ -301,17 +301,29 @@ async def discover_free_models(api_key: str) -> list[dict]:
     base_url = os.environ.get("OPENROUTER_BASE", "https://openrouter.ai/api/v1")
 
     try:
+        # FIX: stream + body size limit — на Render free tier огромный JSON (400+ моделей
+        # с бенчмарками) вызывает зависание httpx при чтении ответа. Стриминг с лимитом
+        # предотвращает это и даёт predictablый timeout.
+        _MAX_BODY_BYTES = 2 * 1024 * 1024  # 2 MB
         async with httpx.AsyncClient() as client:
-            r = await client.get(
+            async with client.stream(
+                "GET",
                 f"{base_url}/models",
                 headers={"Authorization": f"Bearer {api_key}"},
-                timeout=15,
-            )
-        if r.status_code != 200:
-            logger.warning("OpenRouter /models returned %d", r.status_code)
-            return []
+                timeout=httpx.Timeout(connect=10, read=30, write=10, pool=10),
+            ) as r:
+                if r.status_code != 200:
+                    await r.aread()
+                    logger.warning("OpenRouter /models returned %d", r.status_code)
+                    return []
+                body = b""
+                async for chunk in r.aiter_bytes(chunk_size=65536):
+                    body += chunk
+                    if len(body) > _MAX_BODY_BYTES:
+                        logger.warning("OpenRouter /models response too large (%d bytes), truncating", len(body))
+                        break
 
-        data = r.json()
+        data = json.loads(body.decode("utf-8", errors="replace"))
         models = data.get("data", [])
 
         free_models = []
