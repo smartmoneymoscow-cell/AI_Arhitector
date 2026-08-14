@@ -1270,8 +1270,16 @@ async def _check_gemini_key_health(api_key: str) -> tuple[str, str]:
 
 
 async def proactive_health_loop():
-    """Фоновый цикл проверки всех ключей. Запускать как asyncio.create_task()."""
+    """Фоновый цикл проверки ключей.
+
+    ВАЖНО: НЕ помечаем ключи как мёртвые при ошибках health check —
+    это может быть временный сбой API. Помечаем мёртвыми ТОЛЬКО при
+    явном 401 (невалидный ключ) И ТОЛЬКО после 3 последовательных
+    неудач. Восстанавливаем ключи сразу при успешной проверке.
+    """
     await asyncio.sleep(10)
+    _or_fail_count: dict[str, int] = {}  # key -> consecutive failures
+    _gm_fail_count: dict[str, int] = {}
     while True:
         try:
             logger.info("Proactive health check: starting...")
@@ -1282,33 +1290,37 @@ async def proactive_health_loop():
                 was_alive = not _is_key_cooling(key)
                 kind, detail = await _check_openrouter_key_health(key)
                 if kind == "ok":
+                    _or_fail_count.pop(key, None)
                     if not was_alive:
                         _mark_key_dead(key, 0, "health_check_recovered")
                         logger.info("OR key %s RECOVERED", _mask_key(key))
                 elif kind == "invalid":
-                    _mark_key_dead(key, 30 * 24 * 3600, f"health_check_{kind}")
-                    if was_alive:
-                        logger.warning("OR key %s → DEAD: %s", _mask_key(key), detail)
-                elif kind in ("rate_limit", "quota_exhausted"):
-                    sec = _COOLDOWN_QUOTA_EXHAUSTED if kind == "quota_exhausted" else _COOLDOWN_RATE_LIMIT
-                    _mark_key_dead(key, sec, f"health_check_{kind}")
-                await asyncio.sleep(0.3)
+                    # Невалидный ключ — помечаем мёртвым ТОЛЬКО после 3 подряд неудач
+                    _or_fail_count[key] = _or_fail_count.get(key, 0) + 1
+                    if _or_fail_count[key] >= 3:
+                        _mark_key_dead(key, 30 * 24 * 3600, f"health_check_{kind}_x3")
+                        logger.warning("OR key %s → DEAD (3x invalid): %s", _mask_key(key), detail)
+                    else:
+                        logger.info("OR key %s invalid (%d/3): %s", _mask_key(key), _or_fail_count[key], detail)
+                # rate_limit, quota_exhausted, error — НЕ помечаем мёртвым (временно)
+                await asyncio.sleep(0.5)
 
             for key in gm_keys:
                 was_alive = not _is_key_cooling(key)
                 kind, detail = await _check_gemini_key_health(key)
                 if kind == "ok":
+                    _gm_fail_count.pop(key, None)
                     if not was_alive:
                         _mark_key_dead(key, 0, "health_check_recovered")
                         logger.info("Gemini key %s RECOVERED", _mask_key(key))
                 elif kind == "invalid":
-                    _mark_key_dead(key, 30 * 24 * 3600, f"health_check_{kind}")
-                    if was_alive:
-                        logger.warning("Gemini key %s → DEAD: %s", _mask_key(key), detail)
-                elif kind in ("rate_limit", "quota_exhausted"):
-                    sec = _COOLDOWN_QUOTA_EXHAUSTED if kind == "quota_exhausted" else _COOLDOWN_RATE_LIMIT
-                    _mark_key_dead(key, sec, f"health_check_{kind}")
-                await asyncio.sleep(0.3)
+                    _gm_fail_count[key] = _gm_fail_count.get(key, 0) + 1
+                    if _gm_fail_count[key] >= 3:
+                        _mark_key_dead(key, 30 * 24 * 3600, f"health_check_{kind}_x3")
+                        logger.warning("Gemini key %s → DEAD (3x invalid): %s", _mask_key(key), detail)
+                    else:
+                        logger.info("Gemini key %s invalid (%d/3): %s", _mask_key(key), _gm_fail_count[key], detail)
+                await asyncio.sleep(0.5)
 
             or_alive = sum(1 for k in or_keys if not _is_key_cooling(k))
             gm_alive = sum(1 for k in gm_keys if not _is_key_cooling(k))
