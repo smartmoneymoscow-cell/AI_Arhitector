@@ -309,7 +309,7 @@ async def parse_proxy(
         "post",
         f"{settings.LLM_SERVICE_URL}/api/v1/parse",
         json={"text": text},
-        timeout=120,
+        timeout=15,
     )
     return r.json()
 

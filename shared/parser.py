@@ -241,14 +241,14 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 # ═══════════════════════════════════════════════════════════════
 
 LLM_CASCADE = [
-    {"model": "google/gemma-4-26b-a4b-it:free", "tier": 1, "timeout": 30},
-    {"model": "google/gemma-4-31b-it:free", "tier": 1, "timeout": 30},
-    {"model": "nvidia/nemotron-3-ultra-550b-a55b:free", "tier": 1, "timeout": 30},
-    {"model": "openai/gpt-oss-20b:free", "tier": 1, "timeout": 30},
-    {"model": "nvidia/nemotron-3-super-120b-a12b:free", "tier": 2, "timeout": 30},
-    {"model": "nvidia/nemotron-3-nano-30b-a3b:free", "tier": 2, "timeout": 30},
-    {"model": "poolside/laguna-s-2.1:free", "tier": 2, "timeout": 30},
-    {"model": "cohere/north-mini-code:free", "tier": 3, "timeout": 30},
+    {"model": "google/gemma-4-26b-a4b-it:free", "tier": 1, "timeout": 3},
+    {"model": "google/gemma-4-31b-it:free", "tier": 1, "timeout": 3},
+    {"model": "nvidia/nemotron-3-ultra-550b-a55b:free", "tier": 1, "timeout": 3},
+    {"model": "openai/gpt-oss-20b:free", "tier": 1, "timeout": 3},
+    {"model": "nvidia/nemotron-3-super-120b-a12b:free", "tier": 2, "timeout": 3},
+    {"model": "nvidia/nemotron-3-nano-30b-a3b:free", "tier": 2, "timeout": 3},
+    {"model": "poolside/laguna-s-2.1:free", "tier": 2, "timeout": 3},
+    {"model": "cohere/north-mini-code:free", "tier": 3, "timeout": 3},
 ]
 
 
@@ -310,7 +310,7 @@ async def discover_free_models(api_key: str) -> list[dict]:
                 "GET",
                 f"{base_url}/models",
                 headers={"Authorization": f"Bearer {api_key}"},
-                timeout=httpx.Timeout(connect=10, read=30, write=10, pool=10),
+                timeout=httpx.Timeout(connect=5, read=10, write=5, pool=5),
             ) as r:
                 if r.status_code != 200:
                     await r.aread()
@@ -365,7 +365,7 @@ async def discover_free_models(api_key: str) -> list[dict]:
             free_models.append({
                 "model": mid,
                 "tier": priority,
-                "timeout": 30,
+                "timeout": 3,
                 "is_free": is_free,
                 "name": m.get("name", ""),
             })
@@ -775,7 +775,7 @@ def _get_google_keys() -> list[str]:
 _GEMINI_KEY_IDX = 0
 
 
-async def _call_gemini(prompt: str, timeout: int = 60) -> dict | None:
+async def _call_gemini(prompt: str, timeout: int = 3) -> dict | None:
     """Call Google Gemini API — БЕСПЛАТНО (free tier, 15 RPM per key).
 
     Перебирает ВСЕ живые (не остывающие) Gemini-ключи по кругу, начиная
@@ -810,7 +810,7 @@ async def _call_gemini(prompt: str, timeout: int = 60) -> dict | None:
         }
     }
 
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite-001")
 
     # Пробуем КАЖДЫЙ живой ключ ровно один раз (round-robin), а не только 3.
     for attempt in range(len(keys)):
@@ -881,7 +881,7 @@ async def _call_ollama(prompt: str) -> dict | None:
             r = await client.post(
                 f"{OLLAMA_URL}/api/chat",
                 json=payload,
-                timeout=60,
+                timeout=3,
             )
 
         if r.status_code != 200:
@@ -1213,7 +1213,7 @@ async def _check_openrouter_key_health(api_key: str) -> tuple[str, str]:
 
 async def _check_gemini_key_health(api_key: str) -> tuple[str, str]:
     """Проверка Gemini ключа через минимальный generateContent."""
-    model = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
+    model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite-001")
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     payload = {
         "contents": [{"parts": [{"text": "hi"}]}],

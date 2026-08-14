@@ -61,7 +61,7 @@ async def _parse_via_llm_service(prompt: str) -> dict:
             r = await client.post(
                 f"{llm_url}/api/v1/parse",
                 json={"text": prompt},
-                timeout=60.0,
+                timeout=15.0,
             )
         if r.status_code == 200:
             return r.json()
