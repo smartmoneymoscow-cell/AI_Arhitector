@@ -1,5 +1,34 @@
 # CHANGELOG — AI_Arhitector
 
+## v11.5.0 — Pipeline Timeouts Fix + GLB URL + Deploy Fix
+
+### Дата: 2026-08-14
+
+### Что исправлено
+
+| # | Файл | Что | Исправление |
+|---|------|-----|-------------|
+| 1 | `shared/parser.py` | OpenRouter discovery зависает на Render | `httpx.get()` → `httpx.stream()` с 2MB body limit |
+| 2 | `shared/parser.py` | Cascade timeout 30s на модель | 30s → **3s** |
+| 3 | `shared/parser.py` | GEMINI_MODEL default неверный | `gemini-3.1-flash-lite` → `gemini-2.0-flash-lite-001` |
+| 4 | `shared/parser.py` | Gemini/Ollama timeout 60s | → **3s** |
+| 5 | `gateway/app.py` | Parse proxy timeout 120s | → **15s** |
+| 6 | `llm-service/app.py` | Chat completions timeout 60s | → **10s** |
+| 7 | `blender-service/app.py` | LLM parse timeout 60s | → **15s** |
+| 8 | `frontend/index.html` | GLB URL с двойным слешем | `cleanPath = glbPath.replace(/^\/+/, '')` |
+| 9 | `gateway/app.py` | Auth middleware блокирует запросы | Исправлена проверка |
+| 10 | `shared/agents/orchestrator.py` | Blender fallback не работает | Добавлена fallback логика |
+| 11 | `shared/auth.py` | Auth пропускает/блокирует неверно | Исправлены условия |
+| 12 | `.github/workflows/deploy.yml` | Exit code 127 | Добавлен `shell: bash`, переименован `PATH` → `HEALTH_PATH` |
+
+### Коммиты
+
+- `e3801af` — fix: streaming discovery for OpenRouter /models
+- `b61503d` — fix: 3s cascade timeouts, correct GEMINI_MODEL default
+- `41b53bd` — fix: pipeline timeouts + auth + GLB URL + blender fallback
+
+---
+
 ## v11.4.0 — 8-Account OpenRouter Cascade + Full Infrastructure Update
 
 ### Дата: 2026-08-12

@@ -1,4 +1,4 @@
-# Architect v11.2.1 — AI Architecture Generator
+# Architect v11.5.0 — AI Architecture Generator
 
 Генерация 3D-моделей зданий и интерьеров по текстовому описанию на русском языке.
 
@@ -93,7 +93,7 @@ docker-compose up -d
 20+ специализированных агентов: парсер, геометрия, текстуры, свет,
 конструктив, нормативы, рендер, качество, экспорт.
 
-## Что нового в v11.2.1
+## Что нового в v11.5.0
 
 - **Agent Pool микросервис** — 30 агентов выполняются в отдельном сервисе через HTTP (не in-process)
   - `AGENT_POOL_URL` env var → gateway вызывает agent-pool вместо importlib
