@@ -241,14 +241,14 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 # ═══════════════════════════════════════════════════════════════
 
 LLM_CASCADE = [
-    {"model": "google/gemma-4-26b-a4b-it:free", "tier": 1, "timeout": 3},
-    {"model": "google/gemma-4-31b-it:free", "tier": 1, "timeout": 3},
-    {"model": "nvidia/nemotron-3-ultra-550b-a55b:free", "tier": 1, "timeout": 3},
-    {"model": "openai/gpt-oss-20b:free", "tier": 1, "timeout": 3},
-    {"model": "nvidia/nemotron-3-super-120b-a12b:free", "tier": 2, "timeout": 3},
-    {"model": "nvidia/nemotron-3-nano-30b-a3b:free", "tier": 2, "timeout": 3},
-    {"model": "poolside/laguna-s-2.1:free", "tier": 2, "timeout": 3},
-    {"model": "cohere/north-mini-code:free", "tier": 3, "timeout": 3},
+    {"model": "google/gemma-4-26b-a4b-it:free", "tier": 1, "timeout": 30},
+    {"model": "google/gemma-4-31b-it:free", "tier": 1, "timeout": 30},
+    {"model": "nvidia/nemotron-3-ultra-550b-a55b:free", "tier": 1, "timeout": 30},
+    {"model": "openai/gpt-oss-20b:free", "tier": 1, "timeout": 30},
+    {"model": "nvidia/nemotron-3-super-120b-a12b:free", "tier": 2, "timeout": 30},
+    {"model": "nvidia/nemotron-3-nano-30b-a3b:free", "tier": 2, "timeout": 30},
+    {"model": "poolside/laguna-s-2.1:free", "tier": 2, "timeout": 30},
+    {"model": "cohere/north-mini-code:free", "tier": 3, "timeout": 30},
 ]
 
 
@@ -365,7 +365,7 @@ async def discover_free_models(api_key: str) -> list[dict]:
             free_models.append({
                 "model": mid,
                 "tier": priority,
-                "timeout": 3,
+                "timeout": 30,
                 "is_free": is_free,
                 "name": m.get("name", ""),
             })
@@ -775,7 +775,7 @@ def _get_google_keys() -> list[str]:
 _GEMINI_KEY_IDX = 0
 
 
-async def _call_gemini(prompt: str, timeout: int = 3) -> dict | None:
+async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
     """Call Google Gemini API — БЕСПЛАТНО (free tier, 15 RPM per key).
 
     Перебирает ВСЕ живые (не остывающие) Gemini-ключи по кругу, начиная

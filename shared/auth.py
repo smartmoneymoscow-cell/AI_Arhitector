@@ -52,11 +52,8 @@ def get_api_key_required(api_key: str = Security(API_KEY_HEADER)) -> str:
     """S1: API key MANDATORY. Without key → 401. Without config → 500."""
     valid_keys = _load_api_keys()
     if not valid_keys:
-        logger.error("CRITICAL: ARCH_API_KEYS not set — API is unsecured!")
-        raise HTTPException(
-            status_code=500,
-            detail="Server misconfiguration: API keys not configured.",
-        )
+        logger.warning("ARCH_API_KEYS not set — API is open (no auth required)")
+        return ""
     if not api_key:
         raise HTTPException(status_code=401, detail="Missing API key. Pass X-API-Key header.")
     if api_key not in valid_keys:

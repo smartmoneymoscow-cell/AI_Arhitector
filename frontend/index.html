@@ -1501,7 +1501,8 @@ function _handleOrchestratorResult(orchResult, prompt) {
   if(orchResult.exports && orchResult.exports.output_path) {
     const glbPath = orchResult.exports.output_path;
     if(glbPath) {
-      const url = glbPath.startsWith('http') ? glbPath : API_BASE + '/api/v1/files/' + glbPath;
+      const cleanPath = glbPath.replace(/^\/+/, '');
+      const url = glbPath.startsWith('http') ? glbPath : API_BASE + '/api/v1/files/' + cleanPath;
       loadGLBModel(url);
       addMessage('assistant', currentLang==='en'?'✅ 3D model ready!':'✅ 3D модель готова!');
       return;
@@ -1510,7 +1511,8 @@ function _handleOrchestratorResult(orchResult, prompt) {
 
   // Fallback: check render image
   if(orchResult.render && orchResult.render.output_path) {
-    const imgUrl = API_BASE + '/api/v1/files/' + orchResult.render.output_path;
+    const cleanRenderPath = orchResult.render.output_path.replace(/^\/+/, '');
+    const imgUrl = API_BASE + '/api/v1/files/' + cleanRenderPath;
     addMessage('assistant', '<img src="'+imgUrl+'" style="max-width:100%;border-radius:12px;margin:8px 0" />');
     addMessage('assistant', currentLang==='en'?'✅ Render complete!':'✅ Рендер готов!');
     return;
@@ -1623,7 +1625,8 @@ async function proceedWithGeneration(prompt, parsed) {
     showGenOverlay();
     const orchResult = await callOrchestratorAPI(prompt, parsed);
     if(orchResult.status==='success' && orchResult.exports && orchResult.exports.glb) {
-      loadGLBModel(API_BASE + orchResult.exports.glb);
+      const glbUrl = orchResult.exports.glb.startsWith('http') ? orchResult.exports.glb : API_BASE + '/api/v1/files/' + orchResult.exports.glb.replace(/^\/+/, '');
+      loadGLBModel(glbUrl);
       addMessage('assistant', currentLang==='en'?'✅ 3D model ready!':'✅ 3D модель готова!');
     } else { addMessage('assistant', currentLang==='en'?'⚠️ Generation incomplete':'⚠️ Генерация не завершена'); }
   } catch(e) { console.warn('Gen error:', e); addMessage('assistant', '⚠️ '+e.message); }

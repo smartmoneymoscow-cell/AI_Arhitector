@@ -309,7 +309,7 @@ async def parse_proxy(
         "post",
         f"{settings.LLM_SERVICE_URL}/api/v1/parse",
         json={"text": text},
-        timeout=15,
+        timeout=120,
     )
     return r.json()
 
@@ -405,6 +405,7 @@ async def orchestrator_execute(
         blender_service_url=settings.BLENDER_SERVICE_URL,
         llm_service_url=settings.LLM_SERVICE_URL,
         output_dir=settings.OUTPUT_DIR,
+        blender_service_urls=_get_blender_urls(),
     )
 
     loop = asyncio.get_event_loop()
@@ -473,6 +474,7 @@ async def orchestrator_resume(
         blender_service_url=settings.BLENDER_SERVICE_URL,
         llm_service_url=settings.LLM_SERVICE_URL,
         output_dir=settings.OUTPUT_DIR,
+        blender_service_urls=_get_blender_urls(),
     )
 
     # Retrieve stored job from Redis/memory

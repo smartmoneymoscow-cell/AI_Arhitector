@@ -137,14 +137,38 @@ class Orchestrator:
         llm_service_url: str = "",
         output_dir: str = "/app/output",
         agent_timeout: int = 120,
+        blender_service_urls: list[str] | None = None,
     ):
         self.runner = AgentRunner(default_timeout=agent_timeout)
         self.clarification = ClarificationEngine()
         self.jobs: dict[str, dict] = {}
         self.blender_service_url = blender_service_url
+        self.blender_service_urls = blender_service_urls or (
+            [blender_service_url] if blender_service_url else []
+        )
         self.llm_service_url = llm_service_url
         self.output_dir = output_dir
+        self._working_blender_url: str | None = None
         os.makedirs(output_dir, exist_ok=True)
+
+    def _find_working_blender(self) -> str:
+        """Probe blender URLs and return the first that responds to /health."""
+        if self._working_blender_url:
+            return self._working_blender_url
+        import httpx as _httpx
+        for url in self.blender_service_urls:
+            try:
+                with _httpx.Client(timeout=5.0) as c:
+                    r = c.get(f"{url}/health")
+                    if r.status_code == 200:
+                        self._working_blender_url = url
+                        logger.info("Blender service found: %s", url)
+                        return url
+            except Exception:
+                continue
+        # fallback to primary even if probe failed
+        self._working_blender_url = self.blender_service_url
+        return self._working_blender_url
 
     def execute(
         self,
@@ -485,7 +509,7 @@ class Orchestrator:
                     "agent": "render",
                     "params": {
                         "script": combined_script,
-                        "blender_service_url": self.blender_service_url,
+                        "blender_service_url": self._find_working_blender(),
                         "quality": quality,
                         "output_path": os.path.join(self.output_dir, f"{job_id}_render.png"),
                         "output_dir": self.output_dir,
@@ -545,7 +569,7 @@ class Orchestrator:
                             "agent": "render",
                             "params": {
                                 "script": combined_script,
-                                "blender_service_url": self.blender_service_url,
+                                "blender_service_url": self._find_working_blender(),
                                 "quality": "16k_force",
                                 "samples_override": 4096,
                                 "use_tiled_render": True,
@@ -590,7 +614,7 @@ class Orchestrator:
                     "params": {
                         "script": geometry_script,
                         "format": export_formats[0] if export_formats else "glb",
-                        "blender_service_url": self.blender_service_url,
+                        "blender_service_url": self._find_working_blender(),
                         "output_dir": self.output_dir,
                         "job_id": job_id,
                     },
@@ -1002,7 +1026,7 @@ class Orchestrator:
                 "agent": "render",
                 "params": {
                     "script": combined_script,
-                    "blender_service_url": self.blender_service_url,
+                    "blender_service_url": self._find_working_blender(),
                     "quality": quality,
                     "output_path": os.path.join(self.output_dir, f"{job_id}_render.png"),
                     "output_dir": self.output_dir,
@@ -1035,7 +1059,7 @@ class Orchestrator:
             {
                 "name": "export",
                 "agent": "export",
-                "params": {"script": geometry_script, "format": export_formats[0] if export_formats else "glb", "blender_service_url": self.blender_service_url, "output_dir": self.output_dir, "job_id": job_id},
+                "params": {"script": geometry_script, "format": export_formats[0] if export_formats else "glb", "blender_service_url": self._find_working_blender(), "output_dir": self.output_dir, "job_id": job_id},
             },
             timeout=120,
         )

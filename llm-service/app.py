@@ -177,7 +177,7 @@ async def chat_completions(req: ChatRequest):
                     f"{settings.OPENROUTER_BASE}/chat/completions",
                     headers=headers,
                     json=payload,
-                    timeout=10.0,
+                    timeout=60.0,
                 )
         except httpx.TimeoutException:
             last_error = (504, "OpenRouter timeout")
