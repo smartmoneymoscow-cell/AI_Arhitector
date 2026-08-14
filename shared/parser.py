@@ -773,6 +773,7 @@ def _get_google_keys() -> list[str]:
 
 
 _GEMINI_KEY_IDX = 0
+_OR_KEY_IDX = 0  # round-robin для OpenRouter ключей
 
 
 async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
@@ -840,11 +841,17 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
             logger.error("Gemini: all models returned 404, giving up")
             return None
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{chosen_model}:generateContent?key={key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{chosen_model}:generateContent"
 
         try:
             async with httpx.AsyncClient() as client:
-                r = await client.post(url, json=payload, timeout=timeout)
+                # x-goog-api-key header (рекомендовано Google для AQ формата)
+                r = await client.post(
+                    url,
+                    json=payload,
+                    headers={"x-goog-api-key": key},
+                    timeout=timeout,
+                )
 
             if r.status_code == 404:
                 # Модель удалена — пробуем следующую модель, ключ НЕ наказываем
@@ -853,9 +860,11 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
                 continue
 
             if r.status_code == 401:
-                # Невалидный ключ — помечаем мёртвым, переходим к следующему
                 _mark_key_dead(key, _COOLDOWN_QUOTA_EXHAUSTED, "gemini_401_invalid")
-                logger.warning("Gemini key %s invalid (401), skipping", _mask_key(key))
+                logger.warning(
+                    "Gemini key %s invalid (401): %s. Check https://aistudio.google.com/apikey",
+                    _mask_key(key), r.text[:200],
+                )
                 continue
 
             if r.status_code == 429:
@@ -1058,7 +1067,11 @@ async def parse_prompt_async(text: str) -> dict:
         live_keys = _filter_alive(api_keys)
         model_removed = False
 
-        for key_idx, api_key in enumerate(live_keys):
+        # Round-robin: начинаем со следующего ключа
+        for attempt in range(len(live_keys)):
+            api_key = live_keys[_OR_KEY_IDX % len(live_keys)]
+            _OR_KEY_IDX = (_OR_KEY_IDX + 1) % len(live_keys)
+            key_idx = attempt
             logger.info("Trying LLM: %s (key %d/%d)", model, key_idx + 1, len(live_keys))
             result, status, body = await _call_openrouter(model, text, timeout, api_key)
 
