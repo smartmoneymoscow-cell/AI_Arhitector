@@ -810,25 +810,59 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
         }
     }
 
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite-001")
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    # Fallback models if primary is deleted (404)
+    _GEMINI_MODELS = [
+        model_name,
+        "gemini-flash-lite-latest",
+        "gemini-2.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-3.5-flash-lite",
+    ]
+    # Deduplicate while preserving order
+    seen = set()
+    _GEMINI_MODELS = [m for m in _GEMINI_MODELS if not (m in seen or seen.add(m))]
+
+    _model_404: set[str] = set()  # модели, которые вернули404
 
     # Пробуем КАЖДЫЙ живой ключ ровно один раз (round-robin), а не только 3.
     for attempt in range(len(keys)):
         key = keys[_GEMINI_KEY_IDX % len(keys)]
         _GEMINI_KEY_IDX = (_GEMINI_KEY_IDX + 1) % len(keys)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={key}"
+
+        # Выбираем модель: primary → fallbacks, пропускаем 404
+        chosen_model = None
+        for m in _GEMINI_MODELS:
+            if m not in _model_404:
+                chosen_model = m
+                break
+        if not chosen_model:
+            logger.error("Gemini: all models returned 404, giving up")
+            return None
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{chosen_model}:generateContent?key={key}"
 
         try:
             async with httpx.AsyncClient() as client:
                 r = await client.post(url, json=payload, timeout=timeout)
 
+            if r.status_code == 404:
+                # Модель удалена — пробуем следующую модель, ключ НЕ наказываем
+                _model_404.add(chosen_model)
+                logger.warning("Gemini model %s deleted (404), trying next model", chosen_model)
+                continue
+
+            if r.status_code == 401:
+                # Невалидный ключ — помечаем мёртвым, переходим к следующему
+                _mark_key_dead(key, _COOLDOWN_QUOTA_EXHAUSTED, "gemini_401_invalid")
+                logger.warning("Gemini key %s invalid (401), skipping", _mask_key(key))
+                continue
+
             if r.status_code == 429:
                 body = r.text[:300]
                 if _looks_like_quota_exhausted(429, body):
-                    # Дневная бесплатная квота на этом аккаунте кончилась — сразу переключаемся
                     _mark_key_dead(key, _COOLDOWN_QUOTA_EXHAUSTED, "gemini_quota_exhausted")
                 else:
-                    # Обычный RPM-лимит (15 req/min) — короткая пауза перед следующим ключом
                     _mark_key_dead(key, _COOLDOWN_RATE_LIMIT, "gemini_rpm_limit")
                 logger.warning(
                     "Gemini rate-limited (key %d/%d) — switching to next account", attempt + 1, len(keys)
@@ -836,7 +870,6 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
                 continue
 
             if r.status_code in (400, 403):
-                # Невалидный / заблокированный ключ — тоже переключаемся, но надолго
                 _mark_key_dead(key, _COOLDOWN_QUOTA_EXHAUSTED, f"gemini_http_{r.status_code}")
                 logger.error("Gemini key invalid/blocked (%d): %s", r.status_code, r.text[:300])
                 continue
@@ -1212,26 +1245,20 @@ async def _check_openrouter_key_health(api_key: str) -> tuple[str, str]:
 
 
 async def _check_gemini_key_health(api_key: str) -> tuple[str, str]:
-    """Проверка Gemini ключа через минимальный generateContent."""
-    model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite-001")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    payload = {
-        "contents": [{"parts": [{"text": "hi"}]}],
-        "generationConfig": {"maxOutputTokens": 1},
-    }
+    """Проверка Gemini ключа через /v1beta/models endpoint (легковесный)."""
     try:
         async with httpx.AsyncClient() as client:
-            r = await client.post(
-                url, json=payload,
-                headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-                timeout=15,
+            r = await client.get(
+                "https://generativelanguage.googleapis.com/v1beta/models",
+                params={"key": api_key},
+                timeout=10,
             )
         if r.status_code == 200:
             return "ok", "200"
-        if r.status_code in (400, 403):
-            return "invalid", str(r.status_code)
-        if r.status_code == 404:
-            return "error", f"404 — model {model}"
+        if r.status_code == 401:
+            return "invalid", "401 — key rejected"
+        if r.status_code == 403:
+            return "invalid", "403 — forbidden"
         if r.status_code == 429:
             body = r.text.lower()
             if "quota" in body or "daily" in body:
