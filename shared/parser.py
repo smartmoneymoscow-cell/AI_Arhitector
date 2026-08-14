@@ -1004,6 +1004,7 @@ async def parse_prompt_async(text: str) -> dict:
     L7: Full sha256 hash
     L8: Model version in cache key
     """
+    global _OR_KEY_IDX
     text = _sanitize_prompt(text)
     if not text:
         return _minimal_defaults("Empty prompt")
