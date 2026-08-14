@@ -164,7 +164,11 @@ async def chat_completions(req: ChatRequest):
 
     last_error: tuple[int, str] | None = None
 
-    for key in keys:
+    # Round-robin: используем shared counter из parser
+    import shared.parser as _parser
+    for attempt in range(len(keys)):
+        key = keys[_parser._OR_KEY_IDX % len(keys)]
+        _parser._OR_KEY_IDX = (_parser._OR_KEY_IDX + 1) % len(keys)
         headers = {
             "Content-Type": "application/json; charset=utf-8",
             "Authorization": f"Bearer {key}",
