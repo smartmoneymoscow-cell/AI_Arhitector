@@ -248,14 +248,16 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 # ═══════════════════════════════════════════════════════════════
 
 LLM_CASCADE = [
-    {"model": "openai/gpt-4o-mini", "tier": 1, "timeout": 30},
-    {"model": "deepseek/deepseek-chat", "tier": 1, "timeout": 30},
-    {"model": "anthropic/claude-3-haiku", "tier": 1, "timeout": 30},
-    {"model": "google/gemma-4-26b-a4b-it:free", "tier": 2, "timeout": 30},
-    {"model": "google/gemma-4-31b-it:free", "tier": 2, "timeout": 30},
+    {"model": "google/gemma-4-26b-a4b-it:free", "tier": 1, "timeout": 30},
+    {"model": "google/gemma-4-31b-it:free", "tier": 1, "timeout": 30},
+    {"model": "nvidia/nemotron-3-ultra-550b-a55b:free", "tier": 1, "timeout": 30},
+    {"model": "nvidia/nemotron-3-super-120b-a12b:free", "tier": 1, "timeout": 30},
     {"model": "nvidia/nemotron-3-nano-30b-a3b:free", "tier": 2, "timeout": 30},
     {"model": "poolside/laguna-s-2.1:free", "tier": 2, "timeout": 30},
-    {"model": "cohere/north-mini-code:free", "tier": 3, "timeout": 30},
+    {"model": "poolside/laguna-xs-2.1:free", "tier": 2, "timeout": 30},
+    {"model": "cohere/north-mini-code:free", "tier": 2, "timeout": 30},
+    {"model": "liquid/lfm-2.5-2.6b:free", "tier": 3, "timeout": 30},
+    {"model": "openai/gpt-oss-20b:free", "tier": 3, "timeout": 30},
 ]
 
 
