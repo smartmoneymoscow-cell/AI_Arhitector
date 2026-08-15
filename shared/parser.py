@@ -444,39 +444,8 @@ def _cascade_is_stale() -> bool:
 
 
 def get_active_cascade(api_key: str = "") -> list[dict]:
-    """Return the active cascade: discovered models (preferred, even if
-    slightly stale) > another worker's fresher Redis snapshot > hardcoded
-    fallback (only if we've NEVER discovered anything, e.g. cold start
-    with OpenRouter unreachable)."""
-    global _DISCOVERED_MODELS, _DISCOVER_TS
-
-    with _DISCOVER_LOCK:
-        have_local = bool(_DISCOVERED_MODELS)
-        local_fresh = have_local and (time.time() - _DISCOVER_TS) < _DISCOVER_TTL
-
-    if local_fresh:
-        return _DISCOVERED_MODELS
-
-    # Наш локальный список устарел (или его ещё нет) — проверяем,
-    # не обновил ли его уже другой воркер через Redis.
-    remote = _load_discovery_from_redis()
-    if remote:
-        remote_models, remote_ts = remote
-        if remote_models and remote_ts > _DISCOVER_TS:
-            with _DISCOVER_LOCK:
-                _DISCOVERED_MODELS = remote_models
-                _DISCOVER_TS = remote_ts
-            if (time.time() - remote_ts) < _DISCOVER_TTL:
-                return remote_models
-            have_local = True  # remote тоже устарел, но лучше, чем совсем ничего
-
-    # Отдаём то, что есть (пусть и не первой свежести) — свежий список
-    # реальных free-моделей лучше жёстко зашитого хардкода. Обновление
-    # запустится отдельно (см. _maybe_trigger_discovery ниже).
-    if have_local:
-        return _DISCOVERED_MODELS
-
-    # Совсем ничего не находили ни разу — последний резерв.
+    """Always return hardcoded cascade with paid models.
+    Free model discovery disabled to avoid daily rate limits."""
     return LLM_CASCADE
 
 
