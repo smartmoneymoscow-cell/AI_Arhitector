@@ -1,6 +1,13 @@
 """
 llm-service/parser_flexible.py — FLEXIBLE LLM parsing with all fixes applied.
 
+═══════════════════════════════════════════════════════════════
+  СТРОГОЕ ПРАВИЛО: Парсер РАБОТАЕТ ТОЛЬКО ЧЕРЕЗ LLM.
+  Никаких regex fallback, хардкода, локальных парсеров.
+  Если все LLM ключи упали → AllModelsFailedError.
+  НИКОГДА не добавлять regex/local fallback в этот модуль.
+═══════════════════════════════════════════════════════════════
+
 Fixes:
   L1  — Prompt sanitization (injection prevention)
   L2  — Timeouts increased to 30-40s
@@ -664,6 +671,14 @@ def _l2_set(text: str, val: dict) -> None:
 
 
 class AllModelsFailedError(Exception):
+    """All LLM models failed.
+
+    ═══════ СТРОГОЕ ПРАВИЛО ═══════
+    Это единственный допустимый ответ при недоступности LLM.
+    НИКОГДА не добавлять regex/local fallback вместо этого исключения.
+    Парсер работает ТОЛЬКО через LLM (Gemini / OpenRouter / Ollama).
+    ════════════════════════════════
+    """
     pass
 
 
