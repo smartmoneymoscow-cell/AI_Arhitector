@@ -826,14 +826,14 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
         }
     }
 
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
     # Fallback models if primary is deleted (404)
     _GEMINI_MODELS = [
         model_name,
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
         "gemini-flash-lite-latest",
-        "gemini-2.5-flash-lite",
         "gemini-3.1-flash-lite",
-        "gemini-3.5-flash-lite",
     ]
     # Deduplicate while preserving order
     seen = set()
