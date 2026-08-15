@@ -860,13 +860,29 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
 
         try:
             async with httpx.AsyncClient() as client:
-                # x-goog-api-key header (рекомендовано Google для AQ формата)
-                r = await client.post(
-                    url,
-                    json=payload,
-                    headers={"x-goog-api-key": key},
-                    timeout=timeout,
-                )
+                # FIX: пробуем x-goog-api-key (AIza) И Authorization: Bearer (AQ.Ab)
+                r = None
+                for auth_headers in [
+                    {"x-goog-api-key": key},
+                    {"Authorization": f"Bearer {key}"},
+                ]:
+                    try:
+                        r = await client.post(
+                            url, json=payload,
+                            headers=auth_headers,
+                            timeout=timeout,
+                        )
+                        if r.status_code != 401:
+                            break
+                        # Проверяем reason
+                        try:
+                            reason = r.json().get("error", {}).get("details", [{}])[0].get("reason", "")
+                        except Exception:
+                            reason = ""
+                        if reason == "API_KEY_SERVICE_BLOCKED":
+                            break  # Не пробуем второй header — проблема в проекте
+                    except Exception:
+                        continue
 
             if r.status_code == 404:
                 # Модель удалена — пробуем следующую модель, ключ НЕ наказываем
@@ -875,10 +891,21 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
                 continue
 
             if r.status_code == 401:
+                try:
+                    _reason = r.json().get("error", {}).get("details", [{}])[0].get("reason", "")
+                except Exception:
+                    _reason = ""
+                if _reason == "API_KEY_SERVICE_BLOCKED":
+                    logger.error(
+                        "Gemini API BLOCKED (key %s). Enable 'Generative Language API' in Google Cloud Console. "
+                        "All keys from same project — skipping Gemini entirely.",
+                        _mask_key(key),
+                    )
+                    return None  # Все ключи из одного проекта — быстрый fail
                 _mark_key_dead(key, _COOLDOWN_QUOTA_EXHAUSTED, "gemini_401_invalid")
                 logger.warning(
-                    "Gemini key %s invalid (401): %s. Check https://aistudio.google.com/apikey",
-                    _mask_key(key), r.text[:200],
+                    "Gemini key %s invalid (401, reason=%s). Check https://aistudio.google.com/apikey",
+                    _mask_key(key), _reason,
                 )
                 continue
 
@@ -916,6 +943,78 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
     logger.error("Gemini: all %d live keys failed (of %d total)", len(keys), len(all_keys))
     return None
 
+
+
+
+# ═══════════════════════════════════════════════════════════════
+# DEEPSEEK DIRECT API — fallback между Gemini и OpenRouter
+# ═══════════════════════════════════════════════════════════════
+
+def _get_deepseek_keys() -> list[str]:
+    """Get DeepSeek API keys from environment."""
+    keys = []
+    primary = os.environ.get("DEEPSEEK_API_KEY", "")
+    if primary:
+        keys.append(primary)
+    fallback = os.environ.get("DEEPSEEK_FALLBACK_KEYS", "")
+    if fallback:
+        for k in fallback.split(","):
+            k = k.strip()
+            if k and k not in keys:
+                keys.append(k)
+    return keys
+
+
+async def _call_deepseek(prompt: str, timeout: int = 30) -> dict | None:
+    """Call DeepSeek API directly as fallback between Gemini and OpenRouter."""
+    keys = _get_deepseek_keys()
+    if not keys:
+        return None
+
+    import json as _json
+
+    for key in keys:
+        masked = _mask_key(key)
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    "https://api.deepseek.com/chat/completions",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json={
+                        "model": "deepseek-chat",
+                        "messages": [
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "max_tokens": 1024,
+                        "temperature": 0.1,
+                    },
+                    timeout=timeout,
+                )
+
+            if r.status_code == 200:
+                content = r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                try:
+                    return _json.loads(content)
+                except _json.JSONDecodeError:
+                    import re
+                    match = re.search(r"\{[^{}]*\}", content, re.DOTALL)
+                    if match:
+                        return _json.loads(match.group())
+                    logger.warning("DeepSeek: could not extract JSON from response")
+                    continue
+            elif r.status_code == 402:
+                logger.warning("DeepSeek key %s: insufficient balance", masked)
+            elif r.status_code == 401:
+                logger.warning("DeepSeek key %s: invalid", masked)
+            else:
+                logger.warning("DeepSeek key %s: HTTP %d", masked, r.status_code)
+        except httpx.TimeoutException:
+            logger.warning("DeepSeek timeout %ds", timeout)
+        except Exception as e:
+            logger.warning("DeepSeek error: %s", e)
+
+    return None
 
 async def _call_ollama(prompt: str) -> dict | None:
     """L4: Call local Ollama model as last resort."""
@@ -1051,6 +1150,16 @@ async def parse_prompt_async(text: str) -> dict:
             _l1_set(text, validated)
             _l2_set(text, validated)
             logger.info("Gemini parsed successfully: %s", validated.get("building_type"))
+            return validated
+
+    # ═══ 0.5. DeepSeek — direct API (between Gemini and OpenRouter) ═══
+    deepseek_result = await _call_deepseek(text)
+    if deepseek_result:
+        validated = _validate_and_fix(deepseek_result, text)
+        if isinstance(validated, dict):
+            _l1_set(text, validated)
+            _l2_set(text, validated)
+            logger.info("DeepSeek parsed: %s", validated.get("building_type"))
             return validated
 
     # L3: Get all available keys, skip ones currently cooling down
