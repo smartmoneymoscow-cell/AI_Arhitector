@@ -1,28 +1,55 @@
 #!/bin/bash
-# keep-alive.sh — Ping Render services every 10 min to prevent cold starts
-# Render free tier sleeps after 15 min of no requests
+# ═══════════════════════════════════════════════════════════════
+# Keep-alive daemon для Render Free Tier.
+# Пингует health endpoints каждые 10 минут, предотвращает cold start.
+#
+# Запуск:
+#   chmod +x keep-alive.sh
+#   nohup ./keep-alive.sh &
+#
+# Cron (альтернатива):
+#   */10 * * * * /path/to/keep-alive.sh --once
+# ═══════════════════════════════════════════════════════════════
 
-SERVICES=(
-  "https://architect-gateway.onrender.com/health"
-  "https://ai-arch-blender3d.onrender.com/health"
-  "https://architect-blender.onrender.com/health"
-  "https://architect-llm-1s1j.onrender.com/health"
-)
+GATEWAY="https://architect-gateway.onrender.com"
+LLM="https://architect-llm-1s1j.onrender.com"
+BLENDER="https://ai-arch-blender3d.onrender.com"
 
-LOG="/home/work/.openclaw/workspace/AI_Arhitector/keep-alive.log"
-TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+INTERVAL=600  # 10 минут
 
-echo "[$TIMESTAMP] Keep-alive ping..." >> "$LOG"
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+}
 
-for url in "${SERVICES[@]}"; do
-  name=$(echo "$url" | sed 's|https://||;s|\.onrender\.com.*||')
-  code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 30 "$url" 2>&1)
-  if [ "$code" = "200" ]; then
-    echo "[$TIMESTAMP] ✅ $name" >> "$LOG"
-  else
-    echo "[$TIMESTAMP] ❌ $name ($code)" >> "$LOG"
-  fi
+ping_service() {
+    local name=$1
+    local url=$2
+    local status
+    status=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 15 "$url/health" 2>/dev/null)
+    if [ "$status" = "200" ]; then
+        log "✅ $name: alive (HTTP $status)"
+        return 0
+    else
+        log "❌ $name: dead (HTTP $status)"
+        return 1
+    fi
+}
+
+do_round() {
+    local ok=0 fail=0
+    ping_service "Gateway"  "$GATEWAY"  && ((ok++)) || ((fail++))
+    ping_service "LLM"      "$LLM"      && ((ok++)) || ((fail++))
+    ping_service "Blender"  "$BLENDER"  && ((ok++)) || ((fail++))
+    log "Round: $ok alive, $fail dead"
+}
+
+if [ "$1" = "--once" ]; then
+    do_round
+    exit 0
+fi
+
+log "Keep-alive started (interval: ${INTERVAL}s)"
+while true; do
+    do_round
+    sleep $INTERVAL
 done
-
-# Keep log last 500 lines
-tail -500 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
