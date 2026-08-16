@@ -299,26 +299,6 @@ async def models_refresh():
     }
 
 
-
-
-@app.get("/api/v1/test-groq")
-async def test_groq():
-    """Direct Groq test."""
-    import httpx as _httpx
-    groq_key = os.environ.get("GROQ_API_KEY", "")
-    if not groq_key:
-        return {"error": "no key"}
-    try:
-        async with _httpx.AsyncClient() as client:
-            r = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                json={"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": "Reply with JSON: {\"hello\": true}"}], "response_format": {"type": "json_object"}, "max_tokens": 100},
-                timeout=45,
-            )
-            return {"status": r.status_code, "body": r.text[:500]}
-    except Exception as e:
-        return {"error": str(e)}
 if __name__ == "__main__":
     import uvicorn
 
