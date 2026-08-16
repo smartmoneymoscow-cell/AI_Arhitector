@@ -38,7 +38,7 @@ logger = logging.getLogger("archai.parser")
 # SYSTEM PROMPT — FLEXIBLE, no hardcoded values
 # ═══════════════════════════════════════════════════════════════
 
-SYSTEM_PROMPT_VERSION = "v9.0"  # ← bump to invalidate all caches
+SYSTEM_PROMPT_VERSION = "v10.0"  # ← bump to invalidate all caches
 
 SYSTEM_PROMPT = """Ты — парсер архитектурных описаний для 3D-генератора.
 Отвечай ТОЛЬКО валидным JSON. Никаких рассуждений, пояснений, markdown.
@@ -285,16 +285,48 @@ _BLOCKLIST = {
     "inclusionai/ling-3.0-tiny:free",  # returns None
     "google/lyria-3-clip-preview",  # music model
     "google/lyria-3-pro-preview",  # music model
+    "dots-studio/dots-3-note-preview:free",  # inconsistent JSON output
 }
 
 # Preferred free models (boost priority)
 _PREFERRED = {
-    "google/gemini-2.5-flash",         # best free-tier model
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "mistralai/mistral-small-3.2-24b:free",
-    "qwen/qwen3-235b-a22b:free",
-    "deepseek/deepseek-chat-v3-0324:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "google/gemma-4-31b-it:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "cohere/north-mini-code:free",
+    "nvidia/nemotron-3-nano-30b-a3b:free",
+    "poolside/laguna-s-2.1:free",
+    "openai/gpt-oss-20b:free",
 }
+
+
+def _estimate_power(model_id: str) -> int:
+    """Estimate model power from ID — larger models = higher score.
+    Used to sort discovered free models: strongest first."""
+    model_lower = model_id.lower()
+    import re as _re
+
+    # Extract activated params for MoE models (e.g., "26b-a4b" → 4)
+    a_match = _re.search(r'a(\d+\.?\d*)[bB]', model_lower)
+    if a_match:
+        return int(float(a_match.group(1)) * 10)
+
+    # Extract total params (e.g., "550b" → 550)
+    size_match = _re.search(r'(\d+\.?\d*)[bB]', model_lower)
+    if size_match:
+        return int(float(size_match.group(1)))
+
+    # Known families by power
+    for family, power in [
+        ('gemini', 1000), ('gpt-4', 900), ('gpt-oss', 800),
+        ('deepseek', 700), ('qwen', 600), ('llama-3', 500),
+        ('mistral', 400), ('gemma', 300), ('nemotron', 250),
+    ]:
+        if family in model_lower:
+            return power
+
+    return 100
 
 
 async def discover_free_models(api_key: str) -> list[dict]:
@@ -379,8 +411,8 @@ async def discover_free_models(api_key: str) -> list[dict]:
                 "name": m.get("name", ""),
             })
 
-        # Sort by priority, then by name
-        free_models.sort(key=lambda x: (x["tier"], x["model"]))
+        # Sort by priority, then by power (strongest first), then by name
+        free_models.sort(key=lambda x: (x["tier"], -_estimate_power(x["model"]), x["model"]))
 
         # Limit to top 15 models to avoid cascade timeout
         free_models = free_models[:15]
@@ -446,8 +478,10 @@ def _cascade_is_stale() -> bool:
 
 
 def get_active_cascade(api_key: str = "") -> list[dict]:
-    """Always return hardcoded cascade with paid models.
-    Free model discovery disabled to avoid daily rate limits."""
+    """Return discovered free models if available, fallback to hardcoded cascade.
+    Dynamic models are sorted by power — strongest first."""
+    if _DISCOVERED_MODELS:
+        return _DISCOVERED_MODELS
     return LLM_CASCADE
 
 
