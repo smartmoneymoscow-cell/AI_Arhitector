@@ -1370,6 +1370,35 @@ async def parse_prompt_async(text: str) -> dict:
             logger.info("Ollama fallback succeeded: %s", validated.get("building_type"))
             return validated
 
+    # ═══ L5: LAST RESORT — retry Gemini & Groq (transient failures may have cleared) ═══
+    logger.warning("Ollama unavailable. Last-resort retry: Gemini + Groq...")
+
+    # Retry Gemini with fresh attempt
+    try:
+        gemini_retry = await _call_gemini(text)
+        if gemini_retry:
+            validated = _validate_and_fix(gemini_retry, text)
+            if isinstance(validated, dict):
+                _l1_set(text, validated)
+                _l2_set(text, validated)
+                logger.info("Gemini LAST-RESORT retry succeeded: %s", validated.get("building_type"))
+                return validated
+    except Exception as e:
+        logger.error("Gemini last-resort retry error: %s", e)
+
+    # Retry Groq with fresh attempt
+    try:
+        groq_retry = await _call_groq(text)
+        if groq_retry:
+            validated = _validate_and_fix(groq_retry, text)
+            if isinstance(validated, dict):
+                _l1_set(text, validated)
+                _l2_set(text, validated)
+                logger.info("Groq LAST-RESORT retry succeeded: %s", validated.get("building_type"))
+                return validated
+    except Exception as e:
+        logger.error("Groq last-resort retry error: %s", e)
+
     google_count = len(_get_google_keys())
     or_count = len(api_keys)
     groq_count = len(_get_groq_keys())
