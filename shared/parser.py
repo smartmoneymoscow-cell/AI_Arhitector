@@ -1041,7 +1041,7 @@ def _get_groq_keys() -> list[str]:
     return keys
 
 
-async def _call_groq(prompt: str, timeout: int = 30) -> dict | None:
+async def _call_groq(prompt: str, timeout: int = 45) -> dict | None:
     """Call Groq API directly — free tier, fast inference.
 
     Groq provides free API access with generous rate limits.
@@ -1077,15 +1077,28 @@ async def _call_groq(prompt: str, timeout: int = 30) -> dict | None:
                 )
 
             if r.status_code == 200:
-                content = r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                resp_data = r.json()
+                content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                logger.info("Groq raw response (%d chars): %s", len(content), content[:200])
                 try:
                     return _json.loads(content)
                 except _json.JSONDecodeError:
                     import re
-                    match = re.search(r"\{[^{}]*\}", content, re.DOTALL)
+                    # Try to extract JSON from markdown code blocks
+                    json_match = re.search(r"```(?:json)?\s*\n?(\{.*?\})\s*```", content, re.DOTALL)
+                    if json_match:
+                        try:
+                            return _json.loads(json_match.group(1))
+                        except _json.JSONDecodeError:
+                            pass
+                    # Try to find any JSON object
+                    match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", content, re.DOTALL)
                     if match:
-                        return _json.loads(match.group())
-                    logger.warning("Groq: could not extract JSON from response")
+                        try:
+                            return _json.loads(match.group())
+                        except _json.JSONDecodeError:
+                            pass
+                    logger.warning("Groq: could not extract JSON from response: %s", content[:300])
                     continue
             elif r.status_code == 429:
                 logger.warning("Groq key %s: rate limited", masked)
