@@ -1270,6 +1270,17 @@ async def parse_prompt_async(text: str) -> dict:
             _l2_set(text, validated)
             logger.info("Groq parsed: %s", validated.get("building_type"))
             return validated
+        # Level 2: Retry Groq with fix prompt if validation failed
+        if isinstance(validated, str):
+            logger.info("Groq: retrying with fix prompt")
+            groq_fix = await _call_groq(validated)
+            if groq_fix:
+                fix_validated = _validate_and_fix(groq_fix, text)
+                if isinstance(fix_validated, dict):
+                    _l1_set(text, fix_validated)
+                    _l2_set(text, fix_validated)
+                    logger.info("Groq fix parsed: %s", fix_validated.get("building_type"))
+                    return fix_validated
 
     # L3: Get all available keys, skip ones currently cooling down
     api_keys = _filter_alive(_get_api_keys())
