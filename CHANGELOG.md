@@ -1,5 +1,33 @@
 # CHANGELOG — AI_Arhitector
 
+## v11.6.0 — Dynamic LLM Cascade (2026-08-16)
+
+### Исправлено
+- **Динамический каскад моделей** — `get_active_cascade()` теперь возвращает ОБНАРУЖЕННЫЕ бесплатные модели вместо захардкоженного списка. Fallback на хардкод только если discovery не сработал.
+- **Сортировка по мощности** — `_estimate_power()` оценивает размер модели по ID (параметры, MoE activated params, семейство). Самые мощные модели первыми в каскаде.
+- **Актуальный список _PREFERRED** — обновлён текущими рабочими бесплатными моделями OpenRouter: gemma-4-26b, gemma-4-31b, nemotron-3-ultra-550b, nemotron-3-super-120b, north-mini-code, nemotron-3-nano-30b, laguna-s, gpt-oss-20b.
+- **Blocklist обновлён** — добавлен dots-studio/dots-3-note-preview:free (неконсистентный JSON).
+- **Кеш инвалидирован** — SYSTEM_PROMPT_VERSION bumped to v10.0.
+
+### Архитектурные изменения
+- Discovery (`discover_free_models()`) теперь вызывается при старте + каждые 3600с в фоне
+- Результат discovery автоматически используется через `get_active_cascade()`
+- Каскад строится динамически: 10+ бесплатных моделей OpenRouter × 8 аккаунтов = 80+ комбинаций
+- При 404 от модели → `invalidate_discovery()` + следующая модель
+- При 429/402 от ключа → cooldown + следующий аккаунт
+
+### Тестирование
+- ✅ Groq (llama-3.3-70b-versatile): работает, 0.2s
+- ✅ Cohere (command-r-08-2024): работает, 26s
+- ✅ Gemini Key #1 (gemini-flash-lite-latest): работает
+- ✅ OpenRouter: 16 бесплатных моделей обнаружено
+- ❌ DeepSeek: все 8 ключей — 402 Insufficient Balance (нет бесплатного тира)
+- ❌ Cerebras: 402 Payment required
+- ❌ SambaNova: 402 balance_units=0
+- ⚠️ OpenRouter: все 8 ключей исчерпали дневной лимит (50 req/сутки), reset 2026-08-17 08:00 UTC
+
+---
+
 ## v11.5.0 — Pipeline Timeouts Fix + GLB URL + Deploy Fix
 
 ### Дата: 2026-08-14
