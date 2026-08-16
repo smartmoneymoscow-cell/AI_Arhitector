@@ -1021,6 +1021,87 @@ async def _call_deepseek(prompt: str, timeout: int = 30) -> dict | None:
 
     return None
 
+
+# ═══════════════════════════════════════════════════════════════
+# GROQ DIRECT API — free tier, fast inference
+# ═══════════════════════════════════════════════════════════════
+
+def _get_groq_keys() -> list[str]:
+    """Get Groq API keys from environment."""
+    keys = []
+    primary = os.environ.get("GROQ_API_KEY", "")
+    if primary:
+        keys.append(primary)
+    fallback = os.environ.get("GROQ_FALLBACK_KEYS", "")
+    if fallback:
+        for k in fallback.split(","):
+            k = k.strip()
+            if k and k not in keys:
+                keys.append(k)
+    return keys
+
+
+async def _call_groq(prompt: str, timeout: int = 30) -> dict | None:
+    """Call Groq API directly — free tier, fast inference.
+
+    Groq provides free API access with generous rate limits.
+    Uses OpenAI-compatible endpoint.
+    """
+    import json as _json
+
+    keys = _get_groq_keys()
+    if not keys:
+        return None
+
+    for key in keys:
+        masked = _mask_key(key)
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": "llama-3.3-70b-versatile",
+                        "messages": [
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "max_tokens": 2048,
+                        "temperature": 0.1,
+                        "response_format": {"type": "json_object"},
+                    },
+                    timeout=timeout,
+                )
+
+            if r.status_code == 200:
+                content = r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                try:
+                    return _json.loads(content)
+                except _json.JSONDecodeError:
+                    import re
+                    match = re.search(r"\{[^{}]*\}", content, re.DOTALL)
+                    if match:
+                        return _json.loads(match.group())
+                    logger.warning("Groq: could not extract JSON from response")
+                    continue
+            elif r.status_code == 429:
+                logger.warning("Groq key %s: rate limited", masked)
+                _mark_key_dead(key, _COOLDOWN_RATE_LIMIT, "groq_rpm_limit")
+            elif r.status_code == 401:
+                logger.warning("Groq key %s: invalid", masked)
+            else:
+                logger.warning("Groq key %s: HTTP %d: %s", masked, r.status_code, r.text[:200])
+        except httpx.TimeoutException:
+            logger.warning("Groq timeout %ds", timeout)
+        except Exception as e:
+            logger.warning("Groq error: %s", e)
+
+    return None
+
+
 async def _call_ollama(prompt: str) -> dict | None:
     """L4: Call local Ollama model as last resort."""
     if not OLLAMA_URL:
@@ -1167,6 +1248,16 @@ async def parse_prompt_async(text: str) -> dict:
             logger.info("DeepSeek parsed: %s", validated.get("building_type"))
             return validated
 
+    # ═══ 0.6. Groq — free tier, fast inference (between DeepSeek and OpenRouter) ═══
+    groq_result = await _call_groq(text)
+    if groq_result:
+        validated = _validate_and_fix(groq_result, text)
+        if isinstance(validated, dict):
+            _l1_set(text, validated)
+            _l2_set(text, validated)
+            logger.info("Groq parsed: %s", validated.get("building_type"))
+            return validated
+
     # L3: Get all available keys, skip ones currently cooling down
     api_keys = _filter_alive(_get_api_keys())
     if not api_keys:
@@ -1268,9 +1359,10 @@ async def parse_prompt_async(text: str) -> dict:
 
     google_count = len(_get_google_keys())
     or_count = len(api_keys)
+    groq_count = len(_get_groq_keys())
     raise AllModelsFailedError(
-        f"All {len(cascade)} models failed. Google: {google_count}, OR: {or_count}. "
-        f"FIX: Set GOOGLE_API_KEY in Render env. Prompt: {text[:80]}..."
+        f"All {len(cascade)} models failed. Google: {google_count}, OR: {or_count}, Groq: {groq_count}. "
+        f"FIX: Set GOOGLE_API_KEY or GROQ_API_KEY in Render env. Prompt: {text[:80]}..."
     )
 
 
