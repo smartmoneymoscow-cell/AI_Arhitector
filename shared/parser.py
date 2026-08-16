@@ -1078,8 +1078,18 @@ async def _call_groq(prompt: str, timeout: int = 45) -> dict | None:
 
             if r.status_code == 200:
                 resp_data = r.json()
-                content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                logger.info("Groq raw response (%d chars): %s", len(content), content[:200])
+                # Handle thinking tokens — some models return reasoning in a separate field
+                choice = resp_data.get("choices", [{}])[0]
+                message = choice.get("message", {})
+                content = message.get("content", "")
+                # If content is empty but there's reasoning_content, log it
+                if not content and "reasoning_content" in message:
+                    logger.warning("Groq: model returned reasoning_content but empty content")
+                    content = message.get("reasoning_content", "")
+                logger.info("Groq raw response (%d chars): %s", len(content), content[:300])
+                if not content:
+                    logger.error("Groq: empty response content. Full response: %s", json.dumps(resp_data)[:500])
+                    continue
                 try:
                     return _json.loads(content)
                 except _json.JSONDecodeError:
@@ -1262,7 +1272,9 @@ async def parse_prompt_async(text: str) -> dict:
             return validated
 
     # ═══ 0.6. Groq — free tier, fast inference (between DeepSeek and OpenRouter) ═══
+    logger.info("Attempting Groq (keys: %d)...", len(_get_groq_keys()))
     groq_result = await _call_groq(text)
+    logger.info("Groq result: %s", "success" if groq_result else "failed")
     if groq_result:
         validated = _validate_and_fix(groq_result, text)
         if isinstance(validated, dict):
