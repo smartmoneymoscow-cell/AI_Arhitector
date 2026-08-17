@@ -162,6 +162,23 @@ for dx,dy in [(-{W}/2-0.15,-{L}/2-0.15),({W}/2+0.15,-{L}/2-0.15),(-{W}/2-0.15,{L
 # ═══════════════════════════════════════════════════════════════
 
 
+# ═══════════════════════════════════════════════════════════════
+# RUSSIAN → ENGLISH MAPPING (for LLM output)
+# ═══════════════════════════════════════════════════════════════
+
+_ROOF_RU_EN = {
+    "плоская": "flat", "плоская крыша": "flat", "двускатная": "gabled",
+    "вальмовая": "hip", "мансардная": "mansard", "односкатная": "shed",
+    "купол": "dome", "асимметричная": "asymmetric",
+}
+_MATERIAL_RU_EN = {
+    "кирпич": "brick", "дерево": "wood", "стекло": "glass",
+    "камень": "stone", "бетон": "concrete", "штукатурка": "plaster",
+    "металл": "metal", "панели": "plaster", "сип": "sip_panel",
+    "газосиликат": "gas_silicate", "пеноблок": "foam_block",
+}
+
+
 def generate_bpy_script(params: dict) -> str:
     """
     Генерирует bpy-скрипт для здания.
@@ -172,9 +189,13 @@ def generate_bpy_script(params: dict) -> str:
     floors = safe_val(params.get("floors"), 2, range(1, 21))
     fH = safe_val(params.get("floor_height"), 3.0)
     thick = safe_val(params.get("wall_thickness"), 0.3)
-    roof_type = safe_val(params.get("roof_type"), "gabled", ["gabled", "flat", "hip"])
+    roof_raw = str(params.get("roof_type", "gabled")).strip().lower()
+    roof_type = _ROOF_RU_EN.get(roof_raw, roof_raw)
+    roof_type = safe_val(roof_type, "gabled", ["gabled", "flat", "hip"])
+    mat_raw = str(params.get("facade_material", "plaster")).strip().lower()
+    mat = _MATERIAL_RU_EN.get(mat_raw, mat_raw)
     mat = safe_val(
-        params.get("facade_material"),
+        mat,
         "plaster",
         ["brick", "wood", "glass", "stone", "concrete", "plaster"],
     )
