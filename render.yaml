@@ -1,0 +1,106 @@
+# ════════════════════════════════════════════════════════════════
+# Render.com deployment — Architect v13.0
+# Full LLM cascade: Gemini → DeepSeek → Groq → OpenRouter → Cohere
+# ════════════════════════════════════════════════════════════════
+
+services:
+  # ═══ GATEWAY — Main entry point + Frontend ═══
+  - type: web
+    name: architect-gateway
+    runtime: docker
+    dockerfilePath: ./gateway.Dockerfile
+    rootDir: .
+    region: oregon
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: LLM_SERVICE_URL
+        value: https://architect-llm.onrender.com
+      - key: BLENDER_SERVICE_URL
+        value: ""
+      - key: AGENT_POOL_URL
+        value: ""
+      - key: KAGGLE_RENDERER_URL
+        value: ""
+      - key: KAGGLE_POLLING_ENABLED
+        value: "false"
+      - key: REDIS_URL
+        value: ""
+      - key: FRONTEND_DIR
+        value: /app/frontend
+      - key: PORT
+        value: "8080"
+      - key: ARCH_API_KEYS
+        value: "arch-prod-key-2024"
+      - key: CORS_ORIGINS
+        value: "https://smartmoneymoscow-cell.github.io,https://architect-gateway.onrender.com"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+  # ═══ LLM SERVICE — Full cascade with all providers ═══
+  - type: web
+    name: architect-llm
+    runtime: docker
+    dockerfilePath: ./llm.Dockerfile
+    rootDir: .
+    region: oregon
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      # ── Google Gemini (8 keys, round-robin) ──
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GOOGLE_FALLBACK_KEYS
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash-lite
+
+      # ── OpenRouter (8 keys, round-robin + auto-discovery) ──
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_FALLBACK_KEYS
+        sync: false
+      - key: OPENROUTER_BASE
+        value: https://openrouter.ai/api/v1
+      - key: LLM_MODEL
+        value: google/gemini-2.5-flash:free
+
+      # ── DeepSeek (8 keys) ──
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_FALLBACK_KEYS
+        sync: false
+
+      # ── Groq (free tier, fast inference) ──
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_FALLBACK_KEYS
+        sync: false
+
+      # ── Cerebras ──
+      - key: CEREBRAS_API_KEY
+        sync: false
+
+      # ── SambaNova ──
+      - key: SAMBANOVA_API_KEY
+        sync: false
+
+      # ── Cohere ──
+      - key: COHERE_API_KEY
+        sync: false
+
+      # ── Redis (optional, falls back to in-memory) ──
+      - key: REDIS_URL
+        value: ""
+
+      # ── Server ──
+      - key: PORT
+        value: "8081"
+      - key: KEY_COOLDOWN_RATE_LIMIT_SEC
+        value: "60"
+      - key: KEY_COOLDOWN_QUOTA_SEC
+        value: "86400"
+      - key: CORS_ORIGINS
+        value: "https://smartmoneymoscow-cell.github.io,https://architect-gateway.onrender.com"
+      - key: PYTHONUNBUFFERED
+        value: "1"
