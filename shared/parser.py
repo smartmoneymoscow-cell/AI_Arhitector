@@ -836,8 +836,8 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
     _GEMINI_MODELS = [
         model_name,
         "gemini-flash-latest",
+        "gemini-3.6-flash",
         "gemini-2.5-flash-preview-05-20",
-        "gemini-2.0-flash",
     ]
     # Deduplicate while preserving order
     seen = set()
@@ -860,20 +860,26 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
             logger.error("Gemini: all models returned 404, giving up")
             return None
 
+        # FIX June 2026: Gemini API теперь принимает AQ.Ab ключи ТОЛЬКО через ?key= URL параметр
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{chosen_model}:generateContent"
+        url_with_key = f"{url}?key={key}"
 
         try:
             async with httpx.AsyncClient() as client:
-                # FIX: пробуем x-goog-api-key (AIza) И Authorization: Bearer (AQ.Ab)
+                # FIX: пробуем 3 метода аутентификации:
+                # 1) ?key= URL параметр (работает для AQ.Ab ключей)
+                # 2) x-goog-api-key header (работает для AIza ключей)
+                # 3) Authorization: Bearer (fallback)
                 r = None
-                for auth_headers in [
-                    {"x-goog-api-key": key},
-                    {"Authorization": f"Bearer {key}"},
+                for auth_method in [
+                    {"url": url_with_key, "headers": {}},
+                    {"url": url, "headers": {"x-goog-api-key": key}},
+                    {"url": url, "headers": {"Authorization": f"Bearer {key}"}},
                 ]:
                     try:
                         r = await client.post(
-                            url, json=payload,
-                            headers=auth_headers,
+                            auth_method["url"], json=payload,
+                            headers=auth_method["headers"],
                             timeout=timeout,
                         )
                         if r.status_code != 401:
@@ -1063,7 +1069,7 @@ async def _call_groq(prompt: str, timeout: int = 45) -> dict | None:
                         "Content-Type": "application/json",
                     },
                     json={
-                        "model": "openai/gpt-oss-20b",
+                        "model": "qwen/qwen3.6-27b",
                         "messages": [
                             {"role": "system", "content": SYSTEM_PROMPT},
                             {"role": "user", "content": prompt},
@@ -1078,6 +1084,9 @@ async def _call_groq(prompt: str, timeout: int = 45) -> dict | None:
             if r.status_code == 200:
                 resp_data = r.json()
                 content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                # Strip <think>...</think> tags (qwen3.6 thinking model)
+                import re as _re
+                content = _re.sub(r'<think>.*?</think>', '', content, flags=_re.DOTALL).strip()
                 logger.info("Groq raw response (%d chars): %s", len(content), content[:200])
                 try:
                     return _json.loads(content)

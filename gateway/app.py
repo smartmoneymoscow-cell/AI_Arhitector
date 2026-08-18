@@ -17,7 +17,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from shared.auth import get_api_key_required, rate_limit_middleware
+from shared.auth import get_api_key_optional, get_api_key_required, rate_limit_middleware
 from shared.config import settings
 from shared.logging_config import setup_logging
 
@@ -407,7 +407,7 @@ async def preview_proxy(
 @app.post("/api/v1/chat")
 async def chat_proxy(
     req: dict,
-    api_key: str = Depends(get_api_key_required),
+    api_key: str = Depends(get_api_key_optional),
     _rl: None = Depends(rate_limit_middleware),
 ):
     """Proxy chat to LLM Service."""
@@ -624,7 +624,7 @@ async def stats_endpoint(
 @app.post("/api/v1/clarify")
 async def clarify_endpoint(
     req: dict,
-    api_key: str = Depends(get_api_key_required),
+    api_key: str = Depends(get_api_key_optional),
     _rl: None = Depends(rate_limit_middleware),
 ):
     """Analyze prompt and return clarification questions if needed."""
@@ -667,7 +667,7 @@ async def clarify_endpoint(
 @app.post("/api/v1/clarify/answer")
 async def clarify_answer_endpoint(
     req: dict,
-    api_key: str = Depends(get_api_key_required),
+    api_key: str = Depends(get_api_key_optional),
     _rl: None = Depends(rate_limit_middleware),
 ):
     """Apply clarification answers and return updated params."""
@@ -690,7 +690,7 @@ async def clarify_answer_endpoint(
 @app.post("/api/v1/compliance/check")
 async def compliance_check(
     req: dict,
-    api_key: str = Depends(get_api_key_required),
+    api_key: str = Depends(get_api_key_optional),
     _rl: None = Depends(rate_limit_middleware),
 ):
     """Проверка соответствия нормативам без генерации."""
