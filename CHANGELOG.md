@@ -1,22 +1,37 @@
 # CHANGELOG — AI_Arhitector
 
-## v12.0.0 — Blender via Kaggle GPU Only (2026-08-18)
+## v12.0.0 — LLM Cascade Fix + Infrastructure Recovery (2026-08-18)
 
 ### КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ
 - **Blender рендеринг теперь работает ТОЛЬКО через Kaggle GPU (T4/P100).**
 - Render blender-service оставлен как emergency fallback, но не используется по умолчанию.
 - Все запросы на рендер направляются сначала на Kaggle, затем на Render.
 
-### Что изменено
+### Исправления LLM каскада
 | # | Файл | Что | Исправление |
 |---|------|-----|-------------|
-| 1 | `gateway/app.py` | `_get_blender_urls()` — Kaggle был последним | Kaggle теперь **PRIMARY** (первый в списке) |
-| 2 | `gateway/app.py` | `blender_request_with_fallback()` — только HTTP | Добавлен fallback на Kaggle polling queue |
-| 3 | `gateway/app.py` | `_kaggle_polling_render()` — не существовала | Новая функция: enqueue + wait for result |
-| 4 | `gateway/app.py` | Версия gateway | 8.2.0 → **9.0.0** |
-| 5 | `.env.example` | KAGGLE_RENDERER_URL не было | Добавлен как обязательная переменная |
-| 6 | `.env.example` | KAGGLE_POLLING_ENABLED не было | Добавлен (true по умолчанию) |
-| 7 | `README.md` | Архитектура не показывала Kaggle | Обновлена диаграмма: Kaggle = primary renderer |
+| 1 | `shared/parser.py` | Groq модель `llama-3.3-70b-versatile` удалена из API | Заменена на `openai/gpt-oss-20b` |
+| 2 | `shared/parser.py` | Gemini fallback модели не существуют (`gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.1-flash-lite`) | Заменены на рабочие: `gemini-flash-latest`, `gemini-2.5-flash-preview-05-20`, `gemini-2.0-flash` |
+| 3 | `frontend/index.html` | Gateway URL указывал на Acc4 (suspended) | Обновлён на Acc1: `architect-gateway-3guo.onrender.com` |
+
+### Инфраструктурные исправления
+| # | Что | Детали |
+|---|-----|--------|
+| 1 | Acc4 (Gateway) | Suspended for billing — Gateway перенесён на Acc1 |
+| 2 | Acc1 LLM + Gateway | Задеплоены с полными env vars (8 OpenRouter + Gemini + Groq ключи) |
+| 3 | Acc3,5,6,7,8 LLM | Задеплоены с обновлёнными env vars |
+| 4 | Groq API ключ | Добавлен в LLM cascade как прямой провайдер |
+
+### Статус провайдеров
+| Провайдер | Ключей | Статус | Примечание |
+|-----------|:------:|:------:|------------|
+| OpenRouter | 8/8 | ✅ alive | Free модели: 429 daily limit |
+| Gemini | 1/8 | ⚠️ degraded | Key#1 работает, но 503 under load |
+| Groq | 1/1 | ✅ alive | gpt-oss-20b, fast inference |
+| Cohere | 1/1 | ✅ alive | command-r-08-2024 |
+| DeepSeek | 0/8 | ❌ | 402 Insufficient Balance |
+| SambaNova | 0/1 | ❌ | 402 no balance |
+| Cerebras | 0/1 | ❌ | Model not found |
 
 ### Архитектура (новая)
 ```
@@ -24,10 +39,14 @@
                   │         │          │              │
                   │         │    Google Gemini    bpy-скрипты
                   │         │    OpenRouter       T4/P100 GPU
-                  │         │    DeepSeek/Groq    ngrok/polling
+                  │         │    Groq (NEW)       ngrok/polling
                   │         │
                   │    Orchestrator (v9.0)
                   │    Kaggle = PRIMARY renderer
+                  │
+              Frontend
+              (Three.js 3D)
+```
                   │
               Frontend
               (Three.js 3D)
