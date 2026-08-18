@@ -257,7 +257,6 @@ LLM_CASCADE = [
     {"model": "poolside/laguna-xs-2.1:free", "tier": 2, "timeout": 30},
     {"model": "cohere/north-mini-code:free", "tier": 2, "timeout": 30},
     {"model": "liquid/lfm-2.5-2.6b:free", "tier": 3, "timeout": 30},
-    {"model": "openai/gpt-oss-20b:free", "tier": 3, "timeout": 30},
 ]
 
 
@@ -286,6 +285,7 @@ _BLOCKLIST = {
     "google/lyria-3-clip-preview",  # music model
     "google/lyria-3-pro-preview",  # music model
     "dots-studio/dots-3-note-preview:free",  # inconsistent JSON output
+    "openai/gpt-oss-20b:free",  # outputs empty content (reasoning tokens), use qwen3.6-27b
 }
 
 # Preferred free models (boost priority)
@@ -297,7 +297,6 @@ _PREFERRED = {
     "cohere/north-mini-code:free",
     "nvidia/nemotron-3-nano-30b-a3b:free",
     "poolside/laguna-s-2.1:free",
-    "openai/gpt-oss-20b:free",
 }
 
 
