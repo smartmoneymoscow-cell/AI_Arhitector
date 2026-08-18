@@ -1,5 +1,47 @@
 # CHANGELOG — AI_Arhitector
 
+## v12.0.0 — Blender via Kaggle GPU Only (2026-08-18)
+
+### КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ
+- **Blender рендеринг теперь работает ТОЛЬКО через Kaggle GPU (T4/P100).**
+- Render blender-service оставлен как emergency fallback, но не используется по умолчанию.
+- Все запросы на рендер направляются сначала на Kaggle, затем на Render.
+
+### Что изменено
+| # | Файл | Что | Исправление |
+|---|------|-----|-------------|
+| 1 | `gateway/app.py` | `_get_blender_urls()` — Kaggle был последним | Kaggle теперь **PRIMARY** (первый в списке) |
+| 2 | `gateway/app.py` | `blender_request_with_fallback()` — только HTTP | Добавлен fallback на Kaggle polling queue |
+| 3 | `gateway/app.py` | `_kaggle_polling_render()` — не существовала | Новая функция: enqueue + wait for result |
+| 4 | `gateway/app.py` | Версия gateway | 8.2.0 → **9.0.0** |
+| 5 | `.env.example` | KAGGLE_RENDERER_URL не было | Добавлен как обязательная переменная |
+| 6 | `.env.example` | KAGGLE_POLLING_ENABLED не было | Добавлен (true по умолчанию) |
+| 7 | `README.md` | Архитектура не показывала Kaggle | Обновлена диаграмма: Kaggle = primary renderer |
+
+### Архитектура (новая)
+```
+Пользователь → Nginx → Gateway → LLM Service → Kaggle GPU (Blender)
+                  │         │          │              │
+                  │         │    Google Gemini    bpy-скрипты
+                  │         │    OpenRouter       T4/P100 GPU
+                  │         │    DeepSeek/Groq    ngrok/polling
+                  │         │
+                  │    Orchestrator (v9.0)
+                  │    Kaggle = PRIMARY renderer
+                  │
+              Frontend
+              (Three.js 3D)
+```
+
+### Как запустить Kaggle
+1. Открыть `kaggle/blender_gpu_renderer.ipynb` на kaggle.com
+2. Включить GPU: Settings → Accelerator → GPU T4
+3. Запустить все ячейки
+4. Режим ngrok: вставить токен → получить URL → прописать `KAGGLE_RENDERER_URL`
+5. Режим polling: ноутбук опрашивает Gateway автоматически
+
+---
+
 ## v11.6.0 — Dynamic LLM Cascade (2026-08-16)
 
 ### Исправлено

@@ -1,6 +1,8 @@
-# Architect v11.5.0 — AI Architecture Generator
+# Architect v12.0.0 — AI Architecture Generator
 
 Генерация 3D-моделей зданий и интерьеров по текстовому описанию на русском языке.
+
+**Blender рендеринг работает ТОЛЬКО через Kaggle GPU (T4/P100).**
 
 ## Быстрый старт
 
@@ -25,11 +27,11 @@ docker-compose up -d
 ## Архитектура
 
 ```
-Пользователь → Nginx → Gateway → LLM Service → Blender Service
+Пользователь → Nginx → Gateway → LLM Service → Kaggle GPU (Blender)
                   │         │          │              │
-                  │         │    Google Gemini    Blender CLI
-                  │         │    OpenRouter       (bpy-скрипты)
-                  │         │    Ollama (local)
+                  │         │    Google Gemini    bpy-скрипты
+                  │         │    OpenRouter       T4/P100 GPU
+                  │         │    DeepSeek/Groq    ngrok/polling
                   │         │
                   │    Orchestrator
                   │    (20+ AI-агентов)
@@ -75,13 +77,20 @@ docker-compose up -d
 - Cooldown дублируется в Redis — переживает рестарт контейнера
 - `GET /api/v1/keys/status` — мониторинг: сколько ключей настроено / живых
 
-### Render Accounts
+### Render Accounts (v12.0)
 
 | # | Аккаунт | URL | Что работает | LLM-ключей |
 |---|---------|-----|-------------|------------|
-| 1 | Render #1 | `ai-arch-blender3d.onrender.com` | Blender | — |
-| 4 | Render #4 | `architect-gateway.onrender.com` | Gateway | — |
-| 4 | Render #4 | `architect-llm-1s1j.onrender.com` | LLM Service | 11 |
+| 4 | Render #4 | `architect-gateway.onrender.com` | Gateway + Redis | — |
+| 1 | Render #1 | `architect-llm-s5q7.onrender.com` | LLM #1 | 16 |
+| 2 | Render #2 | `ai-arch-llmproxy.onrender.com` | Agent Pool + microservices | — |
+| 3 | Render #3 | `architect-llm-zczl.onrender.com` | LLM #3 | 16 |
+| 4 | Render #4 | `architect-llm-1s1j.onrender.com` | LLM #4 | 16 |
+| 5 | Render #5 | `architect-llm-2pmo.onrender.com` | LLM #5 | 16 |
+| 6 | Render #6 | `architect-llm-5mdk.onrender.com` | LLM #6 | 16 |
+| 7 | Render #7 | `architect-llm-sdrh.onrender.com` | LLM #7 | 16 |
+| 8 | Render #8 | `architect-llm-qarj.onrender.com` | LLM #8 | 16 |
+| — | Kaggle | GPU T4/P100 | **Blender (GPU рендер)** | — |
 
 ### Pipeline агентов
 

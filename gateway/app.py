@@ -27,7 +27,7 @@ logger = logging.getLogger("archai.gateway")
 app = FastAPI(
     title="Architect Gateway",
     description="API Gateway — ALL routing through here. Nginx → Gateway → Services",
-    version="8.0.0",
+    version="9.0.0",
 )
 
 # CORS — NEVER wildcard in production
@@ -118,21 +118,26 @@ def _get_circuit_stats() -> dict:
 
 
 def _get_blender_urls() -> list[str]:
-    """Get all Blender service URLs (primary + secondary + Kaggle)."""
+    """Get all Blender service URLs — KAGGLE FIRST, Render as fallback.
+    v9.0: Blender rendering works ONLY via Kaggle GPU (T4/P100).
+    Render blender-service is kept as emergency fallback only.
+    """
     urls = []
+    # ═══ KAGGLE GPU RENDERER — PRIMARY (v9.0) ═══
+    kaggle_url = os.environ.get("KAGGLE_RENDERER_URL", "")
+    if kaggle_url:
+        urls.append(kaggle_url)
+        logger.info("Kaggle GPU renderer registered as PRIMARY: %s", kaggle_url)
+    # ═══ Render blender-service — FALLBACK ONLY ═══
     primary = settings.BLENDER_SERVICE_URL
-    if primary:
+    if primary and primary not in urls:
         urls.append(primary)
-    # Additional instances from env
     for i in range(2, 6):
         url = os.environ.get(f"BLENDER_SERVICE_URL_{i}", "")
         if url and url not in urls:
             urls.append(url)
-    # Kaggle GPU renderer (last priority — fallback)
-    kaggle_url = os.environ.get("KAGGLE_RENDERER_URL", "")
-    if kaggle_url and kaggle_url not in urls:
-        urls.append(kaggle_url)
-        logger.info("Kaggle GPU renderer registered: %s", kaggle_url)
+    if not kaggle_url:
+        logger.warning("KAGGLE_RENDERER_URL not set — Blender will use Render fallback (may fail)")
     return urls
 
 
@@ -195,10 +200,12 @@ async def blender_request_with_fallback(
     timeout: float = 120,
     **kwargs,
 ) -> httpx.Response:
-    """Try Blender request with failover across multiple instances."""
+    """Try Blender request with failover — Kaggle first, then Render.
+    v9.0: If KAGGLE_POLLING_ENABLED, uses Kaggle queue for /generate.
+    """
     urls = _get_blender_urls()
     if not urls:
-        raise HTTPException(503, "No Blender service configured")
+        raise HTTPException(503, "No Blender service configured — set KAGGLE_RENDERER_URL")
 
     last_error = None
     for url in urls:
@@ -213,7 +220,43 @@ async def blender_request_with_fallback(
             _record_failure(url)
             logger.warning("Blender %s failed: %s, trying next", url, last_error[:100])
 
+    # All HTTP endpoints failed — try Kaggle polling queue as last resort
+    if os.environ.get("KAGGLE_POLLING_ENABLED", "").lower() in ("true", "1", "yes"):
+        logger.warning("All Blender HTTP failed — trying Kaggle polling queue")
+        try:
+            return await _kaggle_polling_render(kwargs.get("json", {}), timeout=timeout)
+        except Exception as e:
+            logger.error("Kaggle polling also failed: %s", e)
+
     raise HTTPException(502, f"All Blender instances failed: {last_error}")
+
+
+async def _kaggle_polling_render(req_data: dict, timeout: float = 300) -> httpx.Response:
+    """Enqueue render task to Kaggle polling queue and wait for result."""
+    task_id = uuid.uuid4().hex[:8]
+    task = {
+        "id": task_id,
+        "prompt": req_data.get("prompt", ""),
+        "params": req_data.get("params", req_data),
+        "status": "pending",
+        "created_at": time.time(),
+    }
+    _kaggle_queue.append(task)
+    logger.info("Kaggle polling: task %s enqueued, waiting up to %ds", task_id, timeout)
+
+    # Poll for result
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        await asyncio.sleep(3)
+        result = _kaggle_results.get(task_id)
+        if result and result.get("status") == "completed":
+            _kaggle_results.pop(task_id, None)
+            # Wrap result as httpx.Response-compatible
+            import json as _json
+            content = _json.dumps(result.get("result", {})).encode()
+            return httpx.Response(200, content=content, headers={"content-type": "application/json"})
+
+    raise HTTPException(504, f"Kaggle polling timeout ({timeout}s) for task {task_id}")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -279,7 +322,7 @@ async def health():
     return {
         "status": "ok",
         "service": "gateway",
-        "version": "8.2.0",
+        "version": "9.0.0",
         "services": {
             "llm": "configured" if settings.LLM_SERVICE_URL else "not_configured",
             "blender": "configured" if settings.BLENDER_SERVICE_URL else "not_configured",
