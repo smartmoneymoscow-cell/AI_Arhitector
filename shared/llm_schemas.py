@@ -44,6 +44,17 @@ class SuggestionItem(BaseModel):
     label: str = ""
     text: str = ""
 
+    @classmethod
+    def from_string(cls, s: str) -> "SuggestionItem":
+        return cls(label=s[:30], text=s)
+
+    @field_validator("label", "text", mode="before")
+    @classmethod
+    def coerce_from_any(cls, v):
+        if isinstance(v, str):
+            return v
+        return str(v) if v is not None else ""
+
 
 class ClarificationItem(BaseModel):
     field: str = ""
@@ -170,6 +181,13 @@ def validate_llm_response(data: dict | None) -> tuple[ParsedParams | None, list[
 
     if not isinstance(data, dict):
         return None, [f"LLM returned {type(data).__name__} instead of dict"]
+
+    # Pre-process: convert string lists to SuggestionItem dicts
+    if "suggestions" in data and isinstance(data["suggestions"], list):
+        data["suggestions"] = [
+            {"label": s[:30], "text": s} if isinstance(s, str) else s
+            for s in data["suggestions"]
+        ]
 
     errors = []
     try:
