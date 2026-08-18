@@ -795,15 +795,88 @@ _GEMINI_KEY_IDX = 0
 _OR_KEY_IDX = 0  # round-robin для OpenRouter ключей
 
 
+# ═══════════════════════════════════════════════════════════════
+# GEMINI AUTO-DISCOVERY — probe models to find what's available
+# Instead of hardcoding model names, we probe the API to discover
+# which models are currently live and working.
+# ═══════════════════════════════════════════════════════════════
+
+_GEMINI_DISCOVERED_MODELS: list[str] = []
+_GEMINI_DISCOVERY_TIME: float = 0
+_GEMINI_DISCOVERY_TTL: int = 3600  # re-discover every hour
+
+# Known model families to probe (order = priority)
+_GEMINI_MODEL_PROBES = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-latest",
+]
+
+
+async def _discover_gemini_models(api_key: str) -> list[str]:
+    """Probe Gemini API to discover which models are currently available.
+
+    Instead of hardcoding model names or relying on the /models endpoint
+    (which may not work with all key types), we probe each model with a
+    minimal request and see which ones respond successfully.
+
+    Returns list of working model names (sorted by priority).
+    """
+    global _GEMINI_DISCOVERED_MODELS, _GEMINI_DISCOVERY_TIME
+
+    # Return cached if still fresh
+    if _GEMINI_DISCOVERED_MODELS and (time.time() - _GEMINI_DISCOVERY_TIME) < _GEMINI_DISCOVERY_TTL:
+        return _GEMINI_DISCOVERED_MODELS
+
+    working: list[str] = []
+
+    async with httpx.AsyncClient() as client:
+        for model in _GEMINI_MODEL_PROBES:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            try:
+                r = await client.post(
+                    url,
+                    json={"contents": [{"parts": [{"text": "hi"}]}],
+                          "generationConfig": {"maxOutputTokens": 5}},
+                    headers={"Content-Type": "application/json"},
+                    timeout=8,
+                )
+                if r.status_code == 200:
+                    working.append(model)
+                    logger.info("Gemini discovery: ✅ %s", model)
+                elif r.status_code == 404:
+                    logger.info("Gemini discovery: ❌ %s (not found)", model)
+                elif r.status_code == 429:
+                    logger.info("Gemini discovery: ⏳ %s (rate limited, but exists)", model)
+                    working.append(model)  # model exists, just rate-limited
+                elif r.status_code == 401:
+                    logger.warning("Gemini discovery: key invalid, aborting probe")
+                    break
+                else:
+                    logger.info("Gemini discovery: ❌ %s (HTTP %d)", model, r.status_code)
+            except Exception as e:
+                logger.debug("Gemini discovery: ❌ %s (%s)", model, e)
+
+    if working:
+        _GEMINI_DISCOVERED_MODELS = working
+        _GEMINI_DISCOVERY_TIME = time.time()
+        logger.info("Gemini discovery complete: %d models available: %s", len(working), working)
+    else:
+        logger.warning("Gemini discovery: NO working models found!")
+
+    return working
+
+
 async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
     """Call Google Gemini API — БЕСПЛАТНО (free tier, 15 RPM per key).
 
-    Перебирает ВСЕ живые (не остывающие) Gemini-ключи по кругу, начиная
-    со следующего после последнего использованного (round-robin), а не
-    ограничивается фиксированным числом попыток — раньше при 4 ключах и
-    max_retries=3 четвёртый ключ вообще никогда не пробовался.
-    Каждый исчерпанный ключ помечается через _mark_key_dead и пропускается
-    во всех следующих запросах, пока не остынет.
+    Uses AUTO-DISCOVERY to find available models instead of hardcoded list.
+    Перебирает ВСЕ живые (не остывающие) Gemini-ключи по кругу.
     """
     global _GEMINI_KEY_IDX
     all_keys = _get_google_keys()
@@ -815,6 +888,16 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
     if not keys:
         logger.warning("Gemini: all %d keys are cooling down, skipping to OpenRouter", len(all_keys))
         return None
+
+    # Auto-discover available models using first alive key
+    discovered = await _discover_gemini_models(keys[0])
+    if not discovered:
+        # Fallback: try hardcoded list if discovery fails
+        env_model = os.environ.get("GEMINI_MODEL", "")
+        discovered = [m for m in [env_model, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"] if m]
+        logger.warning("Gemini discovery failed, using fallback list: %s", discovered)
+
+    _GEMINI_MODELS = discovered
 
     payload = {
         "system_instruction": {
@@ -830,19 +913,7 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
         }
     }
 
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
-    # Fallback models if primary is deleted (404)
-    _GEMINI_MODELS = [
-        model_name,
-        "gemini-flash-latest",
-        "gemini-3.6-flash",
-        "gemini-2.5-flash-preview-05-20",
-    ]
-    # Deduplicate while preserving order
-    seen = set()
-    _GEMINI_MODELS = [m for m in _GEMINI_MODELS if not (m in seen or seen.add(m))]
-
-    _model_404: set[str] = set()  # модели, которые вернули404
+    _model_404: set[str] = set()  # модели, которые вернули 404
 
     # Пробуем КАЖДЫЙ живой ключ ровно один раз (round-robin), а не только 3.
     for attempt in range(len(keys)):
