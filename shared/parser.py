@@ -835,10 +835,9 @@ async def _call_gemini(prompt: str, timeout: int = 30) -> dict | None:
     # Fallback models if primary is deleted (404)
     _GEMINI_MODELS = [
         model_name,
-        "gemini-3.7-flash",
-        "gemini-3.6-flash",
-        "gemini-flash-lite-latest",
-        "gemini-3.1-flash-lite",
+        "gemini-flash-latest",
+        "gemini-2.5-flash-preview-05-20",
+        "gemini-2.0-flash",
     ]
     # Deduplicate while preserving order
     seen = set()
@@ -1064,7 +1063,7 @@ async def _call_groq(prompt: str, timeout: int = 45) -> dict | None:
                         "Content-Type": "application/json",
                     },
                     json={
-                        "model": "llama-3.3-70b-versatile",
+                        "model": "openai/gpt-oss-20b",
                         "messages": [
                             {"role": "system", "content": SYSTEM_PROMPT},
                             {"role": "user", "content": prompt},
