@@ -133,7 +133,14 @@ class TextureAgent(BaseAgent):
     def process(self, task: Task) -> TaskResult:
         start = time.time()
         try:
-            material = task.params.get("material", "plaster")
+            raw_material = str(task.params.get("material", "plaster")).strip().lower()
+            # Sanitize: LLM may return "brick, metal, wood" — take first valid
+            material = "plaster"
+            for part in raw_material.replace(",", " ").split():
+                part = part.strip()
+                if part in MATERIAL_CONFIGS:
+                    material = part
+                    break
             resolution = task.params.get("resolution", 2048)
             use_pbr_textures = task.params.get("use_pbr_textures", True)
 

@@ -97,7 +97,14 @@ class GeometryAgent(BaseAgent):
 
         # ═══ Добавляем конструктивные элементы по нормативам ═══
         structural_system = params.get("structural_system", task.params.get("structural_system", "frame"))
-        material = params.get("material", building_params.get("mat", "brick"))
+        raw_mat = str(params.get("material", building_params.get("mat", "brick"))).strip().lower()
+        _VALID = {"brick", "wood", "glass", "stone", "concrete", "steel", "metal"}
+        material = "brick"
+        for part in raw_mat.replace(",", " ").split():
+            part = part.strip()
+            if part in _VALID:
+                material = part
+                break
         floors = building_params.get("floors", 2)
         W = building_params.get("W", 10)
         L = building_params.get("L", 12)

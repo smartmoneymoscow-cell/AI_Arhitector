@@ -650,33 +650,10 @@ html,body{background:var(--bg);color:var(--txt)}
       <input type="text" data-i18n-placeholder="searchProjects" placeholder="Поиск проектов…" id="projSearch" oninput="filterProjects(this.value)">
     </div>
     <div class="pp-list" id="projList">
-      <div class="pp-section-label" data-i18n="todayLabel">Сегодня</div>
-      <div class="project-card active" onclick="selectProject(this,'Коттедж 12×15')">
-        <div class="pc-icon">🏠</div>
-        <div class="pc-info"><div class="pc-name">Коттедж 12×15</div><div class="pc-meta" data-i18n="proj1meta">2 этажа · дерево</div></div>
-        <div class="pc-time">14:30</div>
-      </div>
-      <div class="project-card" onclick="selectProject(this,'Офис 5 этажей')">
-        <div class="pc-icon">🏢</div>
-        <div class="pc-info"><div class="pc-name">Офис 5 этажей</div><div class="pc-meta" data-i18n="proj2meta">стекло · плоская кровля</div></div>
-        <div class="pc-time">11:20</div>
-      </div>
-      <div class="pp-section-label" data-i18n="yesterdayLabel">Вчера</div>
-      <div class="project-card" onclick="selectProject(this,'Таунхаус')">
-        <div class="pc-icon">🏘</div>
-        <div class="pc-info"><div class="pc-name">Таунхаус минимализм</div><div class="pc-meta">3 этажа · 8×16</div></div>
-        <div class="pc-time">18:45</div>
-      </div>
-      <div class="project-card" onclick="selectProject(this,'Ванная')">
-        <div class="pc-icon">🛁</div>
-        <div class="pc-info"><div class="pc-name" data-i18n="proj4name">Ванная комната</div><div class="pc-meta" data-i18n="proj4meta">джакузи · мрамор</div></div>
-        <div class="pc-time">16:10</div>
-      </div>
-      <div class="pp-section-label" data-i18n="earlierLabel">Ранее</div>
-      <div class="project-card" onclick="selectProject(this,'Отель')">
-        <div class="pc-icon">🏨</div>
-        <div class="pc-info"><div class="pc-name" data-i18n="proj5name">Отель 12 этажей</div><div class="pc-meta" data-i18n="proj5meta">современный · бассейн</div></div>
-        <div class="pc-time">28 июл</div>
+      <div class="pp-empty" style="padding:20px;text-align:center;color:var(--txt3);font-size:13px">
+        <div style="font-size:32px;margin-bottom:8px">📋</div>
+        <div data-i18n="noProjects">Нет проектов</div>
+        <div style="font-size:11px;margin-top:4px" data-i18n="noProjectsHint">Опишите здание или интерьер в чате</div>
       </div>
     </div>
     <button class="pp-new" onclick="newProject()">

@@ -401,8 +401,20 @@ class Orchestrator:
             # The geometry agent will generate structural/MEP if data is provided
             geom_params.setdefault("structural_calc", {})
             geom_params.setdefault("mep_calc", {})
+            # Sanitize material: LLM may return "brick, metal, wood" — take first valid
+            raw_material = str(params.get("material", "plaster")).strip().lower()
+            _VALID_MATERIALS = {"brick", "wood", "glass", "stone", "concrete", "plaster", "metal", "steel"}
+            _RU_MAT = {"кирпич": "brick", "дерево": "wood", "стекло": "glass", "камень": "stone",
+                       "бетон": "concrete", "штукатурка": "plaster", "металл": "metal", "сталь": "steel"}
+            sanitized_material = "plaster"
+            for part in raw_material.replace(",", " ").split():
+                part = part.strip()
+                part = _RU_MAT.get(part, part)
+                if part in _VALID_MATERIALS:
+                    sanitized_material = part
+                    break
             texture_params = {
-                "material": params.get("material", "plaster"),
+                "material": sanitized_material,
                 "resolution": 2048,
             }
 

@@ -192,13 +192,16 @@ def generate_bpy_script(params: dict) -> str:
     roof_raw = str(params.get("roof_type", "gabled")).strip().lower()
     roof_type = _ROOF_RU_EN.get(roof_raw, roof_raw)
     roof_type = safe_val(roof_type, "gabled", ["gabled", "flat", "hip"])
-    mat_raw = str(params.get("facade_material", "plaster")).strip().lower()
-    mat = _MATERIAL_RU_EN.get(mat_raw, mat_raw)
-    mat = safe_val(
-        mat,
-        "plaster",
-        ["brick", "wood", "glass", "stone", "concrete", "plaster"],
-    )
+    mat_raw = str(params.get("facade_material", params.get("material", "plaster"))).strip().lower()
+    # Sanitize: LLM may return "brick, metal, wood" — take first valid
+    _VALID = {"brick", "wood", "glass", "stone", "concrete", "plaster"}
+    mat = "plaster"
+    for part in mat_raw.replace(",", " ").split():
+        part = part.strip()
+        part = _MATERIAL_RU_EN.get(part, part)
+        if part in _VALID:
+            mat = part
+            break
     has_balcony = bool(params.get("has_balcony", False))
     has_terrace = bool(params.get("has_terrace", False))
     has_garage = bool(params.get("has_garage", False))
