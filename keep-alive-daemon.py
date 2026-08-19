@@ -14,7 +14,7 @@ import os
 from datetime import datetime
 
 SERVICES = [
-    {"name": "Gateway",  "url": "https://architect-gateway.onrender.com/health"},
+    {"name": "Gateway",  "url": "https://architect-gateway-3guo.onrender.com/health"},
     {"name": "LLM",      "url": "https://architect-llm-1s1j.onrender.com/health"},
     {"name": "Blender1", "url": "https://ai-arch-blender3d.onrender.com/health"},
     {"name": "Blender2", "url": "https://architect-blender.onrender.com/health"},

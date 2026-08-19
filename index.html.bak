@@ -301,16 +301,7 @@ html,body{background:var(--bg);color:var(--txt)}
 }
 .welcome h2{font-size:22px;font-weight:700;color:var(--txt);line-height:1.3}
 .welcome p{font-size:13px;color:var(--txt2);max-width:280px;line-height:1.6}
-.quick-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:8px}
-.qa-btn{
-  padding:8px 16px;border-radius:20px;
-  border:1px solid var(--bdr2);background:var(--bg2);
-  color:var(--txt2);font-size:12px;font-weight:500;
-  cursor:pointer;transition:var(--transition);
-  display:flex;align-items:center;gap:6px;font-family:inherit;
-}
-.qa-btn:hover{border-color:var(--acc);color:var(--acc2);background:rgba(139,92,246,.08)}
-.qa-btn .qa-icon{font-size:14px}
+
 
 /* Messages */
 .msg{max-width:85%;display:flex;flex-direction:column}
@@ -701,12 +692,6 @@ html,body{background:var(--bg);color:var(--txt)}
         <div class="welcome-icon">🏗</div>
         <h2 data-i18n="welcomeTitle">Что вы хотите<br>построить?</h2>
         <p data-i18n="welcomeSub">Опишите здание или интерьер — я сгенерирую 3D-модель с рендером</p>
-        <div class="quick-actions">
-          <button class="qa-btn" onclick="go('жилой дом 2 этажа кирпич 10×12')"><span class="qa-icon">🏠</span> <span data-i18n="qaHouse">Дом</span></button>
-          <button class="qa-btn" onclick="go('офис 5 этажей стекло 20×24')"><span class="qa-icon">🏢</span> <span data-i18n="qaOffice">Офис</span></button>
-          <button class="qa-btn" onclick="go('коттедж 12×15 дерево терраса')"><span class="qa-icon">🌲</span> <span data-i18n="qaCottage">Коттедж</span></button>
-          <button class="qa-btn" onclick="go('ванная с джакузи мрамор')"><span class="qa-icon">🛁</span> <span data-i18n="qaInterior">Интерьер</span></button>
-        </div>
       </div>
     </div>
     <div class="input-area">
@@ -742,7 +727,7 @@ html,body{background:var(--bg);color:var(--txt)}
       </div>
       <div class="input-hint" data-i18n="inputHint">Enter — отправить · Shift+Enter — новая строка</div>
     </div>
-    <input type="file" id="fileIn" accept="image/*,.pdf" style="display:none" onchange="handleFile(this.files[0])">
+    <input type="file" id="fileIn" accept="image/*,.pdf,.dwg,.dxf" style="display:none" onchange="handleFile(this.files[0])">
   </div>
 
   <!-- VIEWER -->
@@ -772,11 +757,7 @@ html,body{background:var(--bg);color:var(--txt)}
         <div class="empty-icon">🏗</div>
         <div class="empty-title" data-i18n="emptyTitle">Опишите здание в чате</div>
         <div class="empty-sub" data-i18n="emptySub">Напишите тип, этажи, материал, размеры — 3D появится сразу</div>
-        <div class="empty-actions">
-          <button class="empty-btn" onclick="go('жилой дом 2 этажа кирпич 10×12')"><span>🏠</span> <span data-i18n="qaHouse">Дом</span></button>
-          <button class="empty-btn" onclick="go('офис 5 этажей стекло 20×24')"><span>🏢</span> <span data-i18n="qaOffice">Офис</span></button>
-          <button class="empty-btn" onclick="go('коттедж 12×15 дерево')"><span>🌲</span> <span data-i18n="qaCottage">Коттедж</span></button>
-        </div>
+
       </div>
       <canvas id="c3d" style="display:none"></canvas>
       <div class="gen-overlay" id="genOverlay">
@@ -820,7 +801,7 @@ const T = {
     newProject:'Новый проект',
     welcomeTitle:'Что вы хотите<br>построить?',
     welcomeSub:'Опишите здание или интерьер — я сгенерирую 3D-модель с рендером',
-    qaHouse:'Дом',qaOffice:'Офис',qaCottage:'Коттедж',qaInterior:'Интерьер',
+
     inputPlaceholder:'Опишите здание или интерьер…',
     inputHint:'Enter — отправить · Shift+Enter — новая строка',
     tab3d:'3D',tabInside:'Внутри',tabPlan:'План',tabSection:'Разрез',tabFacade:'Фасад',
@@ -856,7 +837,7 @@ const T = {
     newProject:'New project',
     welcomeTitle:'What do you want<br>to build?',
     welcomeSub:'Describe a building or interior — I\'ll generate a 3D model with render',
-    qaHouse:'House',qaOffice:'Office',qaCottage:'Cottage',qaInterior:'Interior',
+
     inputPlaceholder:'Describe a building or interior…',
     inputHint:'Enter — send · Shift+Enter — new line',
     tab3d:'3D',tabInside:'Inside',tabPlan:'Plan',tabSection:'Section',tabFacade:'Facade',
@@ -999,15 +980,120 @@ function toggleMic() {
 }
 
 // ═══════════════════ FILE ═══════════════════
+let _pendingAnalysisFile = null;
 function handleFile(f) {
   if(!f) return;
   const p=document.getElementById('filePreview'),img=document.getElementById('fpImg'),nm=document.getElementById('fpName');
   nm.textContent=f.name;
-  if(f.type.startsWith('image/')){const r=new FileReader();r.onload=e=>{img.src=e.target.result};r.readAsDataURL(f);img.style.display='';}else{img.style.display='none';}
+  const ext = f.name.split('.').pop().toLowerCase();
+  if(f.type.startsWith('image/')){const r=new FileReader();r.onload=e=>{img.src=e.target.result};r.readAsDataURL(f);img.style.display='';}
+  else if(ext==='pdf'||ext==='dwg'||ext==='dxf'){img.style.display='none';_pendingAnalysisFile=f;}
+  else{img.style.display='none';}
   p.style.display='flex';
 }
-function clearFile() { document.getElementById('filePreview').style.display='none'; document.getElementById('fileIn').value=''; }
+function clearFile() { document.getElementById('filePreview').style.display='none'; document.getElementById('fileIn').value=''; _pendingAnalysisFile=null; }
 function attachFile() { document.getElementById('fileIn').click(); }
+
+async function analyzeUploadedFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const endpoint = ext === 'pdf' ? '/api/v1/analyze/pdf' : '/api/v1/analyze/dwg';
+  const formData = new FormData();
+  formData.append('file', file);
+  showTyping();
+  try {
+    _ensureApiKey();
+    const r = await fetch(API_BASE + endpoint, {
+      method: 'POST',
+      headers: _apiHeaders(),
+      body: formData,
+    });
+    hideTyping();
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    _displayAnalysisResult(data, file.name);
+    return data;
+  } catch(e) {
+    hideTyping();
+    addMessage('assistant', '❌ ' + (currentLang==='en'?'Analysis failed: ':'Анализ не удался: ') + e.message);
+    return null;
+  }
+}
+
+function _displayAnalysisResult(data, fileName) {
+  let html = '<div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:14px;padding:14px 16px;max-width:460px">';
+  html += '<div style="font-weight:700;color:var(--acc2);margin-bottom:10px">📄 ' + esc(fileName) + '</div>';
+
+  // Rooms
+  if(data.rooms && data.rooms.length) {
+    html += '<div style="font-size:12px;font-weight:600;color:var(--txt);margin-bottom:6px">🏠 ' + (currentLang==='en'?'Rooms: ':'Помещения: ') + data.rooms.length + '</div>';
+    data.rooms.slice(0,10).forEach(r => {
+      html += '<div style="font-size:11px;color:var(--txt2);padding:2px 0">• ' + esc(r.name);
+      if(r.area_m2) html += ' — ' + r.area_m2 + ' м²';
+      if(r.width_m && r.length_m) html += ' (' + r.width_m + '×' + r.length_m + ')';
+      html += '</div>';
+    });
+  }
+
+  // Dimensions
+  if(data.dimensions && Object.keys(data.dimensions).length) {
+    html += '<div style="font-size:12px;font-weight:600;color:var(--txt);margin:8px 0 4px">📐 ' + (currentLang==='en'?'Dimensions: ':'Размеры: ') + '</div>';
+    Object.entries(data.dimensions).forEach(([k,v]) => {
+      html += '<div style="font-size:11px;color:var(--txt2);padding:1px 0">• ' + esc(k) + ': ' + v + '</div>';
+    });
+  }
+
+  // MEP systems
+  if(data.mep_systems && data.mep_systems.length) {
+    html += '<div style="font-size:12px;font-weight:600;color:var(--txt);margin:8px 0 4px">🔧 ' + (currentLang==='en'?'Engineering: ':'Инженерные системы: ') + '</div>';
+    data.mep_systems.forEach(m => {
+      html += '<div style="font-size:11px;color:var(--txt2);padding:1px 0">• ' + esc(m.system_type) + ': ' + esc(m.description) + '</div>';
+    });
+  }
+
+  // Materials
+  if(data.materials && data.materials.length) {
+    html += '<div style="font-size:11px;color:var(--txt3);margin-top:6px">🧱 ' + data.materials.join(', ') + '</div>';
+  }
+
+  // Layers (for DXF)
+  if(data.layers && data.layers.length) {
+    const archLayers = data.layers.filter(l => l.is_architectural);
+    if(archLayers.length) {
+      html += '<div style="font-size:12px;font-weight:600;color:var(--txt);margin:8px 0 4px">📋 ' + (currentLang==='en'?'Architectural layers: ':'Архитектурные слои: ') + archLayers.length + '</div>';
+      archLayers.slice(0,8).forEach(l => {
+        html += '<div style="font-size:11px;color:var(--txt2);padding:1px 0">• ' + esc(l.name) + ' (' + l.entity_count + ' ' + (currentLang==='en'?'entities':'объектов') + ')</div>';
+      });
+    }
+  }
+
+  // Warnings
+  if(data.warnings && data.warnings.length) {
+    html += '<div style="font-size:10px;color:#f59e0b;margin-top:6px">⚠ ' + data.warnings.join('; ') + '</div>';
+  }
+
+  // Use as input button
+  html += '<button onclick="useAnalysisForGeneration()" style="margin-top:10px;padding:8px 16px;border-radius:10px;border:1px solid var(--acc);background:rgba(139,92,246,.1);color:var(--acc2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">' + (currentLang==='en'?'🏗 Use for 3D generation':'🏗 Использовать для 3D генерации') + '</button>';
+  html += '</div>';
+  addMessage('assistant', html);
+}
+
+let _lastAnalysisData = null;
+function useAnalysisForGeneration() {
+  if(!_lastAnalysisData) {
+    addMessage('assistant', currentLang==='en'?'Upload a PDF/DWG first':'Сначала загрузите PDF/DWG');
+    return;
+  }
+  const d = _lastAnalysisData;
+  let prompt = '';
+  if(d.rooms && d.rooms.length) {
+    prompt = 'Создай 3D модель по чертежу: ' + d.rooms.map(r => r.name).join(', ');
+    if(d.dimensions && d.dimensions.width_m) prompt += ', размеры ' + d.dimensions.width_m + 'x' + d.dimensions.length_m;
+  } else {
+    prompt = 'Создай 3D модель по загруженному чертежу';
+  }
+  document.getElementById('msgInput').value = prompt;
+  sendMessage();
+}
 
 // ═══════════════════ API INTEGRATION ═══════════════════
 const API_BASE = (()=>{
@@ -1017,17 +1103,16 @@ const API_BASE = (()=>{
   if(stored) return stored.replace(/\/+$/,'');
   const origin = window.location.origin;
   if(origin.includes('github.io') || origin.includes('githubusercontent.com'))
-    return 'https://architect-gateway-3guo.onrender.com';
+    return 'https://architect-gateway.onrender.com';
   return origin;
 })();
 let _backendOk = null;
 function _getApiKey(){ try{ return localStorage.getItem('arch_api_key')||''; }catch(e){ return ''; } }
 function _setApiKey(k){ try{ localStorage.setItem('arch_api_key',k); }catch(e){} }
 function _ensureApiKey(){
-  const k=_getApiKey();
-  if(k) return k;
-  // Don't block — gateway may be in open mode
-  return '';
+  // Public chat endpoints (parse/orchestrator/analyze) no longer require X-API-Key —
+  // ARCH_API_KEYS now only guards direct programmatic API access (see gateway/app.py).
+  return _getApiKey();
 }
 function _apiHeaders(extra){
   const h={'Content-Type':'application/json'};
@@ -1084,13 +1169,13 @@ async function callParseAPI(msg){
 async function callOrchestratorAPI(prompt,parsed){
   _ensureApiKey();
   const ctrl=new AbortController();
-  const tid=setTimeout(()=>ctrl.abort(),300000);
+  const tid=setTimeout(()=>ctrl.abort(),620000);
   try{
     const r=await fetch(API_BASE+'/api/v1/orchestrator/execute',{
       method:'POST',
       headers:_apiHeaders(),
       signal:ctrl.signal,
-      body:JSON.stringify({prompt:prompt,quality:'standard',pipeline_profile:parsed.object_type==='interior'?'interior':'standard',skip_clarification:false,export_formats:['glb']})
+      body:JSON.stringify({prompt:prompt,quality:'fast',pipeline_profile:parsed.object_type==='interior'?'interior':'standard',skip_clarification:false,export_formats:['glb']})
     });
     clearTimeout(tid);
     if(r.ok) return await r.json();
@@ -1150,6 +1235,23 @@ let _orchPrompt = '';         // Original prompt for the current job
 
 async function sendMessage() {
   const inp=document.getElementById('msgInput'), text=inp.value.trim();
+  // Check if there's a pending PDF/DWG file to analyze
+  if(_pendingAnalysisFile && !text) {
+    const f = _pendingAnalysisFile;
+    _pendingAnalysisFile = null;
+    hideWelcome(); addMessage('user', '📄 ' + f.name);
+    const data = await analyzeUploadedFile(f);
+    if(data) _lastAnalysisData = data;
+    return;
+  }
+  if(_pendingAnalysisFile && text) {
+    // File + text: analyze file then use text as prompt
+    const f = _pendingAnalysisFile;
+    _pendingAnalysisFile = null;
+    hideWelcome(); addMessage('user', '📄 ' + f.name + ' — ' + text);
+    const data = await analyzeUploadedFile(f);
+    if(data) _lastAnalysisData = data;
+  }
   if(!text) return;
   hideWelcome(); addMessage('user',text); inp.value=''; autoResize(inp);
   showTyping();
@@ -1166,11 +1268,12 @@ async function sendMessage() {
 
     _ensureApiKey();
     const orchCtrl = new AbortController();
-    const orchTid = setTimeout(()=>orchCtrl.abort(), 300000);
+    const orchTid = setTimeout(()=>orchCtrl.abort(), 620000);
 
-    // Determine pipeline profile from prompt keywords
-    const t = text.toLowerCase();
+    // Determine pipeline profile — prefer LLM-determined, fallback to regex
     let profile = 'standard';
+    // Regex fallback for pipeline profile
+    const t = text.toLowerCase();
     if(/ванн|кухн|спальн|детск|гостин|интерьер|дизайн|комнат/.test(t)) profile = 'interior';
     if(/ландшафт|сад|двор|участок/.test(t)) profile = 'landscape';
     _orchPipelineProfile = profile;
@@ -1183,7 +1286,7 @@ async function sendMessage() {
       signal:orchCtrl.signal,
       body:JSON.stringify({
         prompt: text,
-        quality: 'standard',
+        quality: 'fast',
         pipeline_profile: profile,
         skip_clarification: false,
         export_formats: ['glb']
@@ -1198,6 +1301,11 @@ async function sendMessage() {
     }
 
     const orchResult = await r.json();
+
+    // Use LLM-determined pipeline_profile if provided
+    if(orchResult.pipeline_profile) {
+      _orchPipelineProfile = orchResult.pipeline_profile;
+    }
 
     // ═══ STEP 2: Handle clarification_needed ═══
     if(orchResult.status === 'clarification_needed' && orchResult.clarification) {
@@ -1243,7 +1351,7 @@ function showOrchestratorClarification(questions, params) {
   html += '<div style="font-weight:700;color:#92400e;margin-bottom:10px">💬 '+(currentLang==='en'?'I need to clarify a few things':'Нужно уточнить несколько деталей')+'</div>';
 
   questions.forEach((q,i) => {
-    html += '<div style="margin-bottom:12px"><div style="font-size:13px;color:#78350f;margin-bottom:6px;font-weight:600">'+esc(q.text)+'</div>';
+    html += '<div data-orch-q="'+i+'" style="margin-bottom:12px"><div style="font-size:13px;color:#78350f;margin-bottom:6px;font-weight:600">'+esc(q.text)+'</div>';
     if(q.visual_options && q.visual_options.length) {
       // Visual options with pros/cons
       html += '<div style="display:flex;flex-direction:column;gap:6px">';
@@ -1302,7 +1410,7 @@ async function _resumeOrchestrator() {
   try {
     _ensureApiKey();
     const ctrl = new AbortController();
-    const tid = setTimeout(()=>ctrl.abort(), 300000);
+    const tid = setTimeout(()=>ctrl.abort(), 620000);
 
     const r = await fetch(API_BASE+'/api/v1/orchestrator/resume', {
       method:'POST',
@@ -1311,7 +1419,7 @@ async function _resumeOrchestrator() {
       body:JSON.stringify({
         job_id: jobId,
         answers: _orchAnswers,
-        quality: 'standard',
+        quality: 'fast',
         pipeline_profile: _orchPipelineProfile,
         export_formats: ['glb']
       })
@@ -1355,11 +1463,13 @@ function _handleOrchestratorResult(orchResult, prompt) {
     addMessage('assistant', '<div style="font-size:11px;color:#64748b;padding:4px 0">'+summary+'</div>');
   }
 
-  // Show quality score
-  if(orchResult.quality && orchResult.quality.score !== undefined) {
-    const score = orchResult.quality.score;
-    const color = score >= 8 ? '#16a34a' : score >= 5 ? '#f59e0b' : '#dc2626';
-    addMessage('assistant', '<div style="font-size:12px;color:'+color+';font-weight:600">🎯 '+(currentLang==='en'?'Quality score: ':'Оценка качества: ')+score+'/10</div>');
+  // Show quality result — backend (quality_agent) returns {passed, checks, issues, severity},
+  // there is no numeric "score" field, so render from what actually exists.
+  if(orchResult.quality && orchResult.quality.passed !== undefined) {
+    const q = orchResult.quality;
+    const color = q.passed ? '#16a34a' : (q.severity==='critical' ? '#dc2626' : '#f59e0b');
+    const label = q.passed ? (currentLang==='en'?'Quality check passed':'Проверка качества пройдена') : (currentLang==='en'?'Quality issues found: ':'Найдены замечания: ')+((q.issues||[]).join(', ')||'—');
+    addMessage('assistant', '<div style="font-size:12px;color:'+color+';font-weight:600">🎯 '+esc(label)+'</div>');
   }
 
   // Show duration
@@ -1369,8 +1479,8 @@ function _handleOrchestratorResult(orchResult, prompt) {
   }
 
   // Load 3D model
-  if(orchResult.exports && orchResult.exports.formats) {
-    const glbPath = orchResult.exports.formats.glb || orchResult.exports.formats.GLB;
+  if(orchResult.exports && orchResult.exports.output_path) {
+    const glbPath = orchResult.exports.output_path;
     if(glbPath) {
       const url = glbPath.startsWith('http') ? glbPath : API_BASE + '/api/v1/files/' + glbPath;
       loadGLBModel(url);

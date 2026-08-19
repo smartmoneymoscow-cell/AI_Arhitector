@@ -41,7 +41,7 @@ jobs:
           set -euo pipefail
           BASE_URL="${{ secrets.PRODUCTION_URL }}"
           if [ -z "$BASE_URL" ]; then
-            BASE_URL="https://architect-gateway.onrender.com"
+            BASE_URL="https://architect-gateway-3guo.onrender.com"
           fi
           for i in $(seq 1 12); do
             for HEALTH_PATH in "/health" "/api/v1/health"; do
@@ -64,7 +64,7 @@ jobs:
         run: |
           set -euo pipefail
           for i in $(seq 1 8); do
-            CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://architect-gateway.onrender.com/health" || true)
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://architect-gateway-3guo.onrender.com/health" || true)
             if [ "$CODE" = "200" ]; then
               echo "Gateway warmed up"
               exit 0
@@ -80,7 +80,7 @@ jobs:
         shell: bash
         run: |
           for attempt in 1 2 3; do
-            HEALTH=$(curl -s "https://architect-gateway.onrender.com/health" --max-time 60 || true)
+            HEALTH=$(curl -s "https://architect-gateway-3guo.onrender.com/health" --max-time 60 || true)
             if echo "$HEALTH" | python3 -c "
           import json, sys
           r = json.load(sys.stdin)
@@ -139,7 +139,7 @@ jobs:
         shell: bash
         run: |
           for attempt in 1 2 3; do
-            HEALTH=$(curl -s "https://architect-gateway.onrender.com/health" --max-time 60 || true)
+            HEALTH=$(curl -s "https://architect-gateway-3guo.onrender.com/health" --max-time 60 || true)
             echo "$HEALTH" | python3 -c "
           import json, sys
           r = json.load(sys.stdin)
@@ -157,7 +157,7 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         shell: bash
         run: |
-          RESP=$(curl -s -X POST "https://architect-gateway.onrender.com/api/v1/parse" \
+          RESP=$(curl -s -X POST "https://architect-gateway-3guo.onrender.com/api/v1/parse" \
             -H "Content-Type: application/json" \
             -d '{"text": "двухэтажный кирпичный дом 10x12"}' \
             --max-time 60)

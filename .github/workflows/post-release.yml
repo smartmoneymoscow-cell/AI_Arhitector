@@ -16,7 +16,7 @@ jobs:
           FAILURES=0
 
           # Gateway
-          GW=$(curl -s "https://architect-gateway.onrender.com/health" --max-time 30 2>/dev/null || echo '{"status":"error"}')
+          GW=$(curl -s "https://architect-gateway-3guo.onrender.com/health" --max-time 30 2>/dev/null || echo '{"status":"error"}')
           GW_STATUS=$(echo "$GW" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','error'))" 2>/dev/null || echo "error")
           GW_VERSION=$(echo "$GW" | python3 -c "import json,sys; print(json.load(sys.stdin).get('version','?'))" 2>/dev/null || echo "?")
           echo "Gateway: $GW_STATUS (v$GW_VERSION)"
@@ -39,7 +39,7 @@ jobs:
           echo "Gateway→Blender: $GW_BL"
 
           # Parse test
-          PARSE=$(curl -s -X POST "https://architect-gateway.onrender.com/api/v1/parse" \
+          PARSE=$(curl -s -X POST "https://architect-gateway-3guo.onrender.com/api/v1/parse" \
             -H "Content-Type: application/json" \
             -d '{"text": "двухэтажный кирпичный дом 10x12"}' --max-time 60 2>/dev/null || echo '{"error":"timeout"}')
           echo "Parse test: $(echo "$PARSE" | head -c 200)"

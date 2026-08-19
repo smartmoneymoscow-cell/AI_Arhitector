@@ -240,7 +240,7 @@ jobs:
 
       - name: Test parse endpoint
         run: |
-          PARSE=$(curl -s -X POST "https://architect-gateway.onrender.com/api/v1/parse" \
+          PARSE=$(curl -s -X POST "https://architect-gateway-3guo.onrender.com/api/v1/parse" \
             -H "Content-Type: application/json" \
             -H "X-API-Key: ${{ secrets.ARCH_API_KEY }}" \
             -d '{"text": "двухэтажный кирпичный дом 10x12"}' \
@@ -251,7 +251,7 @@ jobs:
 
       - name: Test stats endpoint
         run: |
-          STATS=$(curl -s "https://architect-gateway.onrender.com/api/v1/stats" \
+          STATS=$(curl -s "https://architect-gateway-3guo.onrender.com/api/v1/stats" \
             -H "X-API-Key: ${{ secrets.ARCH_API_KEY }}" \
             --max-time 15 2>/dev/null)
           echo "Stats: $(echo $STATS | head -c 300)"
@@ -262,7 +262,7 @@ jobs:
           playwright install chromium --with-deps
           python3 -m pytest tests/test_visual_release.py -v --tb=short -k "TestSendButtonVisual or TestReasoningVisual" 2>&1 | tail -30
         env:
-          GATEWAY_URL: https://architect-gateway.onrender.com
+          GATEWAY_URL: https://architect-gateway-3guo.onrender.com
           API_KEY: ${{ secrets.ARCH_API_KEY }}
           SCREENSHOT_DIR: .openclaw/tmp/live_screenshots
         continue-on-error: true

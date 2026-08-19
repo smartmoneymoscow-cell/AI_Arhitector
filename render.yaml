@@ -15,7 +15,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: LLM_SERVICE_URL
-        value: https://architect-llm.onrender.com
+        value: https://architect-llm-s5q7.onrender.com
       - key: BLENDER_SERVICE_URL
         value: ""
       - key: AGENT_POOL_URL
@@ -33,7 +33,7 @@ services:
       - key: ARCH_API_KEYS
         value: "arch-prod-key-2024"
       - key: CORS_ORIGINS
-        value: "https://smartmoneymoscow-cell.github.io,https://architect-gateway.onrender.com"
+        value: "https://smartmoneymoscow-cell.github.io,https://architect-gateway-3guo.onrender.com"
       - key: PYTHONUNBUFFERED
         value: "1"
 
@@ -101,6 +101,6 @@ services:
       - key: KEY_COOLDOWN_QUOTA_SEC
         value: "86400"
       - key: CORS_ORIGINS
-        value: "https://smartmoneymoscow-cell.github.io,https://architect-gateway.onrender.com"
+        value: "https://smartmoneymoscow-cell.github.io,https://architect-gateway-3guo.onrender.com"
       - key: PYTHONUNBUFFERED
         value: "1"

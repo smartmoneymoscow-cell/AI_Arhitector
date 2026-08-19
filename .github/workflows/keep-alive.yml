@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping Gateway
-        run: curl -sf --max-time 30 https://architect-gateway.onrender.com/health || echo "Gateway DOWN"
+        run: curl -sf --max-time 30 https://architect-gateway-3guo.onrender.com/health || echo "Gateway DOWN"
       
       - name: Ping LLM
         run: curl -sf --max-time 30 https://architect-llm-1s1j.onrender.com/health || echo "LLM DOWN"
@@ -24,7 +24,7 @@ jobs:
         run: |
           echo "=== Keep-Alive Ping $(date -u) ==="
           for url in \
-            "https://architect-gateway.onrender.com/health" \
+            "https://architect-gateway-3guo.onrender.com/health" \
             "https://architect-llm-1s1j.onrender.com/health" \
             "https://ai-arch-blender3d.onrender.com/health" \
             "https://architect-blender.onrender.com/health"; do
