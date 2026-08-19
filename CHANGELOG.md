@@ -1,5 +1,42 @@
 # CHANGELOG — AI_Arhitector
 
+## v12.1.0 — Infrastructure Recovery + URL Migration (2026-08-19)
+
+### Что сделано
+- Все URL обновлены: `architect-gateway.onrender.com` → `architect-gateway-3guo.onrender.com`
+- Все сервисы перездеплоены через Render API с полными LLM ключами
+- LLM cascade: Groq → DeepSeek → Gemini → OpenRouter → Cohere → Cerebras → SambaNova
+- Визуальное тестирование пройдено (Puppeteer скриншоты)
+- Frontend → Gateway → LLM → Orchestrator → Blender pipeline работает end-to-end
+
+### Тесты
+| Тип | Результат | Время |
+|-----|-----------|-------|
+| LLM parse (интерьер) | ✅ object_type=interior, room_type=living_room, style=loft | ~15s |
+| LLM parse (здание) | ✅ object_type=building, building_type=cottage, floors=2 | ~20s |
+| Orchestrator (полный) | ✅ 7 шагов: parse→route→geometry→texture→render→quality→export | 53s |
+| GLB экспорт | ✅ 207KB файл доступен через /api/v1/files/ | — |
+| Groq API | ✅ qwen/qwen3.6-27b отвечает | ~2s |
+| Frontend UI | ✅ Chat + 3D viewer + AI thinking display | — |
+
+### Инфраструктура
+| Сервис | URL | Статус |
+|--------|-----|--------|
+| Gateway | architect-gateway-3guo.onrender.com | ✅ v9.0.0 |
+| LLM | architect-llm-s5q7.onrender.com | ✅ v8.0.0 |
+| Blender | ai-arch-blender3d.onrender.com | ✅ v6.0.0 |
+| GitHub Pages | smartmoneymoscow-cell.github.io/AI_Arhitector | ✅ |
+
+### Файлы обновлены
+- `index.html` — gateway URL
+- `frontend/index.html` — gateway URL
+- `full_page.html` — gateway URL
+- `render.yaml` — gateway + LLM URLs
+- `.github/workflows/*.yml` — все workflow URLs
+- `keep-alive-daemon.py` — gateway URL
+
+---
+
 ## v12.0.0 — LLM Cascade Fix + Infrastructure Recovery (2026-08-18)
 
 ### КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ
