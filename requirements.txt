@@ -1,5 +1,5 @@
 # AI_Arhitector — Requirements (PINNED versions)
-# Last updated: 2026-08-10
+# Last updated: 2026-08-21
 
 # ═══ Core ═══
 fastapi>=0.141.1
@@ -23,6 +23,7 @@ ifcopenshell>=0.8.5
 # ═══ 3D mesh processing (fast GLB/DXF export) ═══
 trimesh>=4.12.2
 numpy>=1.26.0
+scipy>=1.14.0
 
 # ═══ CAD (optional — OpenCascade) ═══
 # pythonocc-core==7.8.1  # Uncomment for full CAD (heavy: ~500MB)
