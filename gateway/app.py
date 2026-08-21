@@ -365,7 +365,6 @@ async def parse_proxy(
 @app.post("/api/v1/generate")
 async def generate_proxy(
     req: dict,
-    api_key: str = Depends(get_api_key_required),
     _rl: None = Depends(rate_limit_middleware),
 ):
     """Proxy generate request to Blender Service (with failover)."""
