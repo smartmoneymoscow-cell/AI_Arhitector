@@ -637,6 +637,42 @@ class Orchestrator:
             if export_result.fallback:
                 job["fallback_agents"].append("export")
 
+            # ═══ Fallback: if export failed, try direct blender generate ═══
+            if not export_data or not export_data.get("output_path"):
+                logger.info("Export agent failed, trying direct blender generate")
+                try:
+                    import httpx as _httpx
+                    blender_url = self._find_working_blender()
+                    if blender_url:
+                        with _httpx.Client(timeout=120.0) as _client:
+                            _r = _client.post(
+                                f"{blender_url}/api/v1/generate",
+                                json={"prompt": prompt, "quality": quality},
+                            )
+                            if _r.status_code == 200:
+                                content_type = _r.headers.get("content-type", "")
+                                if "model/gltf-binary" in content_type:
+                                    # Save GLB file
+                                    glb_path = os.path.join(self.output_dir, f"{job_id}.glb")
+                                    os.makedirs(self.output_dir, exist_ok=True)
+                                    with open(glb_path, "wb") as f:
+                                        f.write(_r.content)
+                                    export_data = {
+                                        "output_path": glb_path,
+                                        "format": "glb",
+                                        "job_id": job_id,
+                                        "fallback": "direct_generate",
+                                    }
+                                    logger.info("Direct blender generate succeeded: %s (%d bytes)", glb_path, len(_r.content))
+                                else:
+                                    # JSON response with output_path
+                                    _json = _r.json()
+                                    if _json.get("output_path"):
+                                        export_data = _json
+                                        logger.info("Direct blender generate returned JSON: %s", _json.get("output_path"))
+                except Exception as _e:
+                    logger.warning("Direct blender generate fallback failed: %s", _e)
+
             # ═══ Post-pipeline: Compliance, Financial, Presentation, Drawings ═══
             post_agents = [a for a in agent_sequence if a in ("compliance", "financial", "presentation")]
             post_results = {}
