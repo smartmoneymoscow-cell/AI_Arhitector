@@ -1307,7 +1307,7 @@ async function sendMessage() {
         prompt: text,
         quality: 'standard',
         pipeline_profile: profile,
-        skip_clarification: false,
+        skip_clarification: true,
         export_formats: ['glb']
       })
     });
@@ -1516,6 +1516,26 @@ function _handleOrchestratorResult(orchResult, prompt) {
     addMessage('assistant', '<img src="'+imgUrl+'" style="max-width:100%;border-radius:12px;margin:8px 0" />');
     addMessage('assistant', currentLang==='en'?'✅ Render complete!':'✅ Рендер готов!');
     return;
+  }
+
+  addMessage('assistant', currentLang==='en'?'⚡ Trying direct 3D generation...':'⚡ Пробую прямую генерацию 3D...');
+  try {
+    const genR = await fetch(API_BASE + '/api/v1/generate', {
+      method: 'POST',
+      headers: _apiHeaders(),
+      body: JSON.stringify({prompt: prompt, quality: 'standard'})
+    });
+    if(genR.ok) {
+      const blob = await genR.blob();
+      if(blob.size > 1000) {
+        const glbUrl = URL.createObjectURL(blob);
+        loadGLBModel(glbUrl);
+        addMessage('assistant', currentLang==='en'?'✅ 3D model generated!':'✅ 3D модель сгенерирована!');
+        return;
+      }
+    }
+  } catch(fallbackErr) {
+    console.warn('Direct blender fallback failed:', fallbackErr);
   }
 
   addMessage('assistant', currentLang==='en'?'⚠️ Generation completed but no model produced':'⚠️ Генерация завершена, но модель не создана');
