@@ -1,5 +1,31 @@
 # CHANGELOG — AI_Arhitector
 
+## v13.2.0 — Full LLM Cascade for All Endpoints (2026-08-21)
+
+### Что сделано
+- **Chat endpoint полный каскад** — `/api/v1/chat/completions` теперь использует Groq → Gemini → DeepSeek → OpenRouter → Ollama
+- Раньше chat endpoint использовал ТОЛЬКО OpenRouter → при rate limit падал с 429
+- Теперь chat endpoint аналогичен parse endpoint — полный cascade
+- Health endpoint показывает статус всех 4 провайдеров
+- Keys/status endpoint показывает Groq и DeepSeek ключи
+- docker-compose: добавлены GROQ_API_KEY, GROQ_FALLBACK_KEYS
+- .env.example: добавлены секции Groq и DeepSeek
+
+### Файлы обновлены
+- `llm-service/app.py` — chat_completions() переписан с полным каскадом
+- `docker-compose.yml` — Groq env vars для llm-service
+- `.env.example` — Groq и DeepSeek секции
+- `README.md` — v13.2.0, обновлена документация каскада
+
+### Каскад (приоритет)
+1. Groq (free tier, qwen3.6-27b, ~300 tok/s) — ПЕРВЫЙ
+2. Google Gemini (8 ключей, round-robin)
+3. DeepSeek (прямой API)
+4. OpenRouter (8 ключей, auto-discovery бесплатных моделей)
+5. Ollama (локальный)
+
+---
+
 ## v12.1.0 — Infrastructure Recovery + URL Migration (2026-08-19)
 
 ### Что сделано

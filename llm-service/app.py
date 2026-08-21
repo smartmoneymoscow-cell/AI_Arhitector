@@ -134,78 +134,210 @@ async def _on_shutdown():
 @app.get("/health")
 async def health():
     # Fast health check — don't wait for Redis
+    groq_configured = bool(os.environ.get("GROQ_API_KEY", ""))
     gemini_configured = bool(os.environ.get("GOOGLE_API_KEY", ""))
+    deepseek_configured = bool(os.environ.get("DEEPSEEK_API_KEY", ""))
+    openrouter_configured = bool(os.environ.get("OPENROUTER_API_KEY", ""))
     return HealthResponse(
         status="ok",
         service="llm-service",
-        version="13.1.0",
+        version="13.2.0",
         model=settings.LLM_MODEL,
-        services={"gemini": "configured" if gemini_configured else "not_configured"},
+        services={
+            "groq": "configured" if groq_configured else "not_configured",
+            "gemini": "configured" if gemini_configured else "not_configured",
+            "deepseek": "configured" if deepseek_configured else "not_configured",
+            "openrouter": "configured" if openrouter_configured else "not_configured",
+        },
     )
 
 
 @app.post("/api/v1/chat/completions", response_model=ChatResponse)
 async def chat_completions(req: ChatRequest):
-    """Chat proxy to OpenRouter — перебирает ВСЕ аккаунты (primary + fallback),
-    автоматически пропуская те, что сейчас 'остывают' после 429/402,
-    и переключаясь на следующий при исчерпании текущего."""
-    all_keys = _get_api_keys()
-    if not all_keys:
-        raise HTTPException(503, "No OPENROUTER_API_KEY configured")
+    """Chat proxy — полный LLM каскад: Groq → Gemini → DeepSeek → OpenRouter.
+    Автоматически пропускает недоступные провайдеры."""
+    import shared.parser as _parser
 
-    keys = _filter_alive(all_keys)
-
-    payload = {
-        "model": req.model or settings.LLM_MODEL,
-        "messages": [m.model_dump() for m in req.messages],
-        "max_tokens": req.max_tokens,
-        "temperature": req.temperature,
-    }
-
+    messages = [m.model_dump() for m in req.messages]
+    max_tokens = req.max_tokens or 2048
+    temperature = req.temperature or 0.3
     last_error: tuple[int, str] | None = None
 
-    # Round-robin: используем shared counter из parser
-    import shared.parser as _parser
-    for attempt in range(len(keys)):
-        key = keys[_parser._OR_KEY_IDX % len(keys)]
-        _parser._OR_KEY_IDX = (_parser._OR_KEY_IDX + 1) % len(keys)
-        headers = {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": f"Bearer {key}",
-            "HTTP-Referer": "https://archai.app",
-            "X-Title": "Architect LLM",
+    # ═══ 0. Groq — ПЕРВЫЙ! free tier, fast inference ═══
+    groq_keys = _parser._get_groq_keys()
+    if groq_keys:
+        for key in groq_keys:
+            try:
+                async with httpx.AsyncClient() as client:
+                    r = await client.post(
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": "qwen/qwen3.6-27b",
+                            "messages": messages,
+                            "max_tokens": max_tokens,
+                            "temperature": temperature,
+                        },
+                        timeout=45.0,
+                    )
+                if r.status_code == 200:
+                    logger.info("chat: Groq responded successfully")
+                    return r.json()
+                if r.status_code == 429:
+                    logger.warning("chat: Groq rate limited, trying next")
+                    _parser._mark_key_dead(key, _parser._COOLDOWN_RATE_LIMIT, "groq_chat_rpm")
+                    continue
+                logger.warning("chat: Groq HTTP %d: %s", r.status_code, r.text[:200])
+            except httpx.TimeoutException:
+                logger.warning("chat: Groq timeout")
+            except Exception as e:
+                logger.warning("chat: Groq error: %s", e)
+
+    # ═══ 1. Google Gemini — БЕСПЛАТНО ═══
+    gemini_keys = _parser._get_google_keys()
+    if gemini_keys:
+        for key in _parser._filter_alive(gemini_keys):
+            try:
+                gemini_messages = []
+                for m in messages:
+                    role = "user" if m["role"] == "user" else "model"
+                    gemini_messages.append({"role": role, "parts": [{"text": m["content"]}]})
+                async with httpx.AsyncClient() as client:
+                    r = await client.post(
+                        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent",
+                        headers={"Content-Type": "application/json"},
+                        params={"key": key},
+                        json={"contents": gemini_messages, "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature}},
+                        timeout=30.0,
+                    )
+                if r.status_code == 200:
+                    data = r.json()
+                    text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                    logger.info("chat: Gemini responded successfully")
+                    return {
+                        "id": "gemini-chat",
+                        "object": "chat.completion",
+                        "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+                    }
+                if r.status_code == 429:
+                    logger.warning("chat: Gemini rate limited, trying next")
+                    _parser._mark_key_dead(key, _parser._COOLDOWN_RATE_LIMIT, "gemini_chat_rpm")
+                    continue
+                logger.warning("chat: Gemini HTTP %d: %s", r.status_code, r.text[:200])
+            except httpx.TimeoutException:
+                logger.warning("chat: Gemini timeout")
+            except Exception as e:
+                logger.warning("chat: Gemini error: %s", e)
+
+    # ═══ 2. DeepSeek — direct API ═══
+    deepseek_keys = _parser._get_deepseek_keys()
+    if deepseek_keys:
+        for key in deepseek_keys:
+            try:
+                async with httpx.AsyncClient() as client:
+                    r = await client.post(
+                        "https://api.deepseek.com/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": "deepseek-chat",
+                            "messages": messages,
+                            "max_tokens": max_tokens,
+                            "temperature": temperature,
+                        },
+                        timeout=30.0,
+                    )
+                if r.status_code == 200:
+                    logger.info("chat: DeepSeek responded successfully")
+                    return r.json()
+                if r.status_code == 429:
+                    logger.warning("chat: DeepSeek rate limited")
+                    continue
+                logger.warning("chat: DeepSeek HTTP %d: %s", r.status_code, r.text[:200])
+            except httpx.TimeoutException:
+                logger.warning("chat: DeepSeek timeout")
+            except Exception as e:
+                logger.warning("chat: DeepSeek error: %s", e)
+
+    # ═══ 3. OpenRouter — все ключи с round-robin ═══
+    all_keys = _get_api_keys()
+    if all_keys:
+        keys = _filter_alive(all_keys)
+        payload = {
+            "model": req.model or settings.LLM_MODEL,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
         }
+        for attempt in range(len(keys)):
+            key = keys[_parser._OR_KEY_IDX % len(keys)]
+            _parser._OR_KEY_IDX = (_parser._OR_KEY_IDX + 1) % len(keys)
+            headers = {
+                "Content-Type": "application/json; charset=utf-8",
+                "Authorization": f"Bearer {key}",
+                "HTTP-Referer": "https://archai.app",
+                "X-Title": "Architect LLM",
+            }
+            try:
+                async with httpx.AsyncClient() as client:
+                    r = await client.post(
+                        f"{settings.OPENROUTER_BASE}/chat/completions",
+                        headers=headers,
+                        json=payload,
+                        timeout=60.0,
+                    )
+            except httpx.TimeoutException:
+                last_error = (504, "OpenRouter timeout")
+                continue
+            except Exception as e:
+                last_error = (502, str(e))
+                continue
+
+            if r.status_code == 200:
+                logger.info("chat: OpenRouter responded successfully")
+                return r.json()
+
+            if r.status_code in (429, 402):
+                if _looks_like_quota_exhausted(r.status_code, r.text):
+                    _mark_key_dead(key, _COOLDOWN_QUOTA_EXHAUSTED, f"chat_http_{r.status_code}_quota")
+                else:
+                    _mark_key_dead(key, _COOLDOWN_RATE_LIMIT, f"chat_http_{r.status_code}_rate_limit")
+                logger.warning("chat: OpenRouter key %s exhausted", _mask_key(key))
+                last_error = (r.status_code, r.text)
+                continue
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+
+    # ═══ 4. Ollama — local last resort ═══
+    ollama_result = await _parser._call_ollama(" ")  # just check if available
+    if ollama_result:
         try:
+            import os as _os
+            ollama_url = _os.environ.get("OLLAMA_URL", "")
+            ollama_model = _os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
             async with httpx.AsyncClient() as client:
                 r = await client.post(
-                    f"{settings.OPENROUTER_BASE}/chat/completions",
-                    headers=headers,
-                    json=payload,
+                    f"{ollama_url}/api/chat",
+                    json={"model": ollama_model, "messages": messages, "stream": False},
                     timeout=60.0,
                 )
-        except httpx.TimeoutException:
-            last_error = (504, "OpenRouter timeout")
-            continue
+            if r.status_code == 200:
+                data = r.json()
+                text = data.get("message", {}).get("content", "")
+                logger.info("chat: Ollama responded successfully")
+                return {
+                    "id": "ollama-chat",
+                    "object": "chat.completion",
+                    "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+                }
         except Exception as e:
-            last_error = (502, str(e))
-            continue
+            logger.warning("chat: Ollama error: %s", e)
 
-        if r.status_code == 200:
-            return r.json()
-
-        if r.status_code in (429, 402):
-            if _looks_like_quota_exhausted(r.status_code, r.text):
-                _mark_key_dead(key, _COOLDOWN_QUOTA_EXHAUSTED, f"chat_http_{r.status_code}_quota")
-            else:
-                _mark_key_dead(key, _COOLDOWN_RATE_LIMIT, f"chat_http_{r.status_code}_rate_limit")
-            logger.warning("chat_completions: key %s exhausted, switching account", _mask_key(key))
-            last_error = (r.status_code, r.text)
-            continue
-
-        # Другая ошибка (400/500 и т.п.) — не проблема ключа, дальше пробовать бессмысленно
-        raise HTTPException(status_code=r.status_code, detail=r.text)
-
-    status, detail = last_error or (503, "No live OpenRouter keys")
+    status, detail = last_error or (503, "All LLM providers failed (Groq, Gemini, DeepSeek, OpenRouter, Ollama)")
     raise HTTPException(status_code=status if status in (429, 402) else 503, detail=detail)
 
 
@@ -242,10 +374,12 @@ async def parse_prompt_endpoint(req: ParseRequest):
 @app.get("/api/v1/keys/status")
 async def keys_status():
     """Сколько аккаунтов настроено / живо прямо сейчас (для мониторинга)."""
-    from shared.parser import _get_google_keys, _is_key_cooling
+    from shared.parser import _get_google_keys, _get_groq_keys, _get_deepseek_keys, _is_key_cooling
 
     or_keys = _get_api_keys()
     gm_keys = _get_google_keys()
+    gr_keys = _get_groq_keys()
+    ds_keys = _get_deepseek_keys()
 
     def _status(keys):
         return [
@@ -255,10 +389,14 @@ async def keys_status():
 
     or_status = _status(or_keys)
     gm_status = _status(gm_keys)
+    gr_status = _status(gr_keys)
+    ds_status = _status(ds_keys)
     return {
-        "openrouter": {"total": len(or_keys), "alive": sum(s["alive"] for s in or_status), "keys": or_status},
+        "groq": {"total": len(gr_keys), "alive": sum(s["alive"] for s in gr_status), "keys": gr_status},
         "gemini": {"total": len(gm_keys), "alive": sum(s["alive"] for s in gm_status), "keys": gm_status},
-        "total_accounts": len(or_keys) + len(gm_keys),
+        "deepseek": {"total": len(ds_keys), "alive": sum(s["alive"] for s in ds_status), "keys": ds_status},
+        "openrouter": {"total": len(or_keys), "alive": sum(s["alive"] for s in or_status), "keys": or_status},
+        "total_accounts": len(gr_keys) + len(gm_keys) + len(ds_keys) + len(or_keys),
     }
 
 

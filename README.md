@@ -1,10 +1,10 @@
-# Architect v13.1.0 — AI Architecture Generator
+# Architect v13.2.0 — AI Architecture Generator
 
 Генерация 3D-моделей зданий и интерьеров по текстовому описанию на русском языке.
 
 **Blender рендеринг через Kaggle GPU (T4/P100) + Render fallback.**
 
-**LLM каскад: Groq → Gemini → DeepSeek → OpenRouter (Groq первый для скорости).**
+**LLM каскад: Groq → Gemini → DeepSeek → OpenRouter → Ollama (полный cascade для ВСЕХ эндпоинтов).**
 
 ## Быстрый старт
 
@@ -56,21 +56,26 @@ docker-compose up -d
 
 **НЕ живой** (старый деплой, не трогать): `ai-arch-llmproxy.onrender.com` — 1 OR ключ, 0 Gemini
 
-### LLM-цепочка (бесплатно)
+### LLM-цепочка (полный каскад)
 
 ```
-1. Groq (free tier, быстрый inference, qwen3.6-27b)
-   ↓ если все ключи исчерпаны
-2. Google Gemini API (8 ключей, round-robin)
+1. Groq (free tier, БЫСТРЫЙ, qwen3.6-27b, ~300 tok/s)
+   ↓ если все ключи исчерпаны или не настроены
+2. Google Gemini API (8 ключей, round-robin, gemini-2.5-flash-lite)
    ↓ если все 8 исчерпаны
-3. DeepSeek (прямой API)
+3. DeepSeek (прямой API, deepseek-chat)
    ↓ если все ключи исчерпаны
 4. OpenRouter Free Models (auto-discovery, 15+ моделей)
    ↓ если все модели/ключи недоступны
 5. Ollama (локальный, если настроен)
    ↓ если не настроен
-6. Last resort: retry Groq + Gemini
+6. 503 All providers failed
 ```
+
+**Каскад работает для ВСЕХ эндпоинтов:**
+- `/api/v1/parse` — парсинг промтов
+- `/api/v1/chat/completions` — чат (ОБНОВЛЕНО v13.2!)
+- `/api/v1/orchestrator/execute` — оркестратор
 
 ### Key Rotation
 
@@ -104,6 +109,16 @@ docker-compose up -d
 
 20+ специализированных агентов: парсер, геометрия, текстуры, свет,
 конструктив, нормативы, рендер, качество, экспорт.
+
+## Что нового в v13.2.0
+
+- **Chat endpoint полный каскад** — `/api/v1/chat/completions` теперь использует Groq → Gemini → DeepSeek → OpenRouter → Ollama (раньше только OpenRouter)
+- **Groq первый в каскаде** — free tier, qwen3.6-27b, ~300 tok/s, самый быстрый
+- **DeepSeek прямой API** — fallback между Gemini и OpenRouter
+- **Health endpoint** — показывает статус всех 4 провайдеров (groq, gemini, deepseek, openrouter)
+- **Keys/status endpoint** — мониторинг всех провайдеров
+- **docker-compose** — добавлены GROQ_API_KEY, GROQ_FALLBACK_KEYS в llm-service
+- **.env.example** — добавлены секции Groq и DeepSeek
 
 ## Что нового в v11.5.0
 
