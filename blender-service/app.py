@@ -23,6 +23,16 @@ from shared.logging_config import setup_logging
 from shared.models import GenerateRequest, HealthResponse
 from shared.validation import DEFAULT_FURNITURE
 
+# ═══ TRIMESH FALLBACK (fast GLB without Blender) ═══
+try:
+    import trimesh
+    import numpy as np
+    HAS_TRIMESH = True
+except ImportError:
+    HAS_TRIMESH = False
+    logger.warning("trimesh not installed — fast GLB fallback unavailable")
+
+
 setup_logging("blender-service")
 logger = logging.getLogger("archai.blender")
 
@@ -315,17 +325,40 @@ bpy.ops.render.render(write_still=True)
 
 @app.post("/api/v1/generate")
 async def generate(req: GenerateRequest):
-    """Генерация: промт → LLM парсинг → Blender → GLB/PNG."""
+    """Генерация: промт → LLM парсинг → Blender (trimesh fallback) → GLB."""
     params = await _parse_via_llm_service(req.prompt)
     gen_type = _detect_gen_type(params)
-    quality = getattr(req, 'quality', '16k') or '16k'
+    quality = getattr(req, 'quality', 'fast') or 'fast'
 
+    # Try Blender first (for high quality)
+    if quality in ("16k", "4k", "high"):
+        try:
+            if gen_type == "interior":
+                return await _generate_interior(params, quality=quality)
+            elif gen_type == "landscape":
+                return await _generate_landscape(params, quality=quality)
+            else:
+                return await _generate_building(params, quality=quality)
+        except (HTTPException, Exception) as e:
+            logger.warning("Blender failed (%s), falling back to trimesh: %s", quality, e)
+
+    # Fast path: trimesh GLB generation (no Blender needed)
+    if HAS_TRIMESH:
+        try:
+            glb_path = _trimesh_generate(params, gen_type)
+            return FileResponse(glb_path, media_type="model/gltf-binary",
+                              filename=f"archai_{os.path.basename(glb_path)}")
+        except Exception as e:
+            logger.error("trimesh fallback failed: %s", e)
+            raise HTTPException(500, detail=f"Both Blender and trimesh failed: {e}")
+
+    # Last resort: try Blender with fast settings
     if gen_type == "interior":
-        return await _generate_interior(params, quality=quality)
+        return await _generate_interior(params, quality="fast")
     elif gen_type == "landscape":
-        return await _generate_landscape(params, quality=quality)
+        return await _generate_landscape(params, quality="fast")
     else:
-        return await _generate_building(params, quality=quality)
+        return await _generate_building(params, quality="fast")
 
 
 @app.post("/api/v1/generate/building")
@@ -413,6 +446,113 @@ async def render_16k(req: dict):
     except Exception as e:
         raise HTTPException(500, detail=f"16K render failed: {e}")
 
+
+
+def _trimesh_generate(params: dict, gen_type: str) -> str:
+    """Fast GLB generation using trimesh (no Blender needed). Returns output path."""
+    job_id = uuid.uuid4().hex[:8]
+    output_path = os.path.join(settings.OUTPUT_DIR, f"{job_id}.glb")
+    os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
+
+    def _box(extents, color, translation=None):
+        m = trimesh.creation.box(extents=extents)
+        if translation is not None:
+            m.apply_translation(translation)
+        m.visual.face_colors = np.tile(color, (len(m.faces), 1))
+        return m
+
+    colors = {
+        "brick": [166, 64, 38, 255], "wood": [140, 89, 51, 255],
+        "plaster": [230, 224, 217, 255], "concrete": [180, 180, 180, 255],
+        "stone": [128, 122, 115, 255], "metal": [179, 179, 179, 255],
+        "glass": [179, 217, 230, 180],
+    }
+    features = [str(f).lower() for f in params.get("features", [])]
+
+    if gen_type == "interior":
+        W = params.get("width_m", 5)
+        L = params.get("length_m", 6)
+        H = params.get("height_m", 2.8)
+        furniture = params.get("furniture", [])
+        wall_c = [242, 237, 230, 255]
+        meshes = [
+            _box([W, L, 0.1], [153, 128, 89, 255], [0, 0, -0.05]),
+            _box([W, L, 0.05], [255, 255, 255, 255], [0, 0, H]),
+            _box([W, 0.1, H], wall_c, [0, L/2, H/2]),
+            _box([W, 0.1, H], wall_c, [0, -L/2, H/2]),
+            _box([0.1, L, H], wall_c, [W/2, 0, H/2]),
+            _box([0.1, L, H], wall_c, [-W/2, 0, H/2]),
+        ]
+        defs = {
+            "sofa": ([2.5,1,0.7], [102,102,115,255], [0,-L/4,0.35]),
+            "bed": ([2,1.8,0.6], [102,102,115,255], [0,-L/4,0.3]),
+            "table": ([1.4,0.8,0.8], [140,89,51,255], [0,0,0.4]),
+            "desk": ([1.2,0.6,0.8], [140,89,51,255], [-W/3,L/3,0.4]),
+            "wardrobe": ([1.5,0.6,1.8], [140,89,51,255], [W/3,L/3,0.9]),
+            "bookshelf": ([1.2,0.35,1.8], [140,89,51,255], [W/3,0,0.9]),
+            "tv": ([1.2,0.05,0.7], [179,179,179,255], [0,L/2-0.15,1.2]),
+            "bathtub": ([1.8,0.8,0.6], [179,179,179,255], [-W/4,0,0.3]),
+            "sink": ([0.6,0.45,0.3], [179,179,179,255], [W/4,L/3,0.5]),
+            "toilet": ([0.4,0.6,0.5], [255,255,255,255], [W/3,-L/3,0.25]),
+            "fridge": ([0.7,0.7,1.8], [179,179,179,255], [W/3,-L/3,0.9]),
+            "stove": ([0.6,0.6,0.9], [179,179,179,255], [-W/3,-L/3,0.45]),
+            "chandelier": ([0.5,0.5,0.3], [179,179,179,255], [0,0,H-0.15]),
+            "fireplace": ([1.2,0.4,1.2], [100,80,60,255], [0,L/2-0.2,0.6]),
+        }
+        for item in furniture:
+            if item in defs:
+                ext, color, pos = defs[item]
+                meshes.append(_box(ext, color, pos))
+        if not meshes or len(meshes) < 7:
+            meshes.append(_box([2.5,1,0.7], [102,102,115,255], [0,-L/4,0.35]))
+        scene = trimesh.Scene(meshes)
+    elif gen_type == "landscape":
+        W = params.get("width_m", 20)
+        L = params.get("length_m", 20)
+        meshes = [
+            _box([W, L, 0.1], [80, 120, 60, 255], [0, 0, -0.05]),
+            _box([1.5, L*0.8, 0.02], [180, 170, 150, 255], [0, -L*0.1, 0.01]),
+        ]
+        for tx in [-W/3, W/3]:
+            for ty in [-L/3, L/3]:
+                meshes.append(_box([0.3,0.3,2], [100,70,40,255], [tx,ty,1]))
+                meshes.append(_box([2,2,2.5], [60,100,40,255], [tx,ty,3.25]))
+        scene = trimesh.Scene(meshes)
+    else:
+        W = params.get("width_m", 10)
+        L = params.get("length_m", 12)
+        floors = params.get("floors", 2)
+        fH = 2.8
+        H = floors * fH
+        material = params.get("material", "plaster")
+        roof_type = params.get("roof_type", "flat")
+        wall_c = colors.get(material, colors["plaster"])
+        glass_c = colors["glass"]
+        meshes = [_box([W, L, H], wall_c, [0, 0, H/2])]
+        for i in range(floors + 1):
+            meshes.append(_box([W+0.1, L+0.1, 0.15], [153,153,153,255], [0, 0, i*fH - H/2]))
+        has_panoramic = any("панорам" in f or "panoram" in f for f in features)
+        win_w = 1.8 if has_panoramic else 1.2
+        win_h = 1.8 if has_panoramic else 1.4
+        spacing = 2.0 if has_panoramic else 2.5
+        for fi in range(floors):
+            z = (fi + 0.5) * fH
+            for wx in np.arange(-W/3, W/3+0.1, spacing):
+                for sm in [1, -1]:
+                    meshes.append(_box([win_w, 0.05, win_h], glass_c, [wx, sm*(L/2+0.01), z]))
+        if any("балкон" in f or "balcon" in f for f in features):
+            meshes.append(_box([3, 1.2, 0.1], [153,153,153,255], [0, L/2+0.6, H-fH+0.05]))
+        roof_c = [77, 38, 20, 255]
+        if roof_type in ("gable", "gabled"):
+            meshes.append(_box([W+0.5, L+0.5, 1.5], roof_c, [0, 0, H+0.75]))
+        else:
+            meshes.append(_box([W+0.3, L+0.3, 0.3], roof_c, [0, 0, H+0.15]))
+        meshes.append(_box([30, 30, 0.02], [38,46,31,255], [0, 0, -0.01]))
+        scene = trimesh.Scene(meshes)
+
+    scene.export(output_path, file_type="glb")
+    logger.info("trimesh generated %s: %s (%d bytes)", gen_type, job_id, os.path.getsize(output_path))
+    return output_path
 
 # ═══════════════════════════════════════════════════════════════
 # HELPERS
