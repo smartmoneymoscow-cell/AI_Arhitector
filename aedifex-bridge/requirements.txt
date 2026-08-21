@@ -4,4 +4,4 @@ uvicorn>=0.52.0
 httpx>=0.28.1
 pydantic>=2.13.4
 python-multipart>=0.0.32
-websockets>=17.0
+websockets>=17.0.1
