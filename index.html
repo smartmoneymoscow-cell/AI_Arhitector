@@ -1474,7 +1474,7 @@ async function _handleOrchestratorResult(orchResult, prompt) {
     return;
   }
 
-  // ═══ FALLBACK: Direct blender service generation ═══
+  // ═══ FALLBACK 1: Direct blender service generation ═══
   addMessage('assistant', currentLang==='en'?'⚡ Trying direct 3D generation...':'⚡ Пробую прямую генерацию 3D...');
   try {
     const genR = await fetch(API_BASE + '/api/v1/generate', {
@@ -1483,19 +1483,60 @@ async function _handleOrchestratorResult(orchResult, prompt) {
       body: JSON.stringify({prompt: prompt, quality: 'standard'})
     });
     if(genR.ok) {
-      const blob = await genR.blob();
-      if(blob.size > 1000) {
-        const glbUrl = URL.createObjectURL(blob);
-        loadGLBModel(glbUrl);
-        addMessage('assistant', currentLang==='en'?'✅ 3D model generated!':'✅ 3D модель сгенерирована!');
-        return;
+      const contentType = genR.headers.get('content-type') || '';
+      if(contentType.includes('model/gltf-binary') || contentType.includes('application/octet-stream')) {
+        const blob = await genR.blob();
+        if(blob.size > 1000) {
+          const glbUrl = URL.createObjectURL(blob);
+          loadGLBModel(glbUrl);
+          addMessage('assistant', currentLang==='en'?'✅ 3D model generated!':'✅ 3D модель сгенерирована!');
+          return;
+        }
+      } else {
+        // JSON response with file path
+        const genData = await genR.json();
+        if(genData.output_path) {
+          const fileUrl = API_BASE + '/api/v1/files/' + genData.output_path;
+          loadGLBModel(fileUrl);
+          addMessage('assistant', currentLang==='en'?'✅ 3D model generated!':'✅ 3D модель сгенерирована!');
+          return;
+        }
       }
     }
   } catch(fallbackErr) {
     console.warn('Direct blender fallback failed:', fallbackErr);
   }
 
-  addMessage('assistant', currentLang==='en'?'⚠️ Generation completed but no model produced':'⚠️ Генерация завершена, но модель не создана');
+  // ═══ FALLBACK 2: Try parse + generate separately ═══
+  try {
+    addMessage('assistant', currentLang==='en'?'⚡ Trying parse + generate...':'⚡ Пробую парсинг + генерацию...');
+    const parseR = await fetch(API_BASE + '/api/v1/parse', {
+      method: 'POST',
+      headers: _apiHeaders(),
+      body: JSON.stringify({text: prompt})
+    });
+    if(parseR.ok) {
+      const parsed = await parseR.json();
+      const genR2 = await fetch(API_BASE + '/api/v1/generate', {
+        method: 'POST',
+        headers: _apiHeaders(),
+        body: JSON.stringify({prompt: prompt, quality: 'standard'})
+      });
+      if(genR2.ok) {
+        const blob = await genR2.blob();
+        if(blob.size > 1000) {
+          const glbUrl = URL.createObjectURL(blob);
+          loadGLBModel(glbUrl);
+          addMessage('assistant', currentLang==='en'?'✅ 3D model generated!':'✅ 3D модель сгенерирована!');
+          return;
+        }
+      }
+    }
+  } catch(fallback2Err) {
+    console.warn('Parse+generate fallback failed:', fallback2Err);
+  }
+
+  addMessage('assistant', currentLang==='en'?'⚠️ Generation completed but no model produced. Backend services may be sleeping (Render free tier). Try again in 30 seconds.':'⚠️ Генерация завершена, но модель не создана. Сервисы могут быть на паузе (Render free tier). Попробуйте через 30 секунд.');
 }
 // ═══════════════════ HELPER: Get correct label ═══════════════════
 function getLabel(parsed) {

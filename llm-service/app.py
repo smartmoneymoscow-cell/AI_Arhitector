@@ -138,7 +138,7 @@ async def health():
     return HealthResponse(
         status="ok",
         service="llm-service",
-        version="8.0.0",
+        version="13.1.0",
         model=settings.LLM_MODEL,
         services={"gemini": "configured" if gemini_configured else "not_configured"},
     )

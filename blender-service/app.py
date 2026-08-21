@@ -118,7 +118,7 @@ def _detect_gen_type(params: dict) -> str:
 
 @app.get("/health")
 async def health():
-    return HealthResponse(status="ok", service="blender-service", version="6.0.0")
+    return HealthResponse(status="ok", service="blender-service", version="13.1.0")
 
 
 # ═══════════════════════════════════════════════════════════════

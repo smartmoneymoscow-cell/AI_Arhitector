@@ -38,7 +38,7 @@ logger = logging.getLogger("archai.parser")
 # SYSTEM PROMPT — FLEXIBLE, no hardcoded values
 # ═══════════════════════════════════════════════════════════════
 
-SYSTEM_PROMPT_VERSION = "v10.0"  # ← bump to invalidate all caches
+SYSTEM_PROMPT_VERSION = "v13.1"  # ← bump to invalidate all caches
 
 SYSTEM_PROMPT = """Ты — парсер архитектурных описаний для 3D-генератора.
 Отвечай ТОЛЬКО валидным JSON. Никаких рассуждений, пояснений, markdown.
@@ -1311,42 +1311,22 @@ async def parse_prompt_async(text: str) -> dict:
         _l1_set(text, cached)
         return cached
 
-    # ═══ 0. Google Gemini — БЕСПЛАТНО (пробуем ВСЕ живые ключи) ═══
+    # ═══ 0. Groq — ПЕРВЫЙ! free tier, fast inference ═══
     google_keys_all = _get_google_keys()
     or_keys_all = _get_api_keys()
-    total_accounts = len(google_keys_all) + len(or_keys_all)
+    groq_keys_all = _get_groq_keys()
+    total_accounts = len(google_keys_all) + len(or_keys_all) + len(groq_keys_all)
     logger.info(
-        "Parse: key pool = %d Gemini + %d OpenRouter = %d accounts total (%d Gemini alive, %d OR alive)",
-        len(google_keys_all), len(or_keys_all), total_accounts,
-        len(_filter_alive(google_keys_all)), len(_filter_alive(or_keys_all)),
+        "Parse: key pool = %d Groq + %d Gemini + %d OpenRouter = %d accounts total",
+        len(groq_keys_all), len(google_keys_all), len(or_keys_all), total_accounts,
     )
-    gemini_result = await _call_gemini(text)
-    if gemini_result:
-        validated = _validate_and_fix(gemini_result, text)
-        if isinstance(validated, dict):
-            _l1_set(text, validated)
-            _l2_set(text, validated)
-            logger.info("Gemini parsed successfully: %s", validated.get("building_type"))
-            return validated
-
-    # ═══ 0.5. DeepSeek — direct API (between Gemini and OpenRouter) ═══
-    deepseek_result = await _call_deepseek(text)
-    if deepseek_result:
-        validated = _validate_and_fix(deepseek_result, text)
-        if isinstance(validated, dict):
-            _l1_set(text, validated)
-            _l2_set(text, validated)
-            logger.info("DeepSeek parsed: %s", validated.get("building_type"))
-            return validated
-
-    # ═══ 0.6. Groq — free tier, fast inference (between DeepSeek and OpenRouter) ═══
     groq_result = await _call_groq(text)
     if groq_result:
         validated = _validate_and_fix(groq_result, text)
         if isinstance(validated, dict):
             _l1_set(text, validated)
             _l2_set(text, validated)
-            logger.info("Groq parsed: %s", validated.get("building_type"))
+            logger.info("Groq parsed successfully: %s", validated.get("building_type"))
             return validated
         # Level 2: Retry Groq with fix prompt if validation failed
         if isinstance(validated, str):
@@ -1359,6 +1339,26 @@ async def parse_prompt_async(text: str) -> dict:
                     _l2_set(text, fix_validated)
                     logger.info("Groq fix parsed: %s", fix_validated.get("building_type"))
                     return fix_validated
+
+    # ═══ 1. Google Gemini — БЕСПЛАТНО (пробуем ВСЕ живые ключи) ═══
+    gemini_result = await _call_gemini(text)
+    if gemini_result:
+        validated = _validate_and_fix(gemini_result, text)
+        if isinstance(validated, dict):
+            _l1_set(text, validated)
+            _l2_set(text, validated)
+            logger.info("Gemini parsed successfully: %s", validated.get("building_type"))
+            return validated
+
+    # ═══ 2. DeepSeek — direct API ═══
+    deepseek_result = await _call_deepseek(text)
+    if deepseek_result:
+        validated = _validate_and_fix(deepseek_result, text)
+        if isinstance(validated, dict):
+            _l1_set(text, validated)
+            _l2_set(text, validated)
+            logger.info("DeepSeek parsed: %s", validated.get("building_type"))
+            return validated
 
     # L3: Get all available keys, skip ones currently cooling down
     api_keys = _filter_alive(_get_api_keys())
@@ -1459,8 +1459,21 @@ async def parse_prompt_async(text: str) -> dict:
             logger.info("Ollama fallback succeeded: %s", validated.get("building_type"))
             return validated
 
-    # ═══ L5: LAST RESORT — retry Gemini & Groq (transient failures may have cleared) ═══
-    logger.warning("Ollama unavailable. Last-resort retry: Gemini + Groq...")
+    # ═══ L5: LAST RESORT — retry Groq first, then Gemini ═══
+    logger.warning("Ollama unavailable. Last-resort retry: Groq + Gemini...")
+
+    # Retry Groq first (fastest)
+    try:
+        groq_retry = await _call_groq(text)
+        if groq_retry:
+            validated = _validate_and_fix(groq_retry, text)
+            if isinstance(validated, dict):
+                _l1_set(text, validated)
+                _l2_set(text, validated)
+                logger.info("Groq LAST-RESORT retry succeeded: %s", validated.get("building_type"))
+                return validated
+    except Exception as e:
+        logger.error("Groq last-resort retry error: %s", e)
 
     # Retry Gemini with fresh attempt
     try:
@@ -1474,19 +1487,6 @@ async def parse_prompt_async(text: str) -> dict:
                 return validated
     except Exception as e:
         logger.error("Gemini last-resort retry error: %s", e)
-
-    # Retry Groq with fresh attempt
-    try:
-        groq_retry = await _call_groq(text)
-        if groq_retry:
-            validated = _validate_and_fix(groq_retry, text)
-            if isinstance(validated, dict):
-                _l1_set(text, validated)
-                _l2_set(text, validated)
-                logger.info("Groq LAST-RESORT retry succeeded: %s", validated.get("building_type"))
-                return validated
-    except Exception as e:
-        logger.error("Groq last-resort retry error: %s", e)
 
     google_count = len(_get_google_keys())
     or_count = len(api_keys)

@@ -1,6 +1,6 @@
 # ════════════════════════════════════════════════════════════════
-# Render.com deployment — Architect v13.0
-# Full LLM cascade: Gemini → DeepSeek → Groq → OpenRouter → Cohere
+# Render.com deployment — Architect v13.1
+# Full LLM cascade: Groq → Gemini → DeepSeek → OpenRouter → Cohere
 # ════════════════════════════════════════════════════════════════
 
 services:
@@ -17,13 +17,13 @@ services:
       - key: LLM_SERVICE_URL
         value: https://architect-llm-s5q7.onrender.com
       - key: BLENDER_SERVICE_URL
-        value: ""
+        value: https://ai-arch-blender3d.onrender.com
       - key: AGENT_POOL_URL
         value: ""
       - key: KAGGLE_RENDERER_URL
         value: ""
       - key: KAGGLE_POLLING_ENABLED
-        value: "false"
+        value: "true"
       - key: REDIS_URL
         value: ""
       - key: FRONTEND_DIR

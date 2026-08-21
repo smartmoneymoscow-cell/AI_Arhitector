@@ -1,8 +1,10 @@
-# Architect v12.0.0 — AI Architecture Generator
+# Architect v13.1.0 — AI Architecture Generator
 
 Генерация 3D-моделей зданий и интерьеров по текстовому описанию на русском языке.
 
-**Blender рендеринг работает ТОЛЬКО через Kaggle GPU (T4/P100).**
+**Blender рендеринг через Kaggle GPU (T4/P100) + Render fallback.**
+
+**LLM каскад: Groq → Gemini → DeepSeek → OpenRouter (Groq первый для скорости).**
 
 ## Быстрый старт
 
@@ -57,21 +59,22 @@ docker-compose up -d
 ### LLM-цепочка (бесплатно)
 
 ```
-1. Google Gemini API (8 ключей, round-robin)
+1. Groq (free tier, быстрый inference, qwen3.6-27b)
+   ↓ если все ключи исчерпаны
+2. Google Gemini API (8 ключей, round-robin)
    ↓ если все 8 исчерпаны
-2. OpenRouter Free Models (3 ключа, round-robin)
-   ├── auto-discovery каждый час
-   ├── 8+ бесплатных моделей в каскаде
-   └── при 404 → invalidate discovery + следующая модель
+3. DeepSeek (прямой API)
+   ↓ если все ключи исчерпаны
+4. OpenRouter Free Models (auto-discovery, 15+ моделей)
    ↓ если все модели/ключи недоступны
-3. Ollama (локальный, если настроен)
+5. Ollama (локальный, если настроен)
    ↓ если не настроен
-4. Regex fallback (крайний случай)
+6. Last resort: retry Groq + Gemini
 ```
 
 ### Key Rotation
 
-- Все ключи Gemini и OpenRouter равноправны (нет "основных" и "фолбэков")
+- Все ключи Groq, Gemini, DeepSeek и OpenRouter равноправны
 - При 429 (RPM) → ключ помечается на 60 сек, переход к следующему
 - При 402/quota → ключ помечается на 24 часа
 - Cooldown дублируется в Redis — переживает рестарт контейнера
