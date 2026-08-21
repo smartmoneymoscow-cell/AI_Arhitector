@@ -1463,7 +1463,7 @@ async function _resumeOrchestrator() {
 }
 
 // ═══════════════════ HANDLE ORCHESTRATOR RESULT ═══════════════════
-function _handleOrchestratorResult(orchResult, prompt) {
+async function _handleOrchestratorResult(orchResult, prompt) {
   // Show decomposition if available
   if(orchResult.steps && orchResult.steps.length) {
     const decompHtml = '<div class="decomp-tree"><div class="decomp-title">📋 '+(currentLang==='en'?'Pipeline steps':'Этапы пайплайна')+'</div>'+orchResult.steps.map((s,i)=>'<div class="decomp-item"><div class="di-num">'+(i+1)+'</div><div class="di-line">'+esc(s.name)+'</div><div class="di-service">'+(s.status==='done'?'✅':s.status==='failed'?'❌':'⏭')+'</div></div>').join('')+'</div>';
