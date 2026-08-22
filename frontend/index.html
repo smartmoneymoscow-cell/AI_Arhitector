@@ -610,6 +610,20 @@ html,body{background:var(--bg);color:var(--txt)}
             <button class="lang-pill" data-lang="en" onclick="setLang('en')">EN</button>
           </div>
         </div>
+
+        <!-- Backend URL (v13.4.0) -->
+        <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:6px">
+          <div class="setting-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            <span>Backend URL</span>
+          </div>
+          <div style="display:flex;gap:6px">
+            <input id="backendUrlInput" type="text" placeholder="https://architect-gateway-3guo.onrender.com"
+              style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid var(--bdr);background:var(--bg3);color:var(--txt);font-size:11px;font-family:inherit;outline:none"
+              value="">
+            <button onclick="saveBackendUrl()" style="padding:6px 12px;border-radius:8px;border:none;background:var(--acc);color:#fff;font-size:11px;font-weight:600;cursor:pointer">OK</button>
+          </div>
+        </div>
       </div>
     </button>
   </div>
@@ -617,6 +631,7 @@ html,body{background:var(--bg);color:var(--txt)}
   <div class="logo-center">
     <div class="logo-mark">A</div>
     <div class="logo-text">Architect<span>.ai</span></div>
+    <div id="backendStatus" style="width:8px;height:8px;border-radius:50%;background:#71717a;margin-left:4px;transition:background .3s" title="Backend status"></div>
   </div>
 
   <div class="top-actions">
@@ -926,6 +941,29 @@ function setTheme(theme) {
   });
 }
 
+// v13.4.0: Backend URL configuration
+function saveBackendUrl() {
+  const input = document.getElementById('backendUrlInput');
+  const url = (input.value || '').trim().replace(/\/+$/,'');
+  if (url) {
+    localStorage.setItem('archai_backend_url', url);
+  } else {
+    localStorage.removeItem('archai_backend_url');
+  }
+  // Re-check backend
+  _backendOk = null;
+  checkBackend().then(() => {
+    addMessage('assistant', _backendOk
+      ? '✅ Backend: ' + (_activeBackend || url)
+      : '❌ Backend unavailable');
+  });
+}
+// Init backend URL input on dropdown open
+function initBackendUrlInput() {
+  const input = document.getElementById('backendUrlInput');
+  if (input) input.value = localStorage.getItem('archai_backend_url') || '';
+}
+
 // Init theme on load
 document.documentElement.setAttribute('data-theme', currentTheme);
 
@@ -934,7 +972,7 @@ let accountOpen = false;
 function toggleAccount() {
   accountOpen = !accountOpen;
   document.getElementById('accountDropdown').classList.toggle('open', accountOpen);
-  if (accountOpen) closeDownload();
+  if (accountOpen) { closeDownload(); initBackendUrlInput(); }
   // Sync theme/lang pills on open
   if (accountOpen) {
     document.querySelectorAll('.theme-pill').forEach(p => p.classList.toggle('active', p.dataset.themeVal === currentTheme));
@@ -1021,7 +1059,7 @@ async function analyzeUploadedFile(file) {
   showTyping();
   try {
     _ensureApiKey();
-    const r = await fetch(API_BASE + endpoint, {
+    const r = await fetch((_activeBackend||API_BASE) + endpoint, {
       method: 'POST',
       headers: _apiHeaders(),
       body: formData,
@@ -1121,10 +1159,23 @@ const API_BASE = (()=>{
   const stored = localStorage.getItem('archai_backend_url');
   if(stored) return stored.replace(/\/+$/,'');
   const origin = window.location.origin;
-  if(origin.includes('github.io') || origin.includes('githubusercontent.com'))
+  // Auto-detect: if served from same host as gateway, use origin
+  if(origin.includes('onrender.com') || origin.includes('localhost') || origin.includes('127.0.0.1'))
+    return origin;
+  // GitHub Pages or other static host — try multiple backends
+  if(origin.includes('github.io') || origin.includes('githubusercontent.com')) {
+    // v13.4.0: Try backends in order, first healthy one wins
     return 'https://architect-gateway-3guo.onrender.com';
+  }
   return origin;
 })();
+// v13.4.0: Multi-backend fallback
+const FALLBACK_BACKENDS = [
+  'https://architect-gateway-3guo.onrender.com',
+  'https://architect-llm-5mdk.onrender.com',
+  'https://ai-arch-blender3d.onrender.com',
+];
+let _activeBackend = null;
 let _backendOk = null;
 function _getApiKey(){ try{ return localStorage.getItem('arch_api_key')||''; }catch(e){ return ''; } }
 function _setApiKey(k){ try{ localStorage.setItem('arch_api_key',k); }catch(e){} }
@@ -1140,17 +1191,29 @@ function _apiHeaders(extra){
   return Object.assign(h,extra||{});
 }
 async function checkBackend(){
-  if(!API_BASE){_backendOk=false;return;}
-  try{
-    const ctrl=new AbortController();
-    const tid=setTimeout(()=>ctrl.abort(),5000);
-    const r=await fetch(API_BASE+'/api/v1/health',{signal:ctrl.signal,headers:_apiHeaders()});
-    clearTimeout(tid);
-    _backendOk=r.ok;
-  }catch(e){
-    _backendOk=false;
+  // v13.4.0: Try primary backend first, then fallbacks
+  const backends = [API_BASE, ...FALLBACK_BACKENDS.filter(b => b !== API_BASE)];
+  for(const backend of backends){
+    if(!backend) continue;
+    try{
+      const ctrl=new AbortController();
+      const tid=setTimeout(()=>ctrl.abort(),5000);
+      const r=await fetch(backend+'/api/v1/health',{signal:ctrl.signal,headers:_apiHeaders()});
+      clearTimeout(tid);
+      if(r.ok){
+        _backendOk=true;
+        _activeBackend=backend;
+        console.log('Backend:',backend,'— available');
+        try{document.getElementById('backendStatus').style.background='#22c55e';document.getElementById('backendStatus').title='Backend: '+backend;}catch(e){}
+        return;
+      }
+    }catch(e){/* try next */}
   }
-  console.log('Backend:',_backendOk?'available':'unavailable');
+  _backendOk=false;
+  _activeBackend=null;
+  console.log('Backend: all unavailable');
+  // Update status indicator
+  try{document.getElementById('backendStatus').style.background='#ef4444';document.getElementById('backendStatus').title='Backend offline';}catch(e){}
 }
 async function callParseAPI(msg){
   if(API_BASE && _backendOk===null) await checkBackend();
@@ -1160,7 +1223,7 @@ async function callParseAPI(msg){
       try{
         const ctrl=new AbortController();
         const tid=setTimeout(()=>ctrl.abort(),60000);
-        const r=await fetch(API_BASE+'/api/v1/parse',{
+        const r=await fetch((_activeBackend||API_BASE)+'/api/v1/parse',{
           method:'POST',
           headers:_apiHeaders(),
           signal:ctrl.signal,
@@ -1190,7 +1253,7 @@ async function callOrchestratorAPI(prompt,parsed){
   const ctrl=new AbortController();
   const tid=setTimeout(()=>ctrl.abort(),620000);
   try{
-    const r=await fetch(API_BASE+'/api/v1/orchestrator/execute',{
+    const r=await fetch((_activeBackend||API_BASE)+'/api/v1/orchestrator/execute',{
       method:'POST',
       headers:_apiHeaders(),
       signal:ctrl.signal,
@@ -1299,7 +1362,7 @@ async function sendMessage() {
 
     addMessage('assistant', '<div class="reasoning-card"><div class="reasoning-title">🧠 '+(currentLang==='en'?'Analyzing your request...':'Анализирую ваш запрос...')+'</div><div class="reasoning-step"><div class="rs-icon">◉</div><div class="rs-text">'+(currentLang==='en'?'Sending to AI orchestrator...':'Отправляю в AI-оркестратор...')+'</div></div></div>');
 
-    const r = await fetch(API_BASE+'/api/v1/orchestrator/execute', {
+    const r = await fetch((_activeBackend||API_BASE)+'/api/v1/orchestrator/execute', {
       method:'POST',
       headers:_apiHeaders(),
       signal:orchCtrl.signal,
@@ -1356,6 +1419,31 @@ async function sendMessage() {
   } catch(e) {
     hideTyping();
     console.error('Chat error:', e);
+    // v13.4.0: Fallback to fast trimesh generation when orchestrator fails
+    if(e.message && (e.message.includes('502') || e.message.includes('503') || e.message.includes('unavailable') || e.message.includes('timeout'))) {
+      addMessage('assistant', '⚠️ '+(currentLang==='en'?'Orchestrator unavailable, trying fast generation...':'Оркестратор недоступен, пробую быструю генерацию...'));
+      try {
+        const fastR = await fetch((_activeBackend||API_BASE)+'/api/v1/generate/fast', {
+          method:'POST',
+          headers:_apiHeaders(),
+          body:JSON.stringify({prompt: text})
+        });
+        if(fastR.ok) {
+          const blob = await fastR.blob();
+          const url = URL.createObjectURL(blob);
+          // Load into 3D viewer
+          if(typeof loadGLBFromUrl === 'function') {
+            loadGLBFromUrl(url);
+          } else if(typeof window.loadGLB === 'function') {
+            window.loadGLB(url);
+          }
+          addMessage('assistant', '✅ '+(currentLang==='en'?'Fast GLB generated (basic geometry)':'Быстрый GLB сгенерирован (базовая геометрия)'));
+          return;
+        }
+      } catch(fastE) {
+        console.error('Fast fallback also failed:', fastE);
+      }
+    }
     addMessage('assistant', '❌ '+(e.message || (currentLang==='en'?'Error occurred':'Произошла ошибка')));
   }
 }
@@ -1431,7 +1519,7 @@ async function _resumeOrchestrator() {
     const ctrl = new AbortController();
     const tid = setTimeout(()=>ctrl.abort(), 620000);
 
-    const r = await fetch(API_BASE+'/api/v1/orchestrator/resume', {
+    const r = await fetch((_activeBackend||API_BASE)+'/api/v1/orchestrator/resume', {
       method:'POST',
       headers:_apiHeaders(),
       signal:ctrl.signal,
@@ -1502,7 +1590,7 @@ async function _handleOrchestratorResult(orchResult, prompt) {
     const glbPath = orchResult.exports.output_path;
     if(glbPath) {
       const cleanPath = glbPath.replace(/^\/+/, '');
-      const url = glbPath.startsWith('http') ? glbPath : API_BASE + '/api/v1/files/' + cleanPath;
+      const url = glbPath.startsWith('http') ? glbPath : (_activeBackend||API_BASE) + '/api/v1/files/' + cleanPath;
       loadGLBModel(url);
       addMessage('assistant', currentLang==='en'?'✅ 3D model ready!':'✅ 3D модель готова!');
       return;
@@ -1512,7 +1600,7 @@ async function _handleOrchestratorResult(orchResult, prompt) {
   // Fallback: check render image
   if(orchResult.render && orchResult.render.output_path) {
     const cleanRenderPath = orchResult.render.output_path.replace(/^\/+/, '');
-    const imgUrl = API_BASE + '/api/v1/files/' + cleanRenderPath;
+    const imgUrl = (_activeBackend||API_BASE) + '/api/v1/files/' + cleanRenderPath;
     addMessage('assistant', '<img src="'+imgUrl+'" style="max-width:100%;border-radius:12px;margin:8px 0" />');
     addMessage('assistant', currentLang==='en'?'✅ Render complete!':'✅ Рендер готов!');
     return;
@@ -1520,7 +1608,7 @@ async function _handleOrchestratorResult(orchResult, prompt) {
 
   addMessage('assistant', currentLang==='en'?'⚡ Trying direct 3D generation...':'⚡ Пробую прямую генерацию 3D...');
   try {
-    const genR = await fetch(API_BASE + '/api/v1/generate', {
+    const genR = await fetch((_activeBackend||API_BASE) + '/api/v1/generate', {
       method: 'POST',
       headers: _apiHeaders(),
       body: JSON.stringify({prompt: prompt, quality: 'standard'})
@@ -1645,7 +1733,7 @@ async function proceedWithGeneration(prompt, parsed) {
     showGenOverlay();
     const orchResult = await callOrchestratorAPI(prompt, parsed);
     if(orchResult.status==='success' && orchResult.exports && orchResult.exports.glb) {
-      const glbUrl = orchResult.exports.glb.startsWith('http') ? orchResult.exports.glb : API_BASE + '/api/v1/files/' + orchResult.exports.glb.replace(/^\/+/, '');
+      const glbUrl = orchResult.exports.glb.startsWith('http') ? orchResult.exports.glb : (_activeBackend||API_BASE) + '/api/v1/files/' + orchResult.exports.glb.replace(/^\/+/, '');
       loadGLBModel(glbUrl);
       addMessage('assistant', currentLang==='en'?'✅ 3D model ready!':'✅ 3D модель готова!');
     } else { addMessage('assistant', currentLang==='en'?'⚠️ Generation incomplete':'⚠️ Генерация не завершена'); }

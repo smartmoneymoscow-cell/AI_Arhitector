@@ -27,7 +27,7 @@ logger = logging.getLogger("archai.gateway")
 app = FastAPI(
     title="Architect Gateway",
     description="API Gateway — ALL routing through here. Nginx → Gateway → Services",
-    version="13.3.0",
+    version="13.4.0",
 )
 
 # CORS — NEVER wildcard in production
@@ -322,7 +322,7 @@ async def health():
     return {
         "status": "ok",
         "service": "gateway",
-        "version": "13.3.0",
+        "version": "13.4.0",
         "services": {
             "llm": "configured" if settings.LLM_SERVICE_URL else "not_configured",
             "blender": "configured" if settings.BLENDER_SERVICE_URL else "not_configured",
@@ -407,6 +407,33 @@ async def preview_proxy(
         timeout=120,
     )
     return StreamingResponse(r.aiter_bytes(), media_type="image/png")
+
+
+# ═══════════════════════════════════════════════════════════════
+# FAST GENERATE → trimesh GLB (no Blender needed)
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.post("/api/v1/generate/fast")
+async def generate_fast_proxy(
+    req: dict,
+    _rl: None = Depends(rate_limit_middleware),
+):
+    """v13.4.0: Fast GLB generation via trimesh (no Blender needed)."""
+    r = await blender_request_with_fallback(
+        "post",
+        "/api/v1/generate/fast",
+        json=req,
+        timeout=60,
+    )
+    content_type = r.headers.get("content-type", "")
+    if "model/gltf-binary" in content_type:
+        return StreamingResponse(
+            r.aiter_bytes(),
+            media_type=content_type,
+            headers={"content-disposition": f"attachment; filename=archai_{uuid.uuid4().hex[:8]}.glb"},
+        )
+    return r.json()
 
 
 # ═══════════════════════════════════════════════════════════════

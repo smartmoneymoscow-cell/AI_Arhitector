@@ -128,7 +128,7 @@ def _detect_gen_type(params: dict) -> str:
 
 @app.get("/health")
 async def health():
-    return HealthResponse(status="ok", service="blender-service", version="13.3.0")
+    return HealthResponse(status="ok", service="blender-service", version="13.4.0")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -371,6 +371,21 @@ async def generate_building_endpoint(req: GenerateRequest):
 async def render_interior_endpoint(req: GenerateRequest):
     params = await _parse_via_llm_service(req.prompt)
     return await _generate_interior(params)
+
+
+@app.post("/api/v1/generate/fast")
+async def generate_fast(req: GenerateRequest):
+    """v13.4.0: Fast GLB generation via trimesh (no Blender needed)."""
+    if not HAS_TRIMESH:
+        raise HTTPException(503, "trimesh not installed")
+    params = await _parse_via_llm_service(req.prompt)
+    gen_type = _detect_gen_type(params)
+    try:
+        glb_path = _trimesh_generate(params, gen_type)
+        return FileResponse(glb_path, media_type="model/gltf-binary",
+                          filename=f"archai_{os.path.basename(glb_path)}")
+    except Exception as e:
+        raise HTTPException(500, detail=f"Trimesh generation failed: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -673,6 +673,61 @@ class Orchestrator:
                 except Exception as _e:
                     logger.warning("Direct blender generate fallback failed: %s", _e)
 
+            # ═══ Fallback v13.4.0: trimesh GLB when Blender completely unavailable ═══
+            if not export_data or not export_data.get("output_path"):
+                try:
+                    import trimesh as _trimesh
+                    import numpy as _np
+                    logger.info("Blender unavailable — generating GLB via trimesh fallback")
+                    glb_path = os.path.join(self.output_dir, f"{job_id}_trimesh.glb")
+                    os.makedirs(self.output_dir, exist_ok=True)
+                    # Build geometry from params
+                    w = params.get("width_m", 10)
+                    l = params.get("length_m", 12)
+                    h = params.get("height_m", 3)
+                    floors = params.get("floors", 1)
+                    total_h = h * floors
+                    # Floor
+                    floor = _trimesh.creation.box(extents=[w, l, 0.15])
+                    floor.apply_translation([0, 0, -0.075])
+                    # Walls
+                    wall_thickness = 0.2
+                    walls = []
+                    # Front wall
+                    walls.append(_trimesh.creation.box(extents=[w, wall_thickness, total_h], transform=_trimesh.transformations.translation_matrix([0, l/2 - wall_thickness/2, total_h/2])))
+                    # Back wall
+                    walls.append(_trimesh.creation.box(extents=[w, wall_thickness, total_h], transform=_trimesh.transformations.translation_matrix([0, -l/2 + wall_thickness/2, total_h/2])))
+                    # Left wall
+                    walls.append(_trimesh.creation.box(extents=[wall_thickness, l, total_h], transform=_trimesh.transformations.translation_matrix([-w/2 + wall_thickness/2, 0, total_h/2])))
+                    # Right wall
+                    walls.append(_trimesh.creation.box(extents=[wall_thickness, l, total_h], transform=_trimesh.transformations.translation_matrix([w/2 - wall_thickness/2, 0, total_h/2])))
+                    # Roof
+                    roof = _trimesh.creation.box(extents=[w + 0.4, l + 0.4, 0.2])
+                    roof.apply_translation([0, 0, total_h + 0.1])
+                    # Windows (simple cutouts represented as boxes)
+                    windows = []
+                    for i in range(max(1, int(w / 3))):
+                        wx = -w/2 + 1.5 + i * 3
+                        win = _trimesh.creation.box(extents=[1.2, 0.1, 1.4])
+                        win.apply_translation([wx, l/2, h * 0.6])
+                        windows.append(win)
+                    # Combine
+                    meshes = [floor, roof] + walls + windows
+                    scene = _trimesh.Scene(meshes)
+                    scene.export(glb_path, file_type='glb')
+                    export_data = {
+                        "output_path": glb_path,
+                        "format": "glb",
+                        "job_id": job_id,
+                        "fallback": "trimesh",
+                        "note": "Generated via trimesh (Blender unavailable). Basic geometry only.",
+                    }
+                    logger.info("Trimesh GLB generated: %s (%d bytes)", glb_path, os.path.getsize(glb_path))
+                except ImportError:
+                    logger.warning("trimesh not installed — cannot generate GLB fallback")
+                except Exception as _e:
+                    logger.warning("Trimesh GLB fallback failed: %s", _e)
+
             # ═══ Post-pipeline: Compliance, Financial, Presentation, Drawings ═══
             post_agents = [a for a in agent_sequence if a in ("compliance", "financial", "presentation")]
             post_results = {}

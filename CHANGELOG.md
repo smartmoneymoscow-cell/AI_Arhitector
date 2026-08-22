@@ -1,5 +1,28 @@
 # CHANGELOG — AI_Arhitector
 
+## v13.4.0 — Frontend Resilience + Fast GLB Generation (2026-08-23)
+
+### Что сделано
+- **Frontend multi-backend fallback** — checkBackend() пробует несколько backend URL
+- **Backend URL configuration** — пользователь может указать свой backend URL в настройках аккаунта
+- **Backend status indicator** — зелёный/красный индикатор в top bar рядом с логотипом
+- **Fast GLB endpoint** — `POST /api/v1/generate/fast` — быстрая генерация через trimesh (без Blender)
+- **Orchestrator trimesh fallback** — когда Blender недоступен, оркестратор генерирует GLB через trimesh
+- **Frontend fast fallback** — при ошибке 502/503 оркестратора фронтенд пробует `/api/v1/generate/fast`
+- **Auto-detect backend** — simple.html определяет backend URL автоматически
+- **Gateway fast endpoint** — проксирует `/api/v1/generate/fast` в blender-service
+
+### Файлы обновлены
+- `frontend/index.html` — multi-backend fallback, backend URL config, status indicator, fast fallback
+- `simple.html` — auto-detect backend URL
+- `gateway/app.py` — `/api/v1/generate/fast` proxy, версия 13.4.0
+- `blender-service/app.py` — `/api/v1/generate/fast` endpoint, версия 13.4.0
+- `shared/agents/orchestrator.py` — trimesh fallback when Blender unavailable
+- `README.md` — v13.4.0
+- `CHANGELOG.md` — v13.4.0 entry
+
+---
+
 ## v13.3.0 — Version Sync + Trimesh Fallback Consolidation (2026-08-23)
 
 ### Что сделано

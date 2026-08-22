@@ -98,10 +98,12 @@ canvas{width:100%;height:100%;display:block}
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script>
-// ═══ CONFIG ═══
-const GATEWAY = 'https://architect-gateway-3guo.onrender.com';
-const BLENDER = 'https://architect-gateway-3guo.onrender.com'; // через gateway proxy
-const LLM = 'https://architect-gateway-3guo.onrender.com';
+// ═══ CONFIG — v13.4.0: auto-detect backend ═══
+const _origin = window.location.origin;
+const _isStatic = _origin.includes('github.io') || _origin.includes('githubusercontent.com');
+const GATEWAY = _isStatic ? 'https://architect-gateway-3guo.onrender.com' : _origin;
+const BLENDER = GATEWAY;
+const LLM = GATEWAY;
 
 // ═══ THREE.JS ═══
 let scene, camera, renderer, controls;

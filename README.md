@@ -1,4 +1,4 @@
-# Architect v13.3.0 — AI Architecture Generator
+# Architect v13.4.0 — AI Architecture Generator
 
 Генерация 3D-моделей зданий и интерьеров по текстовому описанию на русском языке.
 
@@ -109,6 +109,16 @@ docker-compose up -d
 
 20+ специализированных агентов: парсер, геометрия, текстуры, свет,
 конструктив, нормативы, рендер, качество, экспорт.
+
+## Что нового в v13.4.0
+
+- **Frontend multi-backend fallback** — автоматический поиск работающего бэкенда из списка
+- **Backend URL configuration** — пользователь может указать свой backend URL в настройках
+- **Backend status indicator** — зелёный/красный индикатор в top bar
+- **Fast GLB endpoint** — `/api/v1/generate/fast` для быстрой генерации через trimesh без Blender
+- **Orchestrator trimesh fallback** — когда Blender недоступен, оркестратор генерирует GLB через trimesh
+- **Frontend fast fallback** — при недоступности оркестратора фронтенд пробует fast endpoint
+- **Auto-detect backend** — simple.html определяет backend URL автоматически
 
 ## Что нового в v13.3.0
 
