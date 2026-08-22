@@ -251,7 +251,7 @@ class Orchestrator:
             parse_result = self._run_agent(
                 "parser",
                 {"name": "parse", "agent": "parser", "params": {"prompt": dialog_enriched_prompt, "use_llm": True, "llm_service_url": self.llm_service_url}},
-                timeout=60,
+                timeout=120,
             )
 
             if parse_result.status == TaskStatus.FAILED:
