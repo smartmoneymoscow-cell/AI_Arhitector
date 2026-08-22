@@ -664,7 +664,7 @@ html,body{background:var(--bg);color:var(--txt)}
   <div class="mobile-overlay" id="mobileOverlay" onclick="closeMobile()"></div>
 
   <!-- PROJECTS SIDEBAR -->
-  <div class="projects-panel" id="projectsPanel">
+  <div class="projects-panel collapsed" id="projectsPanel">
     <div class="pp-header">
       <div class="pp-title" data-i18n="projects">Проекты</div>
       <button class="pp-close" onclick="toggleProjects()">✕</button>
@@ -996,7 +996,7 @@ document.addEventListener('click', (e) => {
 });
 
 // ═══════════════════ PROJECTS ═══════════════════
-let projectsOpen = true;
+let projectsOpen = false;
 function toggleProjects() { projectsOpen = !projectsOpen; document.getElementById('projectsPanel').classList.toggle('collapsed', !projectsOpen); }
 function selectProject(el, name) {
   document.querySelectorAll('.project-card').forEach(c => c.classList.remove('active'));
