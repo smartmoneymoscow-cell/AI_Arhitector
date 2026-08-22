@@ -27,7 +27,7 @@ logger = logging.getLogger("archai.gateway")
 app = FastAPI(
     title="Architect Gateway",
     description="API Gateway — ALL routing through here. Nginx → Gateway → Services",
-    version="13.4.0",
+    version="13.5.0",
 )
 
 # CORS — NEVER wildcard in production
@@ -113,6 +113,64 @@ def _get_circuit_stats() -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════
+# LLM SERVICE AUTO-DISCOVERY — find working LLM URL
+# ═══════════════════════════════════════════════════════════════
+
+_LLM_CANDIDATES = [
+    "https://architect-llm-5mdk.onrender.com",
+    "https://architect-llm-1s1j.onrender.com",
+    "https://architect-llm-s5q7.onrender.com",
+    "https://architect-llm-zczl.onrender.com",
+    "https://architect-llm-2pmo.onrender.com",
+    "https://architect-llm-sdrh.onrender.com",
+    "https://architect-llm-qarj.onrender.com",
+]
+_cached_llm_url: str | None = None
+
+
+def _discover_llm_url() -> str:
+    """Find first working LLM service URL. Cache result."""
+    global _cached_llm_url
+    if _cached_llm_url:
+        return _cached_llm_url
+    # If settings has a non-default URL, try it first
+    configured = settings.LLM_SERVICE_URL
+    if configured and configured != "http://localhost:8081":
+        try:
+            import httpx as _httpx
+            with _httpx.Client(timeout=5.0) as c:
+                r = c.get(f"{configured}/health")
+                if r.status_code == 200:
+                    _cached_llm_url = configured
+                    logger.info("LLM discovered (configured): %s", configured)
+                    return configured
+        except Exception:
+            pass
+    # Try candidates
+    import httpx as _httpx
+    for url in _LLM_CANDIDATES:
+        try:
+            with _httpx.Client(timeout=5.0) as c:
+                r = c.get(f"{url}/health")
+                if r.status_code == 200:
+                    _cached_llm_url = url
+                    logger.info("LLM discovered: %s", url)
+                    return url
+        except Exception:
+            continue
+    logger.warning("No working LLM service found")
+    return configured or "http://localhost:8081"
+
+
+def _get_llm_url() -> str:
+    """Get LLM URL with auto-discovery."""
+    global _cached_llm_url
+    if _cached_llm_url:
+        return _cached_llm_url
+    return _discover_llm_url()
+
+
+# ═══════════════════════════════════════════════════════════════
 # BLENDER LOAD BALANCER — multiple instances
 # ═══════════════════════════════════════════════════════════════
 
@@ -121,6 +179,7 @@ def _get_blender_urls() -> list[str]:
     """Get all Blender service URLs — KAGGLE FIRST, Render as fallback.
     v9.0: Blender rendering works ONLY via Kaggle GPU (T4/P100).
     Render blender-service is kept as emergency fallback only.
+    v13.5.0: auto-discover Render blender URL if not configured.
     """
     urls = []
     # ═══ KAGGLE GPU RENDERER — PRIMARY (v9.0) ═══
@@ -130,8 +189,16 @@ def _get_blender_urls() -> list[str]:
         logger.info("Kaggle GPU renderer registered as PRIMARY: %s", kaggle_url)
     # ═══ Render blender-service — FALLBACK ONLY ═══
     primary = settings.BLENDER_SERVICE_URL
-    if primary and primary not in urls:
+    if primary and primary not in urls and primary != "http://localhost:8082":
         urls.append(primary)
+    # v13.5.0: auto-discover Render blender if primary is default
+    if not urls or (len(urls) == 1 and urls[0] == "http://localhost:8082"):
+        _BLENDER_CANDIDATES = [
+            "https://ai-arch-blender3d.onrender.com",
+        ]
+        for candidate in _BLENDER_CANDIDATES:
+            if candidate not in urls:
+                urls.append(candidate)
     for i in range(2, 6):
         url = os.environ.get(f"BLENDER_SERVICE_URL_{i}", "")
         if url and url not in urls:
@@ -322,7 +389,7 @@ async def health():
     return {
         "status": "ok",
         "service": "gateway",
-        "version": "13.4.0",
+        "version": "13.5.0",
         "services": {
             "llm": "configured" if settings.LLM_SERVICE_URL else "not_configured",
             "blender": "configured" if settings.BLENDER_SERVICE_URL else "not_configured",
@@ -350,7 +417,7 @@ async def parse_proxy(
 
     r = await request_with_retry(
         "post",
-        f"{settings.LLM_SERVICE_URL}/api/v1/parse",
+        f"{_get_llm_url()}/api/v1/parse",
         json={"text": text},
         timeout=120,
     )
@@ -449,7 +516,7 @@ async def chat_proxy(
     """Proxy chat to LLM Service."""
     r = await request_with_retry(
         "post",
-        f"{settings.LLM_SERVICE_URL}/api/v1/chat/completions",
+        f"{_get_llm_url()}/api/v1/chat/completions",
         json=req,
         timeout=60,
     )
@@ -480,11 +547,12 @@ async def orchestrator_execute(
 
     job_id = uuid.uuid4().hex[:8]
 
+    _blender_urls = _get_blender_urls()
     orch = Orchestrator(
-        blender_service_url=settings.BLENDER_SERVICE_URL,
-        llm_service_url=settings.LLM_SERVICE_URL,
+        blender_service_url=_blender_urls[0] if _blender_urls else settings.BLENDER_SERVICE_URL,
+        llm_service_url=_get_llm_url(),
         output_dir=settings.OUTPUT_DIR,
-        blender_service_urls=_get_blender_urls(),
+        blender_service_urls=_blender_urls,
     )
 
     loop = asyncio.get_event_loop()
@@ -549,11 +617,12 @@ async def orchestrator_resume(
     export_formats = req.get("export_formats", ["glb"])
     pipeline_profile = req.get("pipeline_profile", "standard")
 
+    _blender_urls = _get_blender_urls()
     orch = Orchestrator(
-        blender_service_url=settings.BLENDER_SERVICE_URL,
-        llm_service_url=settings.LLM_SERVICE_URL,
+        blender_service_url=_blender_urls[0] if _blender_urls else settings.BLENDER_SERVICE_URL,
+        llm_service_url=_get_llm_url(),
         output_dir=settings.OUTPUT_DIR,
-        blender_service_urls=_get_blender_urls(),
+        blender_service_urls=_blender_urls,
     )
 
     # Retrieve stored job from Redis/memory
@@ -672,7 +741,7 @@ async def clarify_endpoint(
     # Parse first
     r = await request_with_retry(
         "post",
-        f"{settings.LLM_SERVICE_URL}/api/v1/parse",
+        f"{_get_llm_url()}/api/v1/parse",
         json={"text": prompt},
         timeout=60,
     )
@@ -738,7 +807,7 @@ async def compliance_check(
     if not params and prompt:
         r = await request_with_retry(
             "post",
-            f"{settings.LLM_SERVICE_URL}/api/v1/parse",
+            f"{_get_llm_url()}/api/v1/parse",
             json={"text": prompt},
             timeout=60,
         )
@@ -884,7 +953,7 @@ async def variants_endpoint(
     # Parse prompt first
     r = await request_with_retry(
         "post",
-        f"{settings.LLM_SERVICE_URL}/api/v1/parse",
+        f"{_get_llm_url()}/api/v1/parse",
         json={"text": prompt},
         timeout=60,
     )

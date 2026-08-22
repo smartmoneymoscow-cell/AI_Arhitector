@@ -1,5 +1,18 @@
 # CHANGELOG — AI_Arhitector
 
+## v13.5.0 — Orchestrator Fix + Auto-Discovery (2026-08-23)
+
+### Что сделано
+- **LLM auto-discovery** — Gateway пробует 7 LLM-сервисов на Render, кеширует первый рабочий
+- **Blender auto-discovery** — Gateway автоматически находит `ai-arch-blender3d.onrender.com`
+- **Orchestrator fix** — использует discovered URLs вместо `settings.LLM_SERVICE_URL` (который был `localhost:8081`)
+- **Orchestrator теперь работает на Render** — парсер-агент может вызвать LLM
+
+### Файлы обновлены
+- `gateway/app.py` — `_discover_llm_url()`, `_get_blender_urls()` auto-discovery, версия 13.5.0
+
+---
+
 ## v13.4.0 — Frontend Resilience + Fast GLB Generation (2026-08-23)
 
 ### Что сделано

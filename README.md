@@ -1,4 +1,4 @@
-# Architect v13.4.0 — AI Architecture Generator
+# Architect v13.5.0 — AI Architecture Generator
 
 Генерация 3D-моделей зданий и интерьеров по текстовому описанию на русском языке.
 
@@ -109,6 +109,13 @@ docker-compose up -d
 
 20+ специализированных агентов: парсер, геометрия, текстуры, свет,
 конструктив, нормативы, рендер, качество, экспорт.
+
+## Что нового в v13.5.0
+
+- **LLM auto-discovery** — Gateway автоматически находит рабочий LLM-сервис из списка кандидатов
+- **Blender auto-discovery** — Gateway автоматически находит рабочий Blender-сервис
+- **Orchestrator fix** — оркестратор теперь использует discovered URLs вместо Docker internal
+- **Orchestrator работает на Render** — исправлен LLM_SERVICE_URL (был localhost:8081)
 
 ## Что нового в v13.4.0
 
