@@ -582,6 +582,7 @@ async def orchestrator_execute(
         "job_id": result_job_id,
         "session_id": session_id,
         "status": result["status"],
+        "error": result.get("error"),
         "gen_type": r.get("gen_type"),
         "quality": quality,
         "pipeline_profile": pipeline_profile,
