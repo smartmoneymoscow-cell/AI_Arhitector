@@ -631,7 +631,6 @@ html,body{background:var(--bg);color:var(--txt)}
   <div class="logo-center">
     <div class="logo-mark">A</div>
     <div class="logo-text">Architect<span>.ai</span></div>
-    <div id="backendStatus" style="width:8px;height:8px;border-radius:50%;background:#71717a;margin-left:4px;transition:background .3s" title="Backend status"></div>
   </div>
 
   <div class="top-actions">
@@ -1204,7 +1203,6 @@ async function checkBackend(){
         _backendOk=true;
         _activeBackend=backend;
         console.log('Backend:',backend,'— available');
-        try{document.getElementById('backendStatus').style.background='#22c55e';document.getElementById('backendStatus').title='Backend: '+backend;}catch(e){}
         return;
       }
     }catch(e){/* try next */}
@@ -1212,8 +1210,6 @@ async function checkBackend(){
   _backendOk=false;
   _activeBackend=null;
   console.log('Backend: all unavailable');
-  // Update status indicator
-  try{document.getElementById('backendStatus').style.background='#ef4444';document.getElementById('backendStatus').title='Backend offline';}catch(e){}
 }
 async function callParseAPI(msg){
   if(API_BASE && _backendOk===null) await checkBackend();
