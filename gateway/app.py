@@ -27,7 +27,7 @@ logger = logging.getLogger("archai.gateway")
 app = FastAPI(
     title="Architect Gateway",
     description="API Gateway — ALL routing through here. Nginx → Gateway → Services",
-    version="13.1.0",
+    version="13.3.0",
 )
 
 # CORS — NEVER wildcard in production
@@ -322,7 +322,7 @@ async def health():
     return {
         "status": "ok",
         "service": "gateway",
-        "version": "13.1.0",
+        "version": "13.3.0",
         "services": {
             "llm": "configured" if settings.LLM_SERVICE_URL else "not_configured",
             "blender": "configured" if settings.BLENDER_SERVICE_URL else "not_configured",

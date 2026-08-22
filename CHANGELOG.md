@@ -1,5 +1,22 @@
 # CHANGELOG — AI_Arhitector
 
+## v13.3.0 — Version Sync + Trimesh Fallback Consolidation (2026-08-23)
+
+### Что сделано
+- **Gateway version sync** — Gateway обновлён с v13.1.0 до v13.3.0
+- **Blender Service version sync** — обновлён до v13.3.0
+- **Trimesh GLB fallback** — консолидирован в релизе (был в коммитах до v13.2.0)
+- **scipy dependency** — добавлен для trimesh GLB export
+- **Kaggle notebook URL fix** — обновлён Gateway URL
+- **Test report** — финальный отчёт тестирования v13.2.0
+
+### Файлы обновлены
+- `gateway/app.py` — версия 13.1.0 → 13.3.0
+- `blender-service/app.py` — версия 13.1.0 → 13.3.0
+- `README.md` — v13.3.0
+
+---
+
 ## v13.2.0 — Full LLM Cascade for All Endpoints (2026-08-21)
 
 ### Что сделано

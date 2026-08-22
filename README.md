@@ -1,4 +1,4 @@
-# Architect v13.2.0 — AI Architecture Generator
+# Architect v13.3.0 — AI Architecture Generator
 
 Генерация 3D-моделей зданий и интерьеров по текстовому описанию на русском языке.
 
@@ -109,6 +109,14 @@ docker-compose up -d
 
 20+ специализированных агентов: парсер, геометрия, текстуры, свет,
 конструктив, нормативы, рендер, качество, экспорт.
+
+## Что нового в v13.3.0
+
+- **Gateway version sync** — Gateway и Blender Service обновлены до v13.3.0
+- **Trimesh GLB fallback** — быстрая генерация GLB через trimesh (numpy) без Blender
+- **scipy dependency** — добавлен для trimesh GLB export
+- **Kaggle notebook URL fix** — обновлён Gateway URL в ноутбуке
+- **Test report** — финальный отчёт тестирования с анализом скриншотов
 
 ## Что нового в v13.2.0
 
