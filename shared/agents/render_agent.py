@@ -347,7 +347,7 @@ comp.location = (400, 0)
 tree.links.new(rl.outputs['Image'], comp.inputs['Image'])
 """
 
-            full_script = script + "\n" + render_script + "\n" + resolution_enforce
+            full_script = script + "\n" + resolution_enforce + "\n" + render_script
 
             # Priority: Kaggle GPU (T4) → Blender service (Render) → local
             result = None
