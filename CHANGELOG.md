@@ -1,5 +1,34 @@
 # CHANGELOG — AI_Arhitector
 
+## v13.6.0 — Keep-Alive Fix + New Frontend (2026-08-24)
+
+### Что сделано
+- **Keep-Alive workflow FIX** — исправлены health endpoints: `/health` → `/api/v1/health`
+  - Все LLM-сервисы и Blender теперь пингуются по правильному пути
+  - Таймаут увеличен с 30 до 60 сек (Render просыпается 15-25 сек)
+  - Cron изменён с `*/3` на `*/5` (оптимальнее для GitHub Actions лимитов)
+- **Новый frontend** — `frontend/architect-ai.html`
+  - Быстрая генерация GLB через trimesh (2-3 сек)
+  - Полный пайплайн через Orchestrator (Blender CYCLES)
+  - Прогресс-бар генерации с шагами
+  - Переключатель качества: Быстро / Стандарт / Качество
+  - Fallback backends для отказоустойчивости
+  - Экспорт GLB и PNG
+  - Виды: 3D, план, разрез
+  - Каркасный режим и сетка
+  - Индикатор статуса бэкенда
+
+### Проблемы решены
+- Keep-alive падал на КАЖДОМ запуске (615+ failures подряд)
+- Причина: workflow пинговал `/health` вместо `/api/v1/health`
+- LLM-сервисы спали потому что keep-alive не работал
+
+### Файлы обновлены
+- `.github/workflows/keep-alive.yml` — правильные endpoints, таймауты
+- `frontend/architect-ai.html` — новый UI
+
+---
+
 ## v13.5.0 — Orchestrator Fix + Auto-Discovery (2026-08-23)
 
 ### Что сделано
