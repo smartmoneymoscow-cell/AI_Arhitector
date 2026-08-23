@@ -540,7 +540,7 @@ def _trimesh_generate(params: dict, gen_type: str) -> str:
             # Try direct match first, then Russian mapping
             key = item_lower if item_lower in defs else _ru_map.get(item_lower)
             if key and key in defs:
-                ext, color, pos = defs[item]
+                ext, color, pos = defs[key]
                 meshes.append(_box(ext, color, pos))
         if not meshes or len(meshes) < 7:
             meshes.append(_box([2.5,1,0.7], [102,102,115,255], [0,-L/4,0.35]))
