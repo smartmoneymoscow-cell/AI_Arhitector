@@ -1,7 +1,7 @@
 name: Keep-Alive Pinger
 on:
   schedule:
-    - cron: '*/8 * * * *'  # Every 8 minutes (Render sleeps after 15min)
+    - cron: '*/3 * * * *'  # Every 8 minutes (Render sleeps after 15min)
   workflow_dispatch:
 
 jobs:
@@ -17,6 +17,10 @@ jobs:
             "LLM-5mdk|https://architect-llm-5mdk.onrender.com/health"
             "LLM-1s1j|https://architect-llm-1s1j.onrender.com/health"
             "LLM-s5q7|https://architect-llm-s5q7.onrender.com/health"
+            "LLM-zczl|https://architect-llm-zczl.onrender.com/health"
+            "LLM-2pmo|https://architect-llm-2pmo.onrender.com/health"
+            "LLM-sdrh|https://architect-llm-sdrh.onrender.com/health"
+            "LLM-qarj|https://architect-llm-qarj.onrender.com/health"
             "Blender|https://ai-arch-blender3d.onrender.com/health"
           )
           OK=0
