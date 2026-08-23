@@ -405,6 +405,30 @@ async def health():
 # ═══════════════════════════════════════════════════════════════
 
 
+
+
+@app.get("/keep-alive")
+@app.get("/api/v1/keep-alive")
+async def keep_alive():
+    """Ping all LLM services to prevent Render cold start. Called by UptimeRobot."""
+    import asyncio
+    urls = _LLM_CANDIDATES + _get_blender_urls()
+    results = {}
+    async def ping(url):
+        try:
+            async with httpx.AsyncClient() as c:
+                r = await c.get(f"{url}/health", timeout=10.0)
+                return r.status_code == 200
+        except:
+            return False
+    tasks = [ping(u) for u in urls]
+    statuses = await asyncio.gather(*tasks, return_exceptions=True)
+    for u, s in zip(urls, statuses):
+        name = u.split("//")[1].split(".")[0]
+        results[name] = "ok" if s is True else "sleeping"
+    alive = sum(1 for v in results.values() if v == "ok")
+    return {"status": "ok", "pinged": len(urls), "alive": alive, "services": results}
+
 @app.post("/api/v1/parse")
 async def parse_proxy(
     req: dict,
