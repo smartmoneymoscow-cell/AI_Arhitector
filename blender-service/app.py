@@ -514,8 +514,32 @@ def _trimesh_generate(params: dict, gen_type: str) -> str:
             "chandelier": ([0.5,0.5,0.3], [179,179,179,255], [0,0,H-0.15]),
             "fireplace": ([1.2,0.4,1.2], [100,80,60,255], [0,L/2-0.2,0.6]),
         }
+        # Russian → English furniture mapping
+        _ru_map = {
+            "кровать": "bed", "двуспальная кровать": "bed", "детская кровать": "bed",
+            "диван": "sofa", "софа": "sofa", "кресло": "sofa",
+            "стол": "table", "обеденный стол": "table", "журнальный столик": "table",
+            "письменный стол": "desk", "рабочий стол": "desk",
+            "шкаф": "wardrobe", "шкаф для одежды": "wardrobe", "платяной шкаф": "wardrobe",
+            "стеллаж": "bookshelf", "книжный шкаф": "bookshelf", "стеллаж для игрушек": "bookshelf",
+            "телевизор": "tv", "тв": "tv",
+            "ванна": "bathtub", "джакузи": "bathtub",
+            "раковина": "sink", "умывальник": "sink",
+            "унитаз": "toilet", "подвесной унитаз": "toilet",
+            "холодильник": "fridge",
+            "плита": "stove", "печь": "stove", "варочная панель": "stove",
+            "люстра": "chandelier", "светильник": "chandelier",
+            "камин": "fireplace",
+            "кроватка": "bed", "комод": "wardrobe", "туалетный столик": "desk",
+            "прикроватная тумба": "table", "прикроватные тумбы": "table",
+            "ковер": "table", "игровой ковер": "table",
+            "зеркало": "tv", "полка": "bookshelf",
+        }
         for item in furniture:
-            if item in defs:
+            item_lower = item.lower().strip()
+            # Try direct match first, then Russian mapping
+            key = item_lower if item_lower in defs else _ru_map.get(item_lower)
+            if key and key in defs:
                 ext, color, pos = defs[item]
                 meshes.append(_box(ext, color, pos))
         if not meshes or len(meshes) < 7:
