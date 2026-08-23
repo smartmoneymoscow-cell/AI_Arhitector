@@ -2,1919 +2,800 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Architect — AI Architecture Generator</title>
+<title>Architect AI — 3D Interior & Building Designer</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-/* ═══════════════════ RESET ═══════════════════ */
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;overflow:hidden;font-family:'Inter',sans-serif;transition:background .3s,color .3s}
+html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;background:#0a0a0c;color:#e4e4e7}
 body{display:flex;flex-direction:column}
-::-webkit-scrollbar{width:5px}
-::-webkit-scrollbar-track{background:transparent}
-button{font-family:inherit}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#3f3f46;border-radius:3px}
 
-/* ═══════════════════ DARK THEME (default) ═══════════════════ */
-:root,[data-theme="dark"]{
-  --bg:#0f0f11;--bg2:#18181b;--bg3:#1e1e23;--bg4:#27272a;
-  --acc:#8b5cf6;--acc2:#a78bfa;--acc3:#c4b5fd;
-  --txt:#fafafa;--txt2:#a1a1aa;--txt3:#71717a;
-  --bdr:#2e2e33;--bdr2:#3f3f46;
-  --ok:#22c55e;--warn:#f59e0b;--err:#ef4444;
-  --glass:rgba(24,24,27,.85);--glass2:rgba(39,39,42,.7);
-  --shadow:0 8px 32px rgba(0,0,0,.4);--shadow2:0 4px 16px rgba(0,0,0,.3);
-  --radius:12px;--radius2:16px;--radius3:20px;
-  --transition:all .2s cubic-bezier(.4,0,.2,1);
-  --canvas-bg:#27272a;
-  --bubble-user:linear-gradient(135deg,#8b5cf6,#6366f1);
-  --bubble-user-txt:#fff;
-  --input-shadow:0 -4px 20px rgba(0,0,0,.1);
-  color-scheme:dark;
-}
-html,body{background:var(--bg);color:var(--txt)}
+/* TOP BAR */
+.top{height:52px;background:rgba(18,18,22,.95);border-bottom:1px solid #27272a;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0;backdrop-filter:blur(20px);z-index:50}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-mark{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#fff;box-shadow:0 2px 12px rgba(139,92,246,.4)}
+.logo-text{font-size:15px;font-weight:700;letter-spacing:-.3px}.logo-text span{color:#a78bfa}
+.top-right{display:flex;align-items:center;gap:8px}
+.status-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,.5)}
+.status-dot.err{background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.5)}
+.top-btn{padding:6px 12px;border-radius:8px;border:1px solid #27272a;background:#18181b;color:#a1a1aa;font-size:11px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .15s}
+.top-btn:hover{background:#27272a;color:#e4e4e7;border-color:#3f3f46}
 
-/* ═══════════════════ LIGHT THEME ═══════════════════ */
-[data-theme="light"]{
-  --bg:#f8f9fa;--bg2:#ffffff;--bg3:#f1f3f5;--bg4:#e9ecef;
-  --acc:#7c3aed;--acc2:#8b5cf6;--acc3:#a78bfa;
-  --txt:#1a1a2e;--txt2:#6b7280;--txt3:#9ca3af;
-  --bdr:#e5e7eb;--bdr2:#d1d5db;
-  --ok:#16a34a;--warn:#d97706;--err:#dc2626;
-  --glass:rgba(255,255,255,.85);--glass2:rgba(255,255,255,.7);
-  --shadow:0 8px 32px rgba(0,0,0,.08);--shadow2:0 4px 16px rgba(0,0,0,.06);
-  --canvas-bg:#e5e7eb;
-  --bubble-user:linear-gradient(135deg,#7c3aed,#6366f1);
-  --bubble-user-txt:#fff;
-  --input-shadow:0 -4px 20px rgba(0,0,0,.04);
-  color-scheme:light;
-}
-
-/* ═══════════════════ SCROLLBAR THEME ═══════════════════ */
-::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
-::-webkit-scrollbar-thumb:hover{background:var(--bdr2)}
-
-/* ═══════════════════ TOP BAR ═══════════════════ */
-.top{
-  height:56px;background:var(--bg2);border-bottom:1px solid var(--bdr);
-  display:flex;align-items:center;justify-content:space-between;
-  padding:0 20px;flex-shrink:0;z-index:50;
-  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
-}
-.account-btn{
-  display:flex;align-items:center;gap:10px;cursor:pointer;
-  padding:6px 12px 6px 6px;border-radius:var(--radius);
-  border:1px solid transparent;background:transparent;
-  transition:var(--transition);position:relative;
-}
-.account-btn:hover{background:var(--bg3);border-color:var(--bdr)}
-.account-avatar{
-  width:34px;height:34px;border-radius:10px;
-  background:linear-gradient(135deg,#8b5cf6,#6366f1,#3b82f6);
-  display:flex;align-items:center;justify-content:center;
-  font-size:14px;font-weight:800;color:#fff;
-  box-shadow:0 2px 8px rgba(139,92,246,.3);
-}
-.account-info{text-align:left;line-height:1.3}
-.account-name{font-size:13px;font-weight:600;color:var(--txt)}
-.account-plan{font-size:10px;color:var(--acc2);font-weight:500}
-
-/* Account dropdown */
-.account-dropdown{
-  position:absolute;top:calc(100% + 8px);left:0;
-  width:320px;background:var(--bg2);border:1px solid var(--bdr);
-  border-radius:var(--radius2);padding:16px;
-  box-shadow:var(--shadow);z-index:100;
-  opacity:0;visibility:hidden;transform:translateY(-8px);
-  transition:var(--transition);
-}
-.account-dropdown.open{opacity:1;visibility:visible;transform:translateY(0)}
-.ad-header{display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--bdr)}
-.ad-avatar{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff}
-.ad-name{font-size:15px;font-weight:700;color:var(--txt)}
-.ad-email{font-size:11px;color:var(--txt3)}
-.token-section{margin-bottom:12px}
-.token-label{font-size:11px;color:var(--txt2);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
-.token-count{color:var(--acc2);font-weight:700;font-size:12px;text-transform:none;letter-spacing:0}
-.token-bar{height:8px;background:var(--bg4);border-radius:4px;overflow:hidden;position:relative}
-.token-fill{height:100%;border-radius:4px;transition:width .6s cubic-bezier(.4,0,.2,1);background:linear-gradient(90deg,#8b5cf6,#6366f1,#3b82f6);position:relative}
-.token-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.2) 50%,transparent 100%);animation:shimmer 2s infinite}
-@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
-.token-stats{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--txt3)}
-.ad-tiers{display:flex;gap:6px;margin-top:12px}
-.ad-tier{
-  flex:1;padding:8px;border-radius:10px;border:1px solid var(--bdr);
-  text-align:center;cursor:pointer;transition:var(--transition);background:var(--bg3);
-}
-.ad-tier:hover{border-color:var(--acc);background:var(--bg4)}
-.ad-tier.active{border-color:var(--acc);background:rgba(139,92,246,.1)}
-.ad-tier-name{font-size:10px;color:var(--txt2);font-weight:600;text-transform:uppercase}
-.ad-tier-price{font-size:13px;color:var(--txt);font-weight:700;margin-top:2px}
-
-/* Settings section in dropdown */
-.ad-divider{height:1px;background:var(--bdr);margin:14px 0}
-.ad-section-title{font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px}
-.setting-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0}
-.setting-label{font-size:12px;color:var(--txt2);font-weight:500;display:flex;align-items:center;gap:8px}
-.setting-label svg{width:16px;height:16px;color:var(--txt3)}
-
-/* Toggle switch */
-.toggle{position:relative;width:44px;height:24px;cursor:pointer}
-.toggle input{display:none}
-.toggle-track{
-  position:absolute;inset:0;border-radius:12px;
-  background:var(--bg4);border:1px solid var(--bdr);
-  transition:var(--transition);
-}
-.toggle input:checked + .toggle-track{background:var(--acc);border-color:var(--acc)}
-.toggle-thumb{
-  position:absolute;top:3px;left:3px;width:18px;height:18px;
-  border-radius:50%;background:#fff;
-  transition:var(--transition);
-  box-shadow:0 1px 3px rgba(0,0,0,.2);
-}
-.toggle input:checked ~ .toggle-thumb{left:23px}
-
-/* Theme pills */
-.theme-pills{display:flex;gap:4px;background:var(--bg3);padding:3px;border-radius:10px}
-.theme-pill{
-  padding:6px 14px;border-radius:7px;font-size:11px;font-weight:600;
-  cursor:pointer;border:none;background:transparent;
-  color:var(--txt2);transition:var(--transition);
-  display:flex;align-items:center;gap:5px;
-}
-.theme-pill:hover{color:var(--txt)}
-.theme-pill.active{background:var(--bg2);color:var(--acc2);box-shadow:0 1px 4px rgba(0,0,0,.1)}
-.theme-pill svg{width:14px;height:14px}
-
-/* Language pills */
-.lang-pills{display:flex;gap:4px;background:var(--bg3);padding:3px;border-radius:10px}
-.lang-pill{
-  padding:6px 14px;border-radius:7px;font-size:11px;font-weight:600;
-  cursor:pointer;border:none;background:transparent;
-  color:var(--txt2);transition:var(--transition);
-}
-.lang-pill:hover{color:var(--txt)}
-.lang-pill.active{background:var(--bg2);color:var(--acc2);box-shadow:0 1px 4px rgba(0,0,0,.1)}
-
-/* Logo */
-.logo-center{display:flex;align-items:center;gap:10px}
-.logo-mark{
-  width:32px;height:32px;border-radius:10px;
-  background:linear-gradient(135deg,#8b5cf6,#6366f1);
-  display:flex;align-items:center;justify-content:center;
-  font-size:15px;font-weight:900;color:#fff;
-  box-shadow:0 2px 12px rgba(139,92,246,.4);
-}
-.logo-text{font-size:16px;font-weight:700;letter-spacing:-.3px}
-.logo-text span{color:var(--acc2)}
-
-/* Right actions */
-.top-actions{display:flex;align-items:center;gap:8px}
-.action-btn{
-  display:flex;align-items:center;gap:6px;
-  padding:7px 14px;border-radius:10px;
-  border:1px solid var(--bdr);background:var(--bg3);
-  color:var(--txt2);font-size:12px;font-weight:500;
-  cursor:pointer;transition:var(--transition);
-}
-.action-btn:hover{background:var(--bg4);color:var(--txt);border-color:var(--bdr2)}
-.action-btn svg{width:15px;height:15px}
-.action-btn.primary{
-  background:linear-gradient(135deg,#8b5cf6,#6366f1);
-  border:none;color:#fff;font-weight:600;
-  box-shadow:0 2px 8px rgba(139,92,246,.3);
-}
-.action-btn.primary:hover{box-shadow:0 4px 16px rgba(139,92,246,.5);transform:translateY(-1px)}
-
-/* Download dropdown */
-.download-dropdown{
-  position:absolute;top:calc(100% + 8px);right:0;
-  width:240px;background:var(--bg2);border:1px solid var(--bdr);
-  border-radius:var(--radius2);padding:8px;
-  box-shadow:var(--shadow);z-index:100;
-  opacity:0;visibility:hidden;transform:translateY(-8px);
-  transition:var(--transition);
-}
-.download-dropdown.open{opacity:1;visibility:visible;transform:translateY(0)}
-.dl-item{
-  display:flex;align-items:center;gap:10px;
-  padding:10px 12px;border-radius:10px;
-  cursor:pointer;transition:var(--transition);
-}
-.dl-item:hover{background:var(--bg3)}
-.dl-icon{
-  width:34px;height:34px;border-radius:8px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:14px;font-weight:700;
-}
-.dl-icon.glb{background:rgba(34,197,94,.15);color:#22c55e}
-.dl-icon.fbx{background:rgba(59,130,246,.15);color:#3b82f6}
-.dl-icon.obj{background:rgba(245,158,11,.15);color:#f59e0b}
-.dl-icon.png{background:rgba(236,72,153,.15);color:#ec4899}
-.dl-icon.pdf{background:rgba(239,68,68,.15);color:#ef4444}
-.dl-icon.ifc{background:rgba(139,92,246,.15);color:#8b5cf6}
-.dl-name{font-size:12px;font-weight:600;color:var(--txt)}
-.dl-desc{font-size:10px;color:var(--txt3)}
-
-/* ═══════════════════ MAIN ═══════════════════ */
+/* MAIN LAYOUT */
 .main{display:flex;flex:1;overflow:hidden}
 
-/* ═══ PROJECTS SIDEBAR ═══ */
-.projects-panel{
-  width:260px;flex-shrink:0;background:var(--bg2);
-  border-right:1px solid var(--bdr);
-  display:flex;flex-direction:column;overflow:hidden;
-  transition:width .3s cubic-bezier(.4,0,.2,1);
-}
-.projects-panel.collapsed{width:0;border-right:none}
-.pp-header{
-  padding:16px;border-bottom:1px solid var(--bdr);
-  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
-}
-.pp-title{font-size:12px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.8px}
-.pp-close{
-  width:28px;height:28px;border-radius:8px;border:none;
-  background:transparent;color:var(--txt3);cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  transition:var(--transition);font-size:14px;
-}
-.pp-close:hover{background:var(--bg3);color:var(--txt)}
-.pp-search{padding:12px 16px;flex-shrink:0}
-.pp-search input{
-  width:100%;padding:8px 12px;border-radius:10px;
-  border:1px solid var(--bdr);background:var(--bg3);
-  color:var(--txt);font-size:12px;font-family:inherit;
-  outline:none;transition:var(--transition);
-}
-.pp-search input:focus{border-color:var(--acc);box-shadow:0 0 0 2px rgba(139,92,246,.15)}
-.pp-search input::placeholder{color:var(--txt3)}
-.pp-list{flex:1;overflow-y:auto;padding:8px}
-.pp-section-label{font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px;padding:8px 8px 4px}
-.project-card{
-  padding:10px 12px;border-radius:10px;cursor:pointer;
-  transition:var(--transition);margin-bottom:2px;
-  display:flex;align-items:center;gap:10px;
-}
-.project-card:hover{background:var(--bg3)}
-.project-card.active{background:rgba(139,92,246,.1);border-left:3px solid var(--acc)}
-.project-card .pc-icon{
-  width:32px;height:32px;border-radius:8px;
-  background:var(--bg4);display:flex;align-items:center;
-  justify-content:center;font-size:14px;flex-shrink:0;
-}
-.project-card .pc-info{flex:1;min-width:0}
-.project-card .pc-name{font-size:12px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.project-card .pc-meta{font-size:10px;color:var(--txt3);margin-top:1px}
-.project-card .pc-time{font-size:9px;color:var(--txt3);flex-shrink:0}
-.pp-new{
-  margin:8px;padding:10px;border-radius:10px;
-  border:1px dashed var(--bdr2);background:transparent;
-  color:var(--txt2);font-size:12px;font-weight:500;
-  cursor:pointer;transition:var(--transition);
-  display:flex;align-items:center;justify-content:center;gap:6px;
-  font-family:inherit;width:calc(100% - 16px);
-}
-.pp-new:hover{border-color:var(--acc);color:var(--acc2);background:rgba(139,92,246,.05)}
+/* CHAT PANEL */
+.chat{width:380px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid #1e1e23;background:#0a0a0c}
+.messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
 
-/* ═══ CHAT SIDEBAR ═══ */
-.chat-panel{
-  width:400px;flex-shrink:0;background:var(--bg);
-  display:flex;flex-direction:column;overflow:hidden;
-  border-right:1px solid var(--bdr);
-}
-.chat-messages{
-  flex:1;overflow-y:auto;min-height:0;
-  padding:16px;display:flex;flex-direction:column;gap:12px;
-}
-.welcome{
-  flex:1;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;
-  gap:20px;padding:20px;text-align:center;
-}
-.welcome-icon{
-  width:64px;height:64px;border-radius:18px;
-  background:linear-gradient(135deg,rgba(139,92,246,.15),rgba(99,102,241,.15));
-  display:flex;align-items:center;justify-content:center;font-size:28px;
-}
-.welcome h2{font-size:22px;font-weight:700;color:var(--txt);line-height:1.3}
-.welcome p{font-size:13px;color:var(--txt2);max-width:280px;line-height:1.6}
-.quick-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:8px}
-.qa-btn{
-  padding:8px 16px;border-radius:20px;
-  border:1px solid var(--bdr2);background:var(--bg2);
-  color:var(--txt2);font-size:12px;font-weight:500;
-  cursor:pointer;transition:var(--transition);
-  display:flex;align-items:center;gap:6px;font-family:inherit;
-}
-.qa-btn:hover{border-color:var(--acc);color:var(--acc2);background:rgba(139,92,246,.08)}
-.qa-btn .qa-icon{font-size:14px}
+/* Welcome */
+.welcome{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px;text-align:center}
+.welcome-icon{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,rgba(139,92,246,.12),rgba(99,102,241,.1));display:flex;align-items:center;justify-content:center;font-size:24px}
+.welcome h2{font-size:20px;font-weight:700;line-height:1.3}
+.welcome p{font-size:12px;color:#71717a;max-width:260px;line-height:1.6}
+.quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%;max-width:300px;margin-top:8px}
+.qbtn{padding:10px;border-radius:10px;border:1px solid #27272a;background:#121214;color:#a1a1aa;font-size:11px;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s;display:flex;align-items:center;gap:8px}
+.qbtn:hover{border-color:#8b5cf6;color:#a78bfa;background:rgba(139,92,246,.06)}
+.qbtn .qi{font-size:16px}
+.qbtn .qt{font-weight:600;font-size:11px}
+.qbtn .qd{font-size:9px;color:#52525b;margin-top:1px}
 
 /* Messages */
-.msg{max-width:85%;display:flex;flex-direction:column}
-.msg.user{align-self:flex-end}
-.msg.assistant{align-self:flex-start}
-.msg-meta{font-size:10px;color:var(--txt3);margin-bottom:4px;display:flex;align-items:center;gap:6px}
-.msg-avatar{
-  width:22px;height:22px;border-radius:6px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:9px;font-weight:700;color:#fff;
-}
-.msg-avatar.ai{background:linear-gradient(135deg,#8b5cf6,#6366f1)}
-.msg-avatar.user-av{background:var(--bg4)}
-.bubble{
-  padding:10px 14px;border-radius:14px;
-  font-size:13px;line-height:1.6;
-  box-shadow:0 1px 3px rgba(0,0,0,.1);
-}
-.msg.user .bubble{
-  background:var(--bubble-user);color:var(--bubble-user-txt);
-  border-radius:16px 16px 4px 16px;
-}
-.msg.assistant .bubble{
-  background:var(--bg2);border:1px solid var(--bdr);
-  color:var(--txt);border-radius:4px 16px 16px 16px;
-}
-.typing{display:flex;gap:5px;padding:12px 16px;background:var(--bg2);border:1px solid var(--bdr);border-radius:4px 16px 16px 16px;align-self:flex-start}
-.typing-dot{
-  width:6px;height:6px;border-radius:50%;background:var(--acc);
-  animation:typeBounce .9s infinite;
-}
-.typing-dot:nth-child(2){animation-delay:.17s}
-.typing-dot:nth-child(3){animation-delay:.34s}
-@keyframes typeBounce{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-4px)}}
+.msg{max-width:90%;display:flex;flex-direction:column}.msg.user{align-self:flex-end}.msg.ai{align-self:flex-start}
+.bubble{padding:10px 14px;border-radius:14px;font-size:13px;line-height:1.6}
+.msg.user .bubble{background:linear-gradient(135deg,#7c3aed,#6366f1);color:#fff;border-radius:16px 16px 4px 16px}
+.msg.ai .bubble{background:#18181b;border:1px solid #27272a;color:#e4e4e7;border-radius:4px 16px 16px 16px}
+.msg-time{font-size:9px;color:#52525b;margin-top:3px}
+.msg.user .msg-time{text-align:right}
 
-/* ═══ INPUT ═══ */
-.input-area{
-  padding:12px 16px 16px;flex-shrink:0;
-  background:linear-gradient(180deg,transparent,var(--bg) 20%);
-}
-.input-box{
-  background:var(--bg2);border:1px solid var(--bdr);
-  border-radius:var(--radius2);overflow:hidden;
-  transition:var(--transition);box-shadow:var(--input-shadow);
-}
-.input-box:focus-within{border-color:var(--acc);box-shadow:0 0 0 2px rgba(139,92,246,.15),var(--input-shadow)}
-.input-toolbar{display:flex;align-items:center;gap:2px;padding:8px 12px 4px}
-.toolbar-btn{
-  width:32px;height:32px;border-radius:8px;border:none;
-  background:transparent;color:var(--txt3);
-  cursor:pointer;display:flex;align-items:center;justify-content:center;
-  transition:var(--transition);font-size:14px;
-}
-.toolbar-btn:hover{background:var(--bg3);color:var(--txt)}
-.toolbar-btn.active{background:rgba(139,92,246,.15);color:var(--acc2)}
-.toolbar-sep{width:1px;height:20px;background:var(--bdr);margin:0 4px}
-.input-row{display:flex;align-items:flex-end;gap:8px;padding:4px 12px 10px}
-.text-input{
-  flex:1;background:transparent;border:none;outline:none;
-  color:var(--txt);font-family:'Inter',sans-serif;
-  font-size:14px;resize:none;min-height:24px;max-height:160px;line-height:1.6;
-}
-.text-input::placeholder{color:var(--txt3);opacity:.7}
-.send-btn{
-  width:36px;height:36px;border-radius:10px;border:none;
-  background:linear-gradient(135deg,#8b5cf6,#6366f1);
-  color:#fff;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  transition:var(--transition);flex-shrink:0;
-  box-shadow:0 2px 8px rgba(139,92,246,.3);
-}
-.send-btn:hover{box-shadow:0 4px 16px rgba(139,92,246,.5);transform:scale(1.05)}
-.send-btn:active{transform:scale(.95)}
-.send-btn svg{width:18px;height:18px}
-.send-btn.recording{
-  background:linear-gradient(135deg,#ef4444,#dc2626);
-  box-shadow:0 2px 8px rgba(239,68,68,.4);
-  animation:recordPulse 1.5s infinite;
-}
-@keyframes recordPulse{0%,100%{box-shadow:0 2px 8px rgba(239,68,68,.4)}50%{box-shadow:0 2px 20px rgba(239,68,68,.6)}}
-.input-hint{text-align:center;padding:4px 0 0;font-size:10px;color:var(--txt3)}
-.file-preview{
-  display:none;margin:8px 12px 4px;padding:8px;
-  background:var(--bg3);border:1px solid var(--bdr);
-  border-radius:10px;align-items:center;gap:8px;
-}
-.file-preview img{width:36px;height:36px;object-fit:cover;border-radius:6px}
-.file-preview .fp-name{flex:1;font-size:11px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.file-preview .fp-remove{
-  width:24px;height:24px;border-radius:6px;border:none;
-  background:transparent;color:var(--txt3);cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  transition:var(--transition);font-size:12px;
-}
-.file-preview .fp-remove:hover{background:var(--bg4);color:var(--err)}
+/* Typing */
+.typing{display:flex;gap:4px;padding:10px 14px;background:#18181b;border:1px solid #27272a;border-radius:4px 16px 16px 16px;align-self:flex-start}
+.typing-dot{width:5px;height:5px;border-radius:50%;background:#8b5cf6;animation:bounce .9s infinite}
+.typing-dot:nth-child(2){animation-delay:.17s}.typing-dot:nth-child(3){animation-delay:.34s}
+@keyframes bounce{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
 
-/* ═══ VIEWER ═══ */
-.viewer{flex:1;display:flex;flex-direction:column;min-width:0}
-.v-toolbar{
-  height:48px;background:var(--bg2);border-bottom:1px solid var(--bdr);
-  display:flex;align-items:center;justify-content:space-between;
-  padding:0 16px;flex-shrink:0;
-}
-.v-tabs{display:flex;gap:2px;background:var(--bg3);padding:3px;border-radius:10px}
-.v-tab{
-  padding:6px 14px;border-radius:7px;font-size:12px;font-weight:500;
-  cursor:pointer;border:none;background:transparent;
-  color:var(--txt2);transition:var(--transition);
-  display:flex;align-items:center;gap:5px;
-}
-.v-tab:hover{color:var(--txt)}
-.v-tab.active{background:var(--bg2);color:var(--acc2);font-weight:600;box-shadow:0 1px 4px rgba(0,0,0,.1)}
-.v-tab .tab-icon{font-size:13px}
-.v-tools{display:flex;gap:4px}
-.v-tool{
-  width:34px;height:34px;border-radius:8px;border:1px solid var(--bdr);
-  background:var(--bg3);color:var(--txt2);cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  transition:var(--transition);font-size:14px;
-}
-.v-tool:hover{background:var(--bg4);color:var(--txt);border-color:var(--bdr2)}
-.v-tool.active{background:rgba(139,92,246,.15);color:var(--acc2);border-color:var(--acc)}
-.canvas-wrap{flex:1;position:relative;overflow:hidden;background:var(--canvas-bg)}
+/* Input */
+.input-area{padding:10px 12px 14px;flex-shrink:0;background:linear-gradient(180deg,transparent,#0a0a0c 20%)}
+.input-box{background:#121214;border:1px solid #27272a;border-radius:14px;display:flex;align-items:flex-end;padding:8px 10px;transition:all .15s}
+.input-box:focus-within{border-color:#8b5cf6;box-shadow:0 0 0 2px rgba(139,92,246,.12)}
+textarea{flex:1;background:transparent;border:none;outline:none;color:#e4e4e7;font-family:inherit;font-size:13px;resize:none;min-height:22px;max-height:100px;line-height:1.5}
+textarea::placeholder{color:#52525b}
+.send{width:34px;height:34px;border-radius:10px;border:none;background:linear-gradient(135deg,#7c3aed,#6366f1);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
+.send:hover{box-shadow:0 4px 16px rgba(139,92,246,.4);transform:scale(1.05)}
+.send:active{transform:scale(.95)}
+.send svg{width:16px;height:16px}
+.input-hint{text-align:center;padding:3px 0 0;font-size:9px;color:#3f3f46}
+
+/* VIEWER */
+.viewer{flex:1;display:flex;flex-direction:column;min-width:0;background:#121214}
+.v-bar{height:44px;background:#121214;border-bottom:1px solid #1e1e23;display:flex;align-items:center;justify-content:space-between;padding:0 12px;flex-shrink:0}
+.v-tabs{display:flex;gap:2px;background:#18181b;padding:2px;border-radius:8px}
+.vtab{padding:5px 12px;border-radius:6px;font-size:11px;font-weight:500;cursor:pointer;border:none;background:transparent;color:#71717a;transition:all .15s;font-family:inherit}
+.vtab:hover{color:#e4e4e7}.vtab.active{background:#27272a;color:#a78bfa;font-weight:600}
+.v-tools{display:flex;gap:3px}
+.vtool{width:30px;height:30px;border-radius:7px;border:1px solid #27272a;background:#18181b;color:#71717a;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .15s}
+.vtool:hover{background:#27272a;color:#e4e4e7}
+
+/* Canvas */
+.canvas-wrap{flex:1;position:relative;overflow:hidden;background:#18181b}
 #c3d{width:100%;height:100%;display:block;cursor:grab}
 #c3d:active{cursor:grabbing}
-.empty-state{
-  position:absolute;inset:0;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:16px;
-  color:var(--txt2);pointer-events:none;
-}
-.empty-icon{
-  width:80px;height:80px;border-radius:24px;
-  background:linear-gradient(135deg,rgba(139,92,246,.1),rgba(99,102,241,.08));
-  display:flex;align-items:center;justify-content:center;font-size:36px;
-}
-.empty-title{font-size:16px;font-weight:700;color:var(--txt)}
-.empty-sub{font-size:12px;max-width:300px;text-align:center;line-height:1.6;color:var(--txt3)}
-.empty-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;pointer-events:all;margin-top:8px}
-.empty-btn{
-  padding:8px 16px;border-radius:10px;
-  border:1px solid var(--bdr2);background:var(--bg2);
-  color:var(--txt2);font-size:12px;font-weight:500;
-  cursor:pointer;transition:var(--transition);
-  display:flex;align-items:center;gap:6px;font-family:inherit;
-}
-.empty-btn:hover{border-color:var(--acc);color:var(--acc2);background:rgba(139,92,246,.08)}
-.gen-overlay{
-  position:absolute;inset:0;background:rgba(15,15,17,.85);
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-  display:none;flex-direction:column;align-items:center;
-  justify-content:center;gap:16px;z-index:10;
-}
-[data-theme="light"] .gen-overlay{background:rgba(248,249,250,.9)}
-.gen-spinner{
-  width:48px;height:48px;border:3px solid var(--bg4);
-  border-top-color:var(--acc);border-radius:50%;
-  animation:spin 1s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg)}}
-.gen-title{font-size:15px;font-weight:700;color:var(--txt)}
-.gen-sub{font-size:11px;color:var(--txt2)}
-.gen-bar{width:240px;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden}
-.gen-fill{height:100%;background:linear-gradient(90deg,#8b5cf6,#6366f1);border-radius:2px;transition:width .4s;width:0}
-.gen-steps{display:flex;flex-direction:column;gap:4px;width:280px;margin-top:4px}
-.gen-step{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--txt3)}
-.gen-step.done{color:var(--ok)}
-.gen-step.active{color:var(--acc2);font-weight:600}
-.gen-step-icon{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0}
-.gen-step.done .gen-step-icon{background:rgba(34,197,94,.15);color:var(--ok)}
-.gen-step.active .gen-step-icon{background:rgba(139,92,246,.15);color:var(--acc2);animation:pulse 1.5s infinite}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
-.v-badge{
-  position:absolute;top:12px;left:50%;transform:translateX(-50%);
-  background:var(--glass);border:1px solid var(--bdr);
-  border-radius:20px;padding:5px 16px;font-size:11px;
-  pointer-events:none;display:none;white-space:nowrap;
-  color:var(--txt);backdrop-filter:blur(10px);
-}
-.v-hint{
-  position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
-  background:var(--glass);border:1px solid var(--bdr);
-  border-radius:20px;padding:5px 16px;font-size:10px;
-  color:var(--txt2);pointer-events:none;white-space:nowrap;display:none;
-  backdrop-filter:blur(10px);
-}
-.notif{
-  position:fixed;bottom:20px;right:20px;
-  background:var(--bg2);border:1px solid var(--bdr);
-  border-radius:var(--radius);padding:12px 16px;
-  font-size:12px;display:none;align-items:center;gap:8px;
-  box-shadow:var(--shadow);border-left:3px solid var(--ok);
-  z-index:200;color:var(--txt);
-}
+.empty-state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#52525b;pointer-events:none}
+.empty-icon{width:64px;height:64px;border-radius:18px;background:rgba(139,92,246,.08);display:flex;align-items:center;justify-content:center;font-size:28px}
+.empty-title{font-size:14px;font-weight:600;color:#a1a1aa}
+.empty-sub{font-size:11px;max-width:260px;text-align:center;line-height:1.5}
 
-/* ═══ RESPONSIVE ═══ */
-@media(max-width:1200px){.projects-panel{width:220px}.chat-panel{width:360px}}
-@media(max-width:1024px){.projects-panel{display:none}.chat-panel{width:340px}}
-@media(min-width:769px) and (max-width:1024px){
-  .chat-panel{position:fixed;left:0;top:52px;bottom:0;z-index:40;width:380px;box-shadow:4px 0 20px rgba(0,0,0,.15)}
-  .main{margin-left:380px}
-  .viewer{height:calc(100vh - 52px)}
-}
-@media(max-width:768px){
-  .top{height:52px;padding:0 12px}
-  .logo-text{display:none}.account-info{display:none}
-  .projects-panel{display:none}
-  .mobile-menu-btn{display:block!important}
-  .chat-panel{
-    position:fixed;left:0;top:52px;bottom:0;z-index:40;
-    transform:translateX(-100%);transition:transform .3s;
-    box-shadow:4px 0 20px rgba(0,0,0,.3);width:100vw;
-  }
-  .chat-panel.open{transform:translateX(0)}
-  .main{flex-direction:column}
-  .viewer{height:calc(100vh - 52px)}
-  .text-input{min-height:48px;font-size:16px}
-  .input-box{border-radius:var(--radius)}
-  .send-btn{width:40px;height:40px}
-  .action-btn span{display:none}.action-btn{padding:7px}
-}
-@media(min-width:769px) and (max-width:1024px){.text-input{min-height:36px}}
-.mobile-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:39}
-.mobile-overlay.open{display:block}
+/* Gen overlay */
+.gen-overlay{position:absolute;inset:0;background:rgba(10,10,12,.9);backdrop-filter:blur(12px);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:10}
+.gen-spinner{width:40px;height:40px;border:3px solid #27272a;border-top-color:#8b5cf6;border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.gen-title{font-size:14px;font-weight:700;color:#e4e4e7}
+.gen-sub{font-size:11px;color:#71717a}
+.gen-bar{width:200px;height:3px;background:#27272a;border-radius:2px;overflow:hidden}
+.gen-fill{height:100%;background:linear-gradient(90deg,#8b5cf6,#6366f1);border-radius:2px;transition:width .4s;width:0}
+.gen-steps{display:flex;flex-direction:column;gap:3px;width:240px;margin-top:4px}
+.gen-step{display:flex;align-items:center;gap:8px;font-size:10px;color:#52525b}
+.gen-step.done{color:#22c55e}.gen-step.active{color:#a78bfa;font-weight:600}
+.gen-step-icon{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0}
+.gen-step.done .gen-step-icon{background:rgba(34,197,94,.15);color:#22c55e}
+.gen-step.active .gen-step-icon{background:rgba(139,92,246,.15);color:#a78bfa;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+
+/* Badge */
+.v-badge{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(18,18,22,.85);border:1px solid #27272a;border-radius:16px;padding:4px 12px;font-size:10px;pointer-events:none;display:none;white-space:nowrap;color:#a1a1aa;backdrop-filter:blur(8px)}
+.v-hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(18,18,22,.85);border:1px solid #27272a;border-radius:16px;padding:4px 12px;font-size:9px;color:#52525b;pointer-events:none;white-space:nowrap;display:none;backdrop-filter:blur(8px)}
+
+/* Notification */
+.notif{position:fixed;bottom:16px;right:16px;background:#18181b;border:1px solid #27272a;border-radius:10px;padding:10px 14px;font-size:11px;display:none;align-items:center;gap:8px;box-shadow:0 8px 32px rgba(0,0,0,.4);border-left:3px solid #22c55e;z-index:200;color:#e4e4e7}
+
+/* Reasoning card */
+.reasoning-card{background:#121214;border:1px solid #27272a;border-radius:12px;padding:12px;margin:4px 0}
+.reasoning-title{font-size:12px;font-weight:700;color:#a78bfa;margin-bottom:8px}
+.reasoning-step{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px;color:#a1a1aa}
+.rs-icon{color:#8b5cf6;font-size:10px}
+
+/* Decomposition */
+.decomp-tree{background:#121214;border:1px solid #27272a;border-radius:12px;padding:12px;margin:4px 0}
+.decomp-title{font-size:12px;font-weight:700;color:#a78bfa;margin-bottom:8px}
+.decomp-item{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px}
+.di-num{width:20px;height:20px;border-radius:50%;background:rgba(139,92,246,.12);color:#a78bfa;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0}
+.di-line{flex:1;color:#a1a1aa}
+.di-service{font-size:9px;color:#52525b}
+
+/* Export panel */
+.export-panel{position:absolute;top:10px;right:10px;background:rgba(18,18,22,.9);border:1px solid #27272a;border-radius:10px;padding:8px;display:none;flex-direction:column;gap:4px;z-index:10;backdrop-filter:blur(8px)}
+.export-btn{padding:6px 12px;border-radius:7px;border:1px solid #27272a;background:#18181b;color:#a1a1aa;font-size:10px;cursor:pointer;font-family:inherit;transition:all .15s;text-align:left;display:flex;align-items:center;gap:6px}
+.export-btn:hover{background:#27272a;color:#e4e4e7;border-color:#3f3f46}
+
+/* Responsive */
+@media(max-width:900px){.chat{width:100%;position:fixed;left:0;top:52px;bottom:0;z-index:40;transform:translateX(-100%);transition:transform .3s}.chat.open{transform:translateX(0)}.viewer{height:calc(100vh - 52px)}}
+
+/* Quality selector */
+.quality-pills{display:flex;gap:3px;background:#18181b;padding:2px;border-radius:8px}
+.qpill{padding:4px 10px;border-radius:6px;font-size:10px;font-weight:500;cursor:pointer;border:none;background:transparent;color:#71717a;transition:all .15s;font-family:inherit}
+.qpill:hover{color:#e4e4e7}.qpill.active{background:#27272a;color:#a78bfa;font-weight:600}
 </style>
 </head>
 <body>
 
-<!-- ═══ TOP BAR ═══ -->
 <div class="top">
-  <div style="display:flex;align-items:center;gap:8px">
-    <button class="mobile-menu-btn" id="mobileMenuBtn" onclick="openMobile()" style="display:none;background:none;border:none;cursor:pointer;padding:6px;color:var(--txt)">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-    </button>
-    <button class="account-btn" id="accountBtn" onclick="toggleAccount()">
-      <div class="account-avatar">A</div>
-      <div class="account-info">
-        <div class="account-name" data-i18n="accountName">Architect Pro</div>
-        <div class="account-plan" data-i18n="accountPlan">Pro план</div>
-      </div>
-      <div class="account-dropdown" id="accountDropdown">
-        <div class="ad-header">
-          <div class="ad-avatar">A</div>
-          <div>
-            <div class="ad-name">Architect Pro</div>
-            <div class="ad-email">user@architect.ai</div>
-          </div>
-        </div>
-        <!-- Token usage -->
-        <div class="token-section">
-          <div class="token-label">
-            <span data-i18n="tokensUsed">Использовано токенов</span>
-            <span class="token-count">12,480 / 50,000</span>
-          </div>
-          <div class="token-bar"><div class="token-fill" style="width:25%"></div></div>
-          <div class="token-stats">
-            <span data-i18n="today">Сегодня: 1,240</span>
-            <span data-i18n="remaining">Осталось: 37,520</span>
-          </div>
-        </div>
-
-        <div class="ad-tiers">
-          <div class="ad-tier"><div class="ad-tier-name">Free</div><div class="ad-tier-price">$0</div></div>
-          <div class="ad-tier active"><div class="ad-tier-name">Pro</div><div class="ad-tier-price">$29</div></div>
-          <div class="ad-tier"><div class="ad-tier-name">Team</div><div class="ad-tier-price">$99</div></div>
-        </div>
-
-        <!-- SETTINGS SECTION -->
-        <div class="ad-divider"></div>
-        <div class="ad-section-title" data-i18n="settings">Настройки</div>
-
-        <!-- Theme -->
-        <div class="setting-row">
-          <div class="setting-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-            <span data-i18n="theme">Тема</span>
-          </div>
-          <div class="theme-pills">
-            <button class="theme-pill" data-theme-val="light" onclick="setTheme('light')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-              <span data-i18n="light">Светлая</span>
-            </button>
-            <button class="theme-pill active" data-theme-val="dark" onclick="setTheme('dark')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-              <span data-i18n="dark">Тёмная</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Language -->
-        <div class="setting-row">
-          <div class="setting-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-            <span data-i18n="language">Язык</span>
-          </div>
-          <div class="lang-pills">
-            <button class="lang-pill active" data-lang="ru" onclick="setLang('ru')">RU</button>
-            <button class="lang-pill" data-lang="en" onclick="setLang('en')">EN</button>
-          </div>
-        </div>
-
-<!-- Backend URL hidden from users (v13.6.1) -->
-      </div>
-    </button>
-  </div>
-
-  <div class="logo-center">
+  <div class="logo">
     <div class="logo-mark">A</div>
     <div class="logo-text">Architect<span>.ai</span></div>
   </div>
-
-  <div class="top-actions">
-    <button class="action-btn" onclick="newProject()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      <span data-i18n="newBtn">Новый</span>
-    </button>
-    <button class="action-btn" onclick="shareProject()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-      <span data-i18n="shareBtn">Поделиться</span>
-    </button>
-    <div style="position:relative">
-      <button class="action-btn primary" id="downloadBtn" onclick="toggleDownload()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span data-i18n="downloadBtn">Скачать</span>
-      </button>
-      <div class="download-dropdown" id="downloadDropdown">
-        <div class="dl-item" onclick="downloadFormat('glb')"><div class="dl-icon glb">3D</div><div><div class="dl-name">GLB / GLTF</div><div class="dl-desc" data-i18n="dlGlb">3D модель, совместима с Unity, Web</div></div></div>
-        <div class="dl-item" onclick="downloadFormat('fbx')"><div class="dl-icon fbx">FB</div><div><div class="dl-name">FBX</div><div class="dl-desc" data-i18n="dlFbx">Для Unreal, Maya, 3ds Max</div></div></div>
-        <div class="dl-item" onclick="downloadFormat('obj')"><div class="dl-icon obj">OB</div><div><div class="dl-name">OBJ + MTL</div><div class="dl-desc" data-i18n="dlObj">Универсальный формат + материалы</div></div></div>
-        <div class="dl-item" onclick="downloadFormat('png')"><div class="dl-icon png">🖼</div><div><div class="dl-name">PNG 16K</div><div class="dl-desc" data-i18n="dlPng">Рендер 15360×8640 px</div></div></div>
-        <div class="dl-item" onclick="downloadFormat('pdf')"><div class="dl-icon pdf">PDF</div><div><div class="dl-name">PDF план</div><div class="dl-desc" data-i18n="dlPdf">Архитектурные чертежи + 3D</div></div></div>
-        <div class="dl-item" onclick="downloadFormat('ifc')"><div class="dl-icon ifc">IF</div><div><div class="dl-name">IFC (BIM)</div><div class="dl-desc" data-i18n="dlIfc">Строительный информационный модель</div></div></div>
-      </div>
+  <div class="top-right">
+    <div class="quality-pills">
+      <button class="qpill active" data-q="fast" onclick="setQuality('fast')">Быстро</button>
+      <button class="qpill" data-q="standard" onclick="setQuality('standard')">Стандарт</button>
+      <button class="qpill" data-q="high" onclick="setQuality('high')">Качество</button>
     </div>
+    <button class="top-btn" onclick="toggleExport()">📥 Экспорт</button>
+    <div class="status-dot" id="statusDot" title="Backend status"></div>
   </div>
 </div>
 
-<!-- ═══ MAIN ═══ -->
 <div class="main">
-  <div class="mobile-overlay" id="mobileOverlay" onclick="closeMobile()"></div>
-
-  <!-- PROJECTS SIDEBAR -->
-  <div class="projects-panel collapsed" id="projectsPanel">
-    <div class="pp-header">
-      <div class="pp-title" data-i18n="projects">Проекты</div>
-      <button class="pp-close" onclick="toggleProjects()">✕</button>
-    </div>
-    <div class="pp-search">
-      <input type="text" data-i18n-placeholder="searchProjects" placeholder="Поиск проектов…" id="projSearch" oninput="filterProjects(this.value)">
-    </div>
-    <div class="pp-list" id="projList">
-      <div class="pp-section-label" data-i18n="todayLabel">Сегодня</div>
-      <div class="project-card active" onclick="selectProject(this,'Коттедж 12×15')">
-        <div class="pc-icon">🏠</div>
-        <div class="pc-info"><div class="pc-name">Коттедж 12×15</div><div class="pc-meta" data-i18n="proj1meta">2 этажа · дерево</div></div>
-        <div class="pc-time">14:30</div>
-      </div>
-      <div class="project-card" onclick="selectProject(this,'Офис 5 этажей')">
-        <div class="pc-icon">🏢</div>
-        <div class="pc-info"><div class="pc-name">Офис 5 этажей</div><div class="pc-meta" data-i18n="proj2meta">стекло · плоская кровля</div></div>
-        <div class="pc-time">11:20</div>
-      </div>
-      <div class="pp-section-label" data-i18n="yesterdayLabel">Вчера</div>
-      <div class="project-card" onclick="selectProject(this,'Таунхаус')">
-        <div class="pc-icon">🏘</div>
-        <div class="pc-info"><div class="pc-name">Таунхаус минимализм</div><div class="pc-meta">3 этажа · 8×16</div></div>
-        <div class="pc-time">18:45</div>
-      </div>
-      <div class="project-card" onclick="selectProject(this,'Ванная')">
-        <div class="pc-icon">🛁</div>
-        <div class="pc-info"><div class="pc-name" data-i18n="proj4name">Ванная комната</div><div class="pc-meta" data-i18n="proj4meta">джакузи · мрамор</div></div>
-        <div class="pc-time">16:10</div>
-      </div>
-      <div class="pp-section-label" data-i18n="earlierLabel">Ранее</div>
-      <div class="project-card" onclick="selectProject(this,'Отель')">
-        <div class="pc-icon">🏨</div>
-        <div class="pc-info"><div class="pc-name" data-i18n="proj5name">Отель 12 этажей</div><div class="pc-meta" data-i18n="proj5meta">современный · бассейн</div></div>
-        <div class="pc-time">28 июл</div>
-      </div>
-    </div>
-    <button class="pp-new" onclick="newProject()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      <span data-i18n="newProject">Новый проект</span>
-    </button>
-  </div>
-
-  <!-- CHAT SIDEBAR -->
-  <div class="chat-panel" id="chatPanel">
-    <div class="chat-messages" id="chatMessages">
-      <div class="welcome" id="welcomeScreen">
+  <div class="chat" id="chatPanel">
+    <div class="messages" id="msgs">
+      <div class="welcome" id="welcome">
         <div class="welcome-icon">🏗</div>
-        <h2 data-i18n="welcomeTitle">Что вы хотите<br>построить?</h2>
-        <p data-i18n="welcomeSub">Опишите здание или интерьер — я сгенерирую 3D-модель с рендером</p>
-        <div class="quick-actions">
-          <button class="qa-btn" onclick="go('жилой дом 2 этажа кирпич 10×12')"><span class="qa-icon">🏠</span> <span data-i18n="qaHouse">Дом</span></button>
-          <button class="qa-btn" onclick="go('офис 5 этажей стекло 20×24')"><span class="qa-icon">🏢</span> <span data-i18n="qaOffice">Офис</span></button>
-          <button class="qa-btn" onclick="go('коттедж 12×15 дерево терраса')"><span class="qa-icon">🌲</span> <span data-i18n="qaCottage">Коттедж</span></button>
-          <button class="qa-btn" onclick="go('ванная с джакузи мрамор')"><span class="qa-icon">🛁</span> <span data-i18n="qaInterior">Интерьер</span></button>
+        <h2>Что построим?</h2>
+        <p>Опишите здание или интерьер — AI сгенерирует 3D модель с рендером</p>
+        <div class="quick-grid">
+          <button class="qbtn" onclick="quick('Современный коттедж 2 этажа 12×10 из кирпича с панорамными окнами')"><span class="qi">🏠</span><div><div class="qt">Коттедж</div><div class="qd">2 этажа · кирпич</div></div></button>
+          <button class="qbtn" onclick="quick('Ванная комната хайтек 3×4 с джакузи и мрамором')"><span class="qi">🛁</span><div><div class="qt">Ванная</div><div class="qd">хайтек · джакузи</div></div></button>
+          <button class="qbtn" onclick="quick('Кухня в стиле лофт 4×5 с кирпичной кладкой и барной стойкой')"><span class="qi">🍳</span><div><div class="qt">Кухня</div><div class="qd">лофт · барная стойка</div></div></button>
+          <button class="qbtn" onclick="quick('Современный офис 8×10 со стеклянным фасадом')"><span class="qi">🏢</span><div><div class="qt">Офис</div><div class="qd">стекло · современный</div></div></button>
+          <button class="qbtn" onclick="quick('Спальня минимализм 4×5 с кроватью и гардеробом')"><span class="qi">🛏</span><div><div class="qt">Спальня</div><div class="qd">минимализм</div></div></button>
+          <button class="qbtn" onclick="quick('Таунхаус 3 этажа 8×16 в стиле минимализм')"><span class="qi">🏘</span><div><div class="qt">Таунхаус</div><div class="qd">3 этажа · минимализм</div></div></button>
         </div>
       </div>
     </div>
     <div class="input-area">
       <div class="input-box">
-        <div class="input-toolbar">
-          <button class="toolbar-btn" onclick="document.getElementById('fileIn').click()" data-i18n-title="uploadPhoto">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          </button>
-          <button class="toolbar-btn" onclick="attachFile()" data-i18n-title="attachFile">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-          </button>
-          <div class="toolbar-sep"></div>
-          <button class="toolbar-btn" id="micBtn" onclick="toggleMic()" data-i18n-title="voiceInput">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-          </button>
-          <button class="toolbar-btn" data-i18n-title="genSettings">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          </button>
-        </div>
-        <div class="input-row">
-          <textarea class="text-input" id="msgInput" data-i18n-placeholder="inputPlaceholder" placeholder="Опишите здание или интерьер…" rows="1"
-            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"
-            oninput="autoResize(this)"></textarea>
-          <button class="send-btn" id="sendBtn" onclick="sendMessage()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-          </button>
-        </div>
-        <div class="file-preview" id="filePreview">
-          <img id="fpImg" src="" alt="">
-          <span class="fp-name" id="fpName"></span>
-          <button class="fp-remove" onclick="clearFile()">✕</button>
-        </div>
+        <textarea id="inp" placeholder="Опишите здание или интерьер…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"></textarea>
+        <button class="send" onclick="send()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
       </div>
-      <div class="input-hint" data-i18n="inputHint">Enter — отправить · Shift+Enter — новая строка</div>
+      <div class="input-hint">Enter — отправить · Shift+Enter — новая строка</div>
     </div>
-    <input type="file" id="fileIn" accept="image/*,.pdf,.dwg,.dxf" style="display:none" onchange="handleFile(this.files[0])">
   </div>
 
-  <!-- VIEWER -->
   <div class="viewer">
-    <div class="v-toolbar">
+    <div class="v-bar">
       <div class="v-tabs">
-        <button class="v-tab active" onclick="setView(this,'ext')"><span class="tab-icon">◆</span> <span data-i18n="tab3d">3D</span></button>
-        <button class="v-tab" onclick="setView(this,'int')"><span class="tab-icon">◻</span> <span data-i18n="tabInside">Внутри</span></button>
-        <button class="v-tab" onclick="setView(this,'plan')"><span class="tab-icon">⊞</span> <span data-i18n="tabPlan">План</span></button>
-        <button class="v-tab" onclick="setView(this,'sec')"><span class="tab-icon">⊟</span> <span data-i18n="tabSection">Разрез</span></button>
-        <button class="v-tab" onclick="setView(this,'fac')"><span class="tab-icon">⊠</span> <span data-i18n="tabFacade">Фасад</span></button>
+        <button class="vtab active" onclick="setView(this,'3d')">◆ 3D</button>
+        <button class="vtab" onclick="setView(this,'plan')">⊞ План</button>
+        <button class="vtab" onclick="setView(this,'section')">⊟ Разрез</button>
       </div>
       <div class="v-tools">
-        <button class="v-tool" onclick="resetCamera()" data-i18n-title="resetCam">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-        </button>
-        <button class="v-tool" id="dimBtn" onclick="toggleDimensions()" data-i18n-title="dimensions">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 3H3v7h18V3z"/><path d="M21 14H3v7h18v-7z"/></svg>
-        </button>
-        <button class="v-tool" id="wireBtn" onclick="toggleWireframe()" data-i18n-title="wireframe">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-        </button>
+        <button class="vtool" onclick="resetCamera()" title="Сброс камеры">↺</button>
+        <button class="vtool" onclick="toggleWireframe()" title="Каркас">▦</button>
+        <button class="vtool" onclick="toggleGrid()" title="Сетка">⊞</button>
       </div>
     </div>
     <div class="canvas-wrap" id="canvasWrap">
       <div class="empty-state" id="emptyState">
         <div class="empty-icon">🏗</div>
-        <div class="empty-title" data-i18n="emptyTitle">Опишите здание в чате</div>
-        <div class="empty-sub" data-i18n="emptySub">Напишите тип, этажи, материал, размеры — 3D появится сразу</div>
-        <div class="empty-actions">
-          <button class="empty-btn" onclick="go('жилой дом 2 этажа кирпич 10×12')"><span>🏠</span> <span data-i18n="qaHouse">Дом</span></button>
-          <button class="empty-btn" onclick="go('офис 5 этажей стекло 20×24')"><span>🏢</span> <span data-i18n="qaOffice">Офис</span></button>
-          <button class="empty-btn" onclick="go('коттедж 12×15 дерево')"><span>🌲</span> <span data-i18n="qaCottage">Коттедж</span></button>
-        </div>
+        <div class="empty-title">3D модель появится здесь</div>
+        <div class="empty-sub">Опишите здание в чате — AI сгенерирует 3D модель за несколько секунд</div>
       </div>
       <canvas id="c3d" style="display:none"></canvas>
       <div class="gen-overlay" id="genOverlay">
         <div class="gen-spinner"></div>
-        <div class="gen-title" id="genTitle" data-i18n="genReading">Читаю описание…</div>
+        <div class="gen-title" id="genTitle">Анализирую описание…</div>
         <div class="gen-sub" id="genSub"></div>
         <div class="gen-bar"><div class="gen-fill" id="genFill"></div></div>
         <div class="gen-steps" id="genSteps"></div>
       </div>
       <div class="v-badge" id="vBadge"></div>
-      <div class="v-hint" id="vHint" data-i18n="viewerHint">🖱 тащи = вращение · колесо = масштаб · дбл.клик = интерьер</div>
+      <div class="v-hint" id="vHint">🖱 тащи = вращение · колесо = масштаб</div>
+      <div class="export-panel" id="exportPanel">
+        <button class="export-btn" onclick="exportModel('glb')">📦 GLB (3D модель)</button>
+        <button class="export-btn" onclick="exportModel('png')">🖼 PNG (рендер)</button>
+      </div>
     </div>
   </div>
 </div>
 
 <div class="notif" id="notif"></div>
 
-<!-- ═══ SCRIPTS ═══ -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <script>
 'use strict';
 
-// ═══════════════════ I18N ═══════════════════
-const T = {
-  ru: {
-    accountName:'Architect Pro',accountPlan:'Pro план',
-    tokensUsed:'Использовано токенов',today:'Сегодня: 1,240',remaining:'Осталось: 37,520',
-    settings:'Настройки',theme:'Тема',language:'Язык',
-    light:'Светлая',dark:'Тёмная',
-    newBtn:'Новый',shareBtn:'Поделиться',downloadBtn:'Скачать',
-    dlGlb:'3D модель, совместима с Unity, Web',dlFbx:'Для Unreal, Maya, 3ds Max',
-    dlObj:'Универсальный формат + материалы',dlPng:'Рендер 15360×8640 px',
-    dlPdf:'Архитектурные чертежи + 3D',dlIfc:'Строительный информационный модель',
-    projects:'Проекты',searchProjects:'Поиск проектов…',
-    todayLabel:'Сегодня',yesterdayLabel:'Вчера',earlierLabel:'Ранее',
-    proj1meta:'2 этажа · дерево',proj2meta:'стекло · плоская кровля',
-    proj4name:'Ванная комната',proj4meta:'джакузи · мрамор',
-    proj5name:'Отель 12 этажей',proj5meta:'современный · бассейн',
-    newProject:'Новый проект',
-    welcomeTitle:'Что вы хотите<br>построить?',
-    welcomeSub:'Опишите здание или интерьер — я сгенерирую 3D-модель с рендером',
-    qaHouse:'Дом',qaOffice:'Офис',qaCottage:'Коттедж',qaInterior:'Интерьер',
-    inputPlaceholder:'Опишите здание или интерьер…',
-    inputHint:'Enter — отправить · Shift+Enter — новая строка',
-    tab3d:'3D',tabInside:'Внутри',tabPlan:'План',tabSection:'Разрез',tabFacade:'Фасад',
-    emptyTitle:'Опишите здание в чате',
-    emptySub:'Напишите тип, этажи, materiał, размеры — 3D появится сразу',
-    genReading:'Читаю описание…',
-    genStep1:'Анализ описания',genStep2:'Генерация геометрии',genStep3:'Применение материалов',
-    genStep4:'Настройка освещения',genStep5:'Рендер 4K',
-    viewerHint:'🖱 тащи = вращение · колесо = масштаб · дбл.клик = интерьер',
-    notif3d:'3D модель готова!',notifCam:'Камера сброшена',notifNew:'Новый проект создан',
-    notifLink:'Ссылка скопирована',notifDl:'Скачивание начато…',
-    notifVoice:'Голосовой ввод не поддерживается',notifMic:'Разрешите доступ к микрофону',
-    aiResponse:'Анализирую описание… Генерирую 3D модель.',
-    genStepOf:'Шаг {n} из 5',
-    uploadPhoto:'Загрузить фото или чертёж',attachFile:'Прикрепить файл',
-    voiceInput:'Голосовой ввод',genSettings:'Параметры генерации',
-    resetCam:'Сброс камеры',dimensions:'Размеры',wireframe:'Каркас',
-  },
-  en: {
-    accountName:'Architect Pro',accountPlan:'Pro plan',
-    tokensUsed:'Tokens used',today:'Today: 1,240',remaining:'Remaining: 37,520',
-    settings:'Settings',theme:'Theme',language:'Language',
-    light:'Light',dark:'Dark',
-    newBtn:'New',shareBtn:'Share',downloadBtn:'Download',
-    dlGlb:'3D model, compatible with Unity, Web',dlFbx:'For Unreal, Maya, 3ds Max',
-    dlObj:'Universal format + materials',dlPng:'Render 15360×8640 px',
-    dlPdf:'Architectural drawings + 3D',dlIfc:'Building Information Model',
-    projects:'Projects',searchProjects:'Search projects…',
-    todayLabel:'Today',yesterdayLabel:'Yesterday',earlierLabel:'Earlier',
-    proj1meta:'2 floors · wood',proj2meta:'glass · flat roof',
-    proj4name:'Bathroom',proj4meta:'jacuzzi · marble',
-    proj5name:'Hotel 12 floors',proj5meta:'modern · pool',
-    newProject:'New project',
-    welcomeTitle:'What do you want<br>to build?',
-    welcomeSub:'Describe a building or interior — I\'ll generate a 3D model with render',
-    qaHouse:'House',qaOffice:'Office',qaCottage:'Cottage',qaInterior:'Interior',
-    inputPlaceholder:'Describe a building or interior…',
-    inputHint:'Enter — send · Shift+Enter — new line',
-    tab3d:'3D',tabInside:'Inside',tabPlan:'Plan',tabSection:'Section',tabFacade:'Facade',
-    emptyTitle:'Describe a building in chat',
-    emptySub:'Write type, floors, material, dimensions — 3D will appear instantly',
-    genReading:'Reading description…',
-    genStep1:'Analyzing description',genStep2:'Generating geometry',genStep3:'Applying materials',
-    genStep4:'Setting up lighting',genStep5:'Rendering 4K',
-    viewerHint:'🖱 drag = rotate · scroll = zoom · dbl-click = interior',
-    notif3d:'3D model ready!',notifCam:'Camera reset',notifNew:'New project created',
-    notifLink:'Link copied',notifDl:'Download started…',
-    notifVoice:'Voice input not supported',notifMic:'Allow microphone access',
-    aiResponse:'Analyzing description… Generating 3D model.',
-    genStepOf:'Step {n} of 5',
-    uploadPhoto:'Upload photo or blueprint',attachFile:'Attach file',
-    voiceInput:'Voice input',genSettings:'Generation settings',
-    resetCam:'Reset camera',dimensions:'Dimensions',wireframe:'Wireframe',
-  }
-};
-
-let currentLang = localStorage.getItem('arch_lang') || 'ru';
-
-function t(key) { return (T[currentLang] && T[currentLang][key]) || T.ru[key] || key; }
-
-function applyLang() {
-  // data-i18n text content
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const key = el.getAttribute('data-i18n');
-    const val = t(key);
-    if (val) el.innerHTML = val;
-  });
-  // data-i18n-placeholder
-  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-    const key = el.getAttribute('data-i18n-placeholder');
-    const val = t(key);
-    if (val) el.placeholder = val;
-  });
-  // data-i18n-title
-  document.querySelectorAll('[data-i18n-title]').forEach(el => {
-    const key = el.getAttribute('data-i18n-title');
-    const val = t(key);
-    if (val) el.title = val;
-  });
-  // Update lang pills
-  document.querySelectorAll('.lang-pill').forEach(p => {
-    p.classList.toggle('active', p.dataset.lang === currentLang);
-  });
-  // Update html lang
-  document.documentElement.lang = currentLang;
-}
-
-function setLang(lang) {
-  currentLang = lang;
-  localStorage.setItem('arch_lang', lang);
-  applyLang();
-}
-
-// ═══════════════════ THEME ═══════════════════
-let currentTheme = localStorage.getItem('arch_theme') || 'dark';
-
-function setTheme(theme) {
-  currentTheme = theme;
-  localStorage.setItem('arch_theme', theme);
-  document.documentElement.setAttribute('data-theme', theme);
-  document.querySelectorAll('.theme-pill').forEach(p => {
-    p.classList.toggle('active', p.dataset.themeVal === theme);
-  });
-}
-
-// v13.4.0: Backend URL configuration
-function saveBackendUrl() {
-  const input = document.getElementById('backendUrlInput');
-  const url = (input.value || '').trim().replace(/\/+$/,'');
-  if (url) {
-    localStorage.setItem('archai_backend_url', url);
-  } else {
-    localStorage.removeItem('archai_backend_url');
-  }
-  // Re-check backend
-  _backendOk = null;
-  checkBackend().then(() => {
-    addMessage('assistant', _backendOk
-      ? '✅ Backend: ' + (_activeBackend || url)
-      : '❌ Backend unavailable');
-  });
-}
-// Init backend URL input on dropdown open
-function initBackendUrlInput() {
-  const input = document.getElementById('backendUrlInput');
-  if (input) input.value = localStorage.getItem('archai_backend_url') || '';
-}
-
-// Init theme on load
-document.documentElement.setAttribute('data-theme', currentTheme);
-
-// ═══════════════════ ACCOUNT DROPDOWN ═══════════════════
-let accountOpen = false;
-function toggleAccount() {
-  accountOpen = !accountOpen;
-  document.getElementById('accountDropdown').classList.toggle('open', accountOpen);
-  if (accountOpen) { closeDownload(); initBackendUrlInput(); }
-  // Sync theme/lang pills on open
-  if (accountOpen) {
-    document.querySelectorAll('.theme-pill').forEach(p => p.classList.toggle('active', p.dataset.themeVal === currentTheme));
-    document.querySelectorAll('.lang-pill').forEach(p => p.classList.toggle('active', p.dataset.lang === currentLang));
-  }
-}
-function closeAccount() { accountOpen = false; document.getElementById('accountDropdown').classList.remove('open'); }
-
-// ═══════════════════ DOWNLOAD ═══════════════════
-let downloadOpen = false;
-function toggleDownload() {
-  downloadOpen = !downloadOpen;
-  document.getElementById('downloadDropdown').classList.toggle('open', downloadOpen);
-  if (downloadOpen) closeAccount();
-}
-function closeDownload() { downloadOpen = false; document.getElementById('downloadDropdown').classList.remove('open'); }
-function downloadFormat(fmt) { closeDownload(); showNotif(`${t('notifDl')} ${fmt.toUpperCase()}`); }
-
-document.addEventListener('click', (e) => {
-  if (!e.target.closest('#accountBtn') && !e.target.closest('.account-dropdown')) closeAccount();
-  if (!e.target.closest('#downloadBtn') && !e.target.closest('.download-dropdown')) closeDownload();
-});
-
-// ═══════════════════ PROJECTS ═══════════════════
-let projectsOpen = false;
-function toggleProjects() { projectsOpen = !projectsOpen; document.getElementById('projectsPanel').classList.toggle('collapsed', !projectsOpen); }
-function selectProject(el, name) {
-  document.querySelectorAll('.project-card').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  showNotif(`${name}`);
-}
-function filterProjects(q) {
-  q = q.toLowerCase();
-  document.querySelectorAll('.project-card').forEach(c => {
-    c.style.display = c.querySelector('.pc-name').textContent.toLowerCase().includes(q) ? '' : 'none';
-  });
-}
-
-// ═══════════════════ MOBILE ═══════════════════
-function closeMobile() {
-  document.getElementById('chatPanel').classList.remove('open');
-  document.getElementById('mobileOverlay').classList.remove('open');
-}
-function openMobile() {
-  document.getElementById('chatPanel').classList.add('open');
-  document.getElementById('mobileOverlay').classList.add('open');
-}
-
-// ═══════════════════ VOICE ═══════════════════
-let recognition = null, isListening = false;
-function toggleMic() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showNotif(t('notifVoice')); return; }
-  const btn = document.getElementById('micBtn'), inp = document.getElementById('msgInput'), sendBtn = document.getElementById('sendBtn');
-  if (isListening && recognition) { recognition.stop(); return; }
-  recognition = new SR(); recognition.lang = currentLang === 'en' ? 'en-US' : 'ru-RU'; recognition.continuous = true; recognition.interimResults = true;
-  recognition.onresult = (e) => { let v=''; for(let i=0;i<e.results.length;i++) v+=e.results[i][0].transcript; if(inp){inp.value=v;autoResize(inp);} };
-  recognition.onstart = () => { isListening=true; btn.classList.add('active'); sendBtn.classList.add('recording'); sendBtn.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>'; };
-  recognition.onend = () => { isListening=false; recognition=null; btn.classList.remove('active'); sendBtn.classList.remove('recording'); sendBtn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>'; };
-  recognition.onerror = (e) => { console.warn('Voice error:',e.error); recognition=null; isListening=false; btn.classList.remove('active'); sendBtn.classList.remove('recording'); sendBtn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>'; if(e.error==='not-allowed') showNotif(t('notifMic')); };
-  recognition.start();
-}
-
-// ═══════════════════ FILE ═══════════════════
-let _pendingAnalysisFile = null;
-function handleFile(f) {
-  if(!f) return;
-  const p=document.getElementById('filePreview'),img=document.getElementById('fpImg'),nm=document.getElementById('fpName');
-  nm.textContent=f.name;
-  const ext = f.name.split('.').pop().toLowerCase();
-  if(f.type.startsWith('image/')){const r=new FileReader();r.onload=e=>{img.src=e.target.result};r.readAsDataURL(f);img.style.display='';}
-  else if(ext==='pdf'||ext==='dwg'||ext==='dxf'){img.style.display='none';_pendingAnalysisFile=f;}
-  else{img.style.display='none';}
-  p.style.display='flex';
-}
-function clearFile() { document.getElementById('filePreview').style.display='none'; document.getElementById('fileIn').value=''; _pendingAnalysisFile=null; }
-function attachFile() { document.getElementById('fileIn').click(); }
-
-async function analyzeUploadedFile(file) {
-  const ext = file.name.split('.').pop().toLowerCase();
-  const endpoint = ext === 'pdf' ? '/api/v1/analyze/pdf' : '/api/v1/analyze/dwg';
-  const formData = new FormData();
-  formData.append('file', file);
-  showTyping();
-  try {
-    _ensureApiKey();
-    const r = await fetch((_activeBackend||API_BASE) + endpoint, {
-      method: 'POST',
-      headers: _apiHeaders(),
-      body: formData,
-    });
-    hideTyping();
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const data = await r.json();
-    _displayAnalysisResult(data, file.name);
-    return data;
-  } catch(e) {
-    hideTyping();
-    addMessage('assistant', '❌ ' + (currentLang==='en'?'Analysis failed: ':'Анализ не удался: ') + e.message);
-    return null;
-  }
-}
-
-function _displayAnalysisResult(data, fileName) {
-  let html = '<div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:14px;padding:14px 16px;max-width:460px">';
-  html += '<div style="font-weight:700;color:var(--acc2);margin-bottom:10px">📄 ' + esc(fileName) + '</div>';
-
-  // Rooms
-  if(data.rooms && data.rooms.length) {
-    html += '<div style="font-size:12px;font-weight:600;color:var(--txt);margin-bottom:6px">🏠 ' + (currentLang==='en'?'Rooms: ':'Помещения: ') + data.rooms.length + '</div>';
-    data.rooms.slice(0,10).forEach(r => {
-      html += '<div style="font-size:11px;color:var(--txt2);padding:2px 0">• ' + esc(r.name);
-      if(r.area_m2) html += ' — ' + r.area_m2 + ' м²';
-      if(r.width_m && r.length_m) html += ' (' + r.width_m + '×' + r.length_m + ')';
-      html += '</div>';
-    });
-  }
-
-  // Dimensions
-  if(data.dimensions && Object.keys(data.dimensions).length) {
-    html += '<div style="font-size:12px;font-weight:600;color:var(--txt);margin:8px 0 4px">📐 ' + (currentLang==='en'?'Dimensions: ':'Размеры: ') + '</div>';
-    Object.entries(data.dimensions).forEach(([k,v]) => {
-      html += '<div style="font-size:11px;color:var(--txt2);padding:1px 0">• ' + esc(k) + ': ' + v + '</div>';
-    });
-  }
-
-  // MEP systems
-  if(data.mep_systems && data.mep_systems.length) {
-    html += '<div style="font-size:12px;font-weight:600;color:var(--txt);margin:8px 0 4px">🔧 ' + (currentLang==='en'?'Engineering: ':'Инженерные системы: ') + '</div>';
-    data.mep_systems.forEach(m => {
-      html += '<div style="font-size:11px;color:var(--txt2);padding:1px 0">• ' + esc(m.system_type) + ': ' + esc(m.description) + '</div>';
-    });
-  }
-
-  // Materials
-  if(data.materials && data.materials.length) {
-    html += '<div style="font-size:11px;color:var(--txt3);margin-top:6px">🧱 ' + data.materials.join(', ') + '</div>';
-  }
-
-  // Layers (for DXF)
-  if(data.layers && data.layers.length) {
-    const archLayers = data.layers.filter(l => l.is_architectural);
-    if(archLayers.length) {
-      html += '<div style="font-size:12px;font-weight:600;color:var(--txt);margin:8px 0 4px">📋 ' + (currentLang==='en'?'Architectural layers: ':'Архитектурные слои: ') + archLayers.length + '</div>';
-      archLayers.slice(0,8).forEach(l => {
-        html += '<div style="font-size:11px;color:var(--txt2);padding:1px 0">• ' + esc(l.name) + ' (' + l.entity_count + ' ' + (currentLang==='en'?'entities':'объектов') + ')</div>';
-      });
-    }
-  }
-
-  // Warnings
-  if(data.warnings && data.warnings.length) {
-    html += '<div style="font-size:10px;color:#f59e0b;margin-top:6px">⚠ ' + data.warnings.join('; ') + '</div>';
-  }
-
-  // Use as input button
-  html += '<button onclick="useAnalysisForGeneration()" style="margin-top:10px;padding:8px 16px;border-radius:10px;border:1px solid var(--acc);background:rgba(139,92,246,.1);color:var(--acc2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">' + (currentLang==='en'?'🏗 Use for 3D generation':'🏗 Использовать для 3D генерации') + '</button>';
-  html += '</div>';
-  addMessage('assistant', html);
-}
-
-let _lastAnalysisData = null;
-function useAnalysisForGeneration() {
-  if(!_lastAnalysisData) {
-    addMessage('assistant', currentLang==='en'?'Upload a PDF/DWG first':'Сначала загрузите PDF/DWG');
-    return;
-  }
-  const d = _lastAnalysisData;
-  let prompt = '';
-  if(d.rooms && d.rooms.length) {
-    prompt = 'Создай 3D модель по чертежу: ' + d.rooms.map(r => r.name).join(', ');
-    if(d.dimensions && d.dimensions.width_m) prompt += ', размеры ' + d.dimensions.width_m + 'x' + d.dimensions.length_m;
-  } else {
-    prompt = 'Создай 3D модель по загруженному чертежу';
-  }
-  document.getElementById('msgInput').value = prompt;
-  sendMessage();
-}
-
-// ═══════════════════ API INTEGRATION ═══════════════════
-const API_BASE = (()=>{
-  const proto = window.location.protocol;
-  if(proto === 'file:') return null;
-  const stored = localStorage.getItem('archai_backend_url');
-  if(stored) return stored.replace(/\/+$/,'');
-  const origin = window.location.origin;
-  // Auto-detect: if served from same host as gateway, use origin
-  if(origin.includes('onrender.com') || origin.includes('localhost') || origin.includes('127.0.0.1'))
-    return origin;
-  // GitHub Pages or other static host — try multiple backends
-  if(origin.includes('github.io') || origin.includes('githubusercontent.com')) {
-    // v13.4.0: Try backends in order, first healthy one wins
-    return 'https://architect-gateway-3guo.onrender.com';
-  }
-  return origin;
-})();
-// v13.4.0: Multi-backend fallback
-const FALLBACK_BACKENDS = [
-  'https://architect-gateway-3guo.onrender.com',
+// ═══ CONFIG ═══
+const GATEWAY = 'https://architect-gateway-3guo.onrender.com';
+const FALLBACKS = [
   'https://architect-llm-5mdk.onrender.com',
-  'https://ai-arch-blender3d.onrender.com',
+  'https://architect-llm-sdrh.onrender.com',
+  'https://architect-llm-qarj.onrender.com',
 ];
-let _activeBackend = null;
-let _backendOk = null;
-function _getApiKey(){ try{ return localStorage.getItem('arch_api_key')||''; }catch(e){ return ''; } }
-function _setApiKey(k){ try{ localStorage.setItem('arch_api_key',k); }catch(e){} }
-function _ensureApiKey(){
-  // Public chat endpoints (parse/orchestrator/analyze) no longer require X-API-Key —
-  // ARCH_API_KEYS now only guards direct programmatic API access (see gateway/app.py).
-  return _getApiKey();
+let _backend = null;
+let _quality = 'fast';
+let _currentModelUrl = null;
+let _wireframeOn = false;
+let _gridOn = true;
+
+// ═══ QUALITY ═══
+function setQuality(q) {
+  _quality = q;
+  document.querySelectorAll('.qpill').forEach(p => p.classList.toggle('active', p.dataset.q === q));
 }
-function _apiHeaders(extra){
-  const h={'Content-Type':'application/json'};
-  const k=_getApiKey();
-  if(k)h['X-API-Key']=k;
-  return Object.assign(h,extra||{});
-}
-async function checkBackend(){
-  // v13.4.0: Try primary backend first, then fallbacks
-  const backends = [API_BASE, ...FALLBACK_BACKENDS.filter(b => b !== API_BASE)];
-  for(const backend of backends){
-    if(!backend) continue;
-    try{
-      const ctrl=new AbortController();
-      const tid=setTimeout(()=>ctrl.abort(),5000);
-      const r=await fetch(backend+'/api/v1/health',{signal:ctrl.signal,headers:_apiHeaders()});
+
+// ═══ BACKEND HEALTH ═══
+async function checkBackend() {
+  const backends = [GATEWAY, ...FALLBACKS];
+  for (const b of backends) {
+    try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 5000);
+      const r = await fetch(b + '/api/v1/health', { signal: ctrl.signal });
       clearTimeout(tid);
-      if(r.ok){
-        _backendOk=true;
-        _activeBackend=backend;
-        console.log('Backend:',backend,'— available');
+      if (r.ok) {
+        _backend = b;
+        document.getElementById('statusDot').classList.remove('err');
+        document.getElementById('statusDot').title = 'Connected: ' + b;
         return;
       }
-    }catch(e){/* try next */}
+    } catch (e) { /* next */ }
   }
-  _backendOk=false;
-  _activeBackend=null;
-  console.log('Backend: all unavailable');
-}
-async function callParseAPI(msg){
-  if(API_BASE && _backendOk===null) await checkBackend();
-  if(API_BASE && _backendOk){
-    _ensureApiKey();
-    for(let attempt=0; attempt<2; attempt++){
-      try{
-        const ctrl=new AbortController();
-        const tid=setTimeout(()=>ctrl.abort(),60000);
-        const r=await fetch((_activeBackend||API_BASE)+'/api/v1/parse',{
-          method:'POST',
-          headers:_apiHeaders(),
-          signal:ctrl.signal,
-          body:JSON.stringify({text:msg})
-        });
-        clearTimeout(tid);
-        if(r.ok){
-          const data=await r.json();
-          if(data.error) throw new Error(data.message||'Parse error');
-          return data;
-        }
-        if(r.status===401||r.status===403){
-          _setApiKey('');
-          throw new Error(currentLang==='en'?'Invalid API key.':'Неверный API ключ.');
-        }
-        throw new Error('HTTP '+r.status);
-      }catch(e){
-        if(attempt===0){console.warn('parse attempt 1 failed:',e.message); await new Promise(r=>setTimeout(r,2000)); continue;}
-        throw e;
-      }
-    }
-  }
-  throw new Error(currentLang==='en'?'Service unavailable':'Сервис временно недоступен');
-}
-async function callOrchestratorAPI(prompt,parsed){
-  _ensureApiKey();
-  const ctrl=new AbortController();
-  const tid=setTimeout(()=>ctrl.abort(),620000);
-  try{
-    const r=await fetch((_activeBackend||API_BASE)+'/api/v1/orchestrator/execute',{
-      method:'POST',
-      headers:_apiHeaders(),
-      signal:ctrl.signal,
-      body:JSON.stringify({prompt:prompt,quality:'standard',pipeline_profile:parsed.object_type==='interior'?'interior':'standard',skip_clarification:false,export_formats:['glb']})
-    });
-    clearTimeout(tid);
-    if(r.ok) return await r.json();
-    throw new Error('HTTP '+r.status);
-  }catch(e){clearTimeout(tid);throw e;}
+  _backend = null;
+  document.getElementById('statusDot').classList.add('err');
+  document.getElementById('statusDot').title = 'Disconnected';
 }
 
-// ═══════════════════ LOCAL PARSER (regex fallback — RU + EN) ═══════════════════
-function parseLocal(text){
-  const t=text.toLowerCase(); const p={};
-  // Floors — Russian word numbers + digits + English
-  const wn={'одно':1,'двух':2,'двуэт':2,'трёх':3,'трех':3,'четыр':4,'пяти':5,'шести':6,'семи':7,'восьми':8,'десяти':10,
-    'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,'eight':8,'nine':9,'ten':10};
-  for(const[w,n] of Object.entries(wn)){if(t.includes(w+'эт')||t.includes(w+'уровн')||t.includes(w+'floor')||t.includes(w+'storey'))p.floors=n;}
-  const fm=t.match(/(\d+)\s*(?:этаж|floor|storey|stories)/); if(fm)p.floors=parseInt(fm[1]);
-  // Dimensions
-  const dm=t.match(/(\d+)\s*[×xх]\s*(\d+)/); if(dm){p.width=parseInt(dm[1]);p.length=parseInt(dm[2]);}
-  const sm=t.match(/(\d+)\s*(?:м|m)\s*[×xх]\s*(\d+)\s*(?:м|m)/); if(sm){p.width=parseInt(sm[1]);p.length=parseInt(sm[2]);}
-  // Roof
-  if(/плоск|flat/.test(t))p.roof_type='flat';
-  else if(/вальм|hip/.test(t))p.roof_type='hip';
-  else if(/двускат|скатн|gabled/.test(t))p.roof_type='gabled';
-  // Material
-  if(/кирпич|brick/.test(t))p.facade_material='brick';
-  else if(/дерев|брус|wood|timber|log/.test(t))p.facade_material='wood';
-  else if(/стекл|glass/.test(t))p.facade_material='glass';
-  else if(/штукат|plaster|stucco/.test(t))p.facade_material='plaster';
-  else if(/камен|stone/.test(t))p.facade_material='stone';
-  else if(/металл|steel|metal/.test(t))p.facade_material='steel';
-  else if(/бетон|concrete/.test(t))p.facade_material='concrete';
-  // Type
-  if(/офис|office/.test(t))p.type='office';
-  else if(/коттедж|cottage/.test(t))p.type='cottage';
-  else if(/таунхаус|townhouse/.test(t))p.type='townhouse';
-  else if(/отель|гостиниц|hotel|motel/.test(t))p.type='hotel';
-  else if(/баня|саун|bathhouse|sauna/.test(t))p.type='bathhouse';
-  else if(/склад|warehouse/.test(t))p.type='warehouse';
-  else if(/гараж|garage/.test(t))p.type='garage';
-  else if(/ресторан|restaurant/.test(t))p.type='restaurant';
-  else if(/школ|school/.test(t))p.type='school';
-  else if(/больниц|hospital|clinic/.test(t))p.type='hospital';
-  else p.type='house';
-  // Features
-  p.has_balcony=/балкон|balcony/.test(t);
-  p.has_garage=/гараж|garage/.test(t);
-  p.has_terrace=/террас|terrace|patio/.test(t);
-  p.has_pool=/бассейн|pool/.test(t);
-  return p;
-}
+// ═══ THREE.JS ═══
+let scene, camera, renderer, controls, gridHelper;
+let _modelGroup = null;
 
-// ═══════════════════ CHAT ═══════════════════
-function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,160)+'px'; }
-// ═══════════════════ ORCHESTRATOR CLARIFICATION STATE ═══════════════════
-let _orchJobId = null;        // Current orchestrator job awaiting clarification
-let _orchPipelineProfile = 'standard';
-let _orchPrompt = '';         // Original prompt for the current job
-
-async function sendMessage() {
-  const inp=document.getElementById('msgInput'), text=inp.value.trim();
-  // Check if there's a pending PDF/DWG file to analyze
-  if(_pendingAnalysisFile && !text) {
-    const f = _pendingAnalysisFile;
-    _pendingAnalysisFile = null;
-    hideWelcome(); addMessage('user', '📄 ' + f.name);
-    const data = await analyzeUploadedFile(f);
-    if(data) _lastAnalysisData = data;
-    return;
-  }
-  if(_pendingAnalysisFile && text) {
-    // File + text: analyze file then use text as prompt
-    const f = _pendingAnalysisFile;
-    _pendingAnalysisFile = null;
-    hideWelcome(); addMessage('user', '📄 ' + f.name + ' — ' + text);
-    const data = await analyzeUploadedFile(f);
-    if(data) _lastAnalysisData = data;
-  }
-  if(!text) return;
-  hideWelcome(); addMessage('user',text); inp.value=''; autoResize(inp);
-  showTyping();
-  _orchPrompt = text;
-
-  try {
-    // ═══ STEP 1: Send to orchestrator (handles parse + clarification internally) ═══
-    if(!_backendOk) await checkBackend();
-    if(!_backendOk) {
-      hideTyping();
-      addMessage('assistant', currentLang==='en'?'💡 Backend unavailable':'💡 Бэкенд недоступен');
-      return;
-    }
-
-    _ensureApiKey();
-    const orchCtrl = new AbortController();
-    const orchTid = setTimeout(()=>orchCtrl.abort(), 620000);
-
-    // Determine pipeline profile — prefer LLM-determined, fallback to regex
-    let profile = 'standard';
-    // Regex fallback for pipeline profile
-    const t = text.toLowerCase();
-    if(/ванн|кухн|спальн|детск|гостин|интерьер|дизайн|комнат/.test(t)) profile = 'interior';
-    if(/ландшафт|сад|двор|участок/.test(t)) profile = 'landscape';
-    _orchPipelineProfile = profile;
-
-    addMessage('assistant', '<div class="reasoning-card"><div class="reasoning-title">🧠 '+(currentLang==='en'?'Analyzing your request...':'Анализирую ваш запрос...')+'</div><div class="reasoning-step"><div class="rs-icon">◉</div><div class="rs-text">'+(currentLang==='en'?'Sending to AI orchestrator...':'Отправляю в AI-оркестратор...')+'</div></div></div>');
-
-    const r = await fetch((_activeBackend||API_BASE)+'/api/v1/orchestrator/execute', {
-      method:'POST',
-      headers:_apiHeaders(),
-      signal:orchCtrl.signal,
-      body:JSON.stringify({
-        prompt: text,
-        quality: 'standard',
-        pipeline_profile: profile,
-        skip_clarification: true,
-        export_formats: ['glb']
-      })
-    });
-    clearTimeout(orchTid);
-    hideTyping();
-
-    if(!r.ok) {
-      const errData = await r.json().catch(()=>({})) ;
-      throw new Error(errData.detail?.message || errData.message || 'HTTP '+r.status);
-    }
-
-    const orchResult = await r.json();
-
-    // Use LLM-determined pipeline_profile if provided
-    if(orchResult.pipeline_profile) {
-      _orchPipelineProfile = orchResult.pipeline_profile;
-    }
-
-    // ═══ STEP 2: Handle clarification_needed ═══
-    if(orchResult.status === 'clarification_needed' && orchResult.clarification) {
-      _orchJobId = orchResult.job_id;
-      const clar = orchResult.clarification;
-
-      // Show parsed info first
-      const params = clar.partial_params || {};
-      const label = getLabel(params);
-      const w = params.width_m||10, l = params.length_m||12;
-      let desc = `🏗 <b>${label}</b> — ${w}×${l}м`;
-      if(params.style) desc += `, ${params.style}`;
-      addMessage('assistant', desc);
-
-      // Show references if LLM provided them
-      if(params.references && params.references.length) {
-        const refHtml = '<div class="ref-gallery"><div class="ref-title">🖼 '+(currentLang==='en'?'References':'Референсы')+'</div><div class="ref-grid">'+params.references.map(r=>'<div class="ref-card"><div style="height:90px;background:linear-gradient(135deg,#f1f5f9,#e2e8f0);display:flex;align-items:center;justify-content:center;font-size:28px">🔍</div><div class="rc-label">'+esc(r)+'</div></div>').join('')+'</div></div>';
-        addMessage('assistant', refHtml);
-      }
-
-      // Show orchestrator's clarification questions
-      showOrchestratorClarification(clar.questions, params);
-      return;
-    }
-
-    // ═══ STEP 3: Handle direct success (no clarification needed) ═══
-    _handleOrchestratorResult(orchResult, text);
-
-  } catch(e) {
-    hideTyping();
-    console.error('Chat error:', e);
-    // v13.4.0: Fallback to fast trimesh generation when orchestrator fails
-    if(e.message && (e.message.includes('502') || e.message.includes('503') || e.message.includes('unavailable') || e.message.includes('timeout'))) {
-      addMessage('assistant', '⚠️ '+(currentLang==='en'?'Orchestrator unavailable, trying fast generation...':'Оркестратор недоступен, пробую быструю генерацию...'));
-      try {
-        const fastR = await fetch((_activeBackend||API_BASE)+'/api/v1/generate/fast', {
-          method:'POST',
-          headers:_apiHeaders(),
-          body:JSON.stringify({prompt: text})
-        });
-        if(fastR.ok) {
-          const blob = await fastR.blob();
-          const url = URL.createObjectURL(blob);
-          // Load into 3D viewer
-          if(typeof loadGLBFromUrl === 'function') {
-            loadGLBFromUrl(url);
-          } else if(typeof window.loadGLB === 'function') {
-            window.loadGLB(url);
-          }
-          addMessage('assistant', '✅ '+(currentLang==='en'?'Fast GLB generated (basic geometry)':'Быстрый GLB сгенерирован (базовая геометрия)'));
-          return;
-        }
-      } catch(fastE) {
-        console.error('Fast fallback also failed:', fastE);
-      }
-    }
-    addMessage('assistant', '❌ '+(e.message || (currentLang==='en'?'Error occurred':'Произошла ошибка')));
-  }
-}
-
-// ═══════════════════ ORCHESTRATOR CLARIFICATION UI ═══════════════════
-let _orchAnswers = {};
-function showOrchestratorClarification(questions, params) {
-  _orchAnswers = {};
-  if(!questions || !questions.length) return;
-
-  let html = '<div style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1px solid #fbbf24;border-radius:14px;padding:14px 16px;margin-bottom:8px;max-width:460px">';
-  html += '<div style="font-weight:700;color:#92400e;margin-bottom:10px">💬 '+(currentLang==='en'?'I need to clarify a few things':'Нужно уточнить несколько деталей')+'</div>';
-
-  questions.forEach((q,i) => {
-    html += '<div data-orch-q="'+i+'" style="margin-bottom:12px"><div style="font-size:13px;color:#78350f;margin-bottom:6px;font-weight:600">'+esc(q.text)+'</div>';
-    if(q.visual_options && q.visual_options.length) {
-      // Visual options with pros/cons
-      html += '<div style="display:flex;flex-direction:column;gap:6px">';
-      q.visual_options.forEach(vo => {
-        html += '<div onclick="answerOrchClarification('+i+',\''+esc(vo.id)+'\',\''+esc(vo.title)+'\')" style="padding:10px 12px;border-radius:10px;border:2px solid '+(vo.recommended?'#f59e0b':'#e5e7eb')+';background:'+(vo.recommended?'#fffbeb':'#fff')+';cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor=\'#f59e0b\'" onmouseout="this.style.borderColor=\''+(vo.recommended?'#f59e0b':'#e5e7eb')+'\'">';
-        html += '<div style="font-weight:700;font-size:12px;color:#1e293b">'+esc(vo.title)+(vo.recommended?' <span style="color:#f59e0b;font-size:10px">★ Рекомендуется</span>':'')+'</div>';
-        html += '<div style="font-size:11px;color:#64748b;margin-top:2px">'+esc(vo.description)+'</div>';
-        if(vo.pros&&vo.pros.length) html += '<div style="font-size:10px;color:#16a34a;margin-top:3px">✅ '+esc(vo.pros.join(', '))+'</div>';
-        if(vo.cons&&vo.cons.length) html += '<div style="font-size:10px;color:#dc2626;margin-top:1px">❌ '+esc(vo.cons.join(', '))+'</div>';
-        if(vo.price_range) html += '<div style="font-size:10px;color:#7c3aed;margin-top:2px">💰 '+esc(vo.price_range)+'</div>';
-        html += '</div>';
-      });
-      html += '</div>';
-    } else if(q.options && q.options.length) {
-      // Simple button options
-      html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
-      q.options.forEach(opt => {
-        html += '<button onclick="answerOrchClarification('+i+',\''+esc(opt)+'\',\''+esc(opt)+'\')" style="padding:6px 12px;border-radius:16px;border:1px solid #d97706;background:#fffbeb;color:#92400e;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background=\'#fbbf24\';this.style.color=\'#fff\'" onmouseout="this.style.background=\'#fffbeb\';this.style.color=\'#92400e\'">'+esc(opt)+'</button>';
-      });
-      html += '</div>';
-    }
-    html += '</div>';
-  });
-
-  html += '<button onclick="skipOrchClarification()" style="padding:6px 14px;border-radius:12px;border:1px solid #d97706;background:transparent;color:#92400e;font-size:11px;cursor:pointer;font-family:inherit;margin-top:4px">'+(currentLang==='en'?'Skip — generate now':'Пропустить — генерировать сейчас')+'</button>';
-  html += '</div>';
-  addMessage('assistant', html);
-}
-
-function answerOrchClarification(qIdx, answerId, displayText) {
-  if(!_orchJobId) return;
-  const questions = document.querySelectorAll('[data-orch-q]');
-  _orchAnswers[qIdx] = answerId;
-  addMessage('user', displayText);
-
-  // Check if all questions answered
-  const totalQ = document.querySelectorAll('[data-orch-q]').length || Object.keys(_orchAnswers).length;
-  if(Object.keys(_orchAnswers).length >= Math.min(totalQ, 2)) {
-    _resumeOrchestrator();
-  }
-}
-
-function skipOrchClarification() {
-  addMessage('assistant', currentLang==='en'?'⚡ Generating without clarifications...':'⚡ Генерирую без уточнений...');
-  _resumeOrchestrator();
-}
-
-async function _resumeOrchestrator() {
-  if(!_orchJobId) return;
-  const jobId = _orchJobId;
-  _orchJobId = null;
-
-  showTyping();
-  addMessage('assistant', currentLang==='en'?'✅ Got it! Generating 3D model...':'✅ Понял! Генерирую 3D модель...');
-
-  try {
-    _ensureApiKey();
-    const ctrl = new AbortController();
-    const tid = setTimeout(()=>ctrl.abort(), 620000);
-
-    const r = await fetch((_activeBackend||API_BASE)+'/api/v1/orchestrator/resume', {
-      method:'POST',
-      headers:_apiHeaders(),
-      signal:ctrl.signal,
-      body:JSON.stringify({
-        job_id: jobId,
-        answers: _orchAnswers,
-        quality: 'standard',
-        pipeline_profile: _orchPipelineProfile,
-        export_formats: ['glb']
-      })
-    });
-    clearTimeout(tid);
-    hideTyping();
-
-    if(!r.ok) {
-      const errData = await r.json().catch(()=>({}));
-      throw new Error(errData.detail?.message || 'HTTP '+r.status);
-    }
-
-    const result = await r.json();
-    _handleOrchestratorResult(result, _orchPrompt);
-
-  } catch(e) {
-    hideTyping();
-    console.error('Resume error:', e);
-    addMessage('assistant', '❌ '+(e.message || 'Resume failed'));
-  }
-  _orchAnswers = {};
-}
-
-// ═══════════════════ HANDLE ORCHESTRATOR RESULT ═══════════════════
-async function _handleOrchestratorResult(orchResult, prompt) {
-  // Show decomposition if available
-  if(orchResult.steps && orchResult.steps.length) {
-    const decompHtml = '<div class="decomp-tree"><div class="decomp-title">📋 '+(currentLang==='en'?'Pipeline steps':'Этапы пайплайна')+'</div>'+orchResult.steps.map((s,i)=>'<div class="decomp-item"><div class="di-num">'+(i+1)+'</div><div class="di-line">'+esc(s.name)+'</div><div class="di-service">'+(s.status==='done'?'✅':s.status==='failed'?'❌':'⏭')+'</div></div>').join('')+'</div>';
-    addMessage('assistant', decompHtml);
-  }
-
-  // Show agent results summary
-  const agentResults = orchResult.agent_results || {};
-  const agentNames = Object.keys(agentResults);
-  if(agentNames.length) {
-    const summary = agentNames.map(a => {
-      const r = agentResults[a];
-      const icon = r && !r.error ? '✅' : '⚠️';
-      return icon + ' ' + a;
-    }).join(' │ ');
-    addMessage('assistant', '<div style="font-size:11px;color:#64748b;padding:4px 0">'+summary+'</div>');
-  }
-
-  // Show quality result — backend (quality_agent) returns {passed, checks, issues, severity},
-  // there is no numeric "score" field, so render from what actually exists.
-  if(orchResult.quality && orchResult.quality.passed !== undefined) {
-    const q = orchResult.quality;
-    const color = q.passed ? '#16a34a' : (q.severity==='critical' ? '#dc2626' : '#f59e0b');
-    const label = q.passed ? (currentLang==='en'?'Quality check passed':'Проверка качества пройдена') : (currentLang==='en'?'Quality issues found: ':'Найдены замечания: ')+((q.issues||[]).join(', ')||'—');
-    addMessage('assistant', '<div style="font-size:12px;color:'+color+';font-weight:600">🎯 '+esc(label)+'</div>');
-  }
-
-  // Show duration
-  if(orchResult.duration_ms) {
-    const sec = Math.round(orchResult.duration_ms / 1000);
-    addMessage('assistant', '<div style="font-size:11px;color:#94a3b8">⏱ '+(currentLang==='en'?'Completed in ':'Завершено за ')+sec+'s</div>');
-  }
-
-  // Load 3D model
-  if(orchResult.exports && orchResult.exports.output_path) {
-    const glbPath = orchResult.exports.output_path;
-    if(glbPath) {
-      const cleanPath = glbPath.replace(/^\/+/, '');
-      const url = glbPath.startsWith('http') ? glbPath : (_activeBackend||API_BASE) + '/api/v1/files/' + cleanPath;
-      loadGLBModel(url);
-      addMessage('assistant', currentLang==='en'?'✅ 3D model ready!':'✅ 3D модель готова!');
-      return;
-    }
-  }
-
-  // Fallback: check render image
-  if(orchResult.render && orchResult.render.output_path) {
-    const cleanRenderPath = orchResult.render.output_path.replace(/^\/+/, '');
-    const imgUrl = (_activeBackend||API_BASE) + '/api/v1/files/' + cleanRenderPath;
-    addMessage('assistant', '<img src="'+imgUrl+'" style="max-width:100%;border-radius:12px;margin:8px 0" />');
-    addMessage('assistant', currentLang==='en'?'✅ Render complete!':'✅ Рендер готов!');
-    return;
-  }
-
-  addMessage('assistant', currentLang==='en'?'⚡ Trying direct 3D generation...':'⚡ Пробую прямую генерацию 3D...');
-  try {
-    const genR = await fetch((_activeBackend||API_BASE) + '/api/v1/generate', {
-      method: 'POST',
-      headers: _apiHeaders(),
-      body: JSON.stringify({prompt: prompt, quality: 'standard'})
-    });
-    if(genR.ok) {
-      const blob = await genR.blob();
-      if(blob.size > 1000) {
-        const glbUrl = URL.createObjectURL(blob);
-        loadGLBModel(glbUrl);
-        addMessage('assistant', currentLang==='en'?'✅ 3D model generated!':'✅ 3D модель сгенерирована!');
-        return;
-      }
-    }
-  } catch(fallbackErr) {
-    console.warn('Direct blender fallback failed:', fallbackErr);
-  }
-
-  addMessage('assistant', currentLang==='en'?'⚠️ Generation completed but no model produced':'⚠️ Генерация завершена, но модель не создана');
-}
-// ═══════════════════ HELPER: Get correct label ═══════════════════
-function getLabel(parsed) {
-  const isInterior = parsed.object_type === 'interior' || parsed.room_type;
-  if(isInterior) {
-    const m = currentLang==='en' ? {bathroom:'Bathroom',children:"Children's room",kitchen:'Kitchen',bedroom:'Bedroom',living:'Living room',office:'Study',hallway:'Hallway',dining:'Dining room'} : {bathroom:'Ванная комната',children:'Детская комната',kitchen:'Кухня',bedroom:'Спальня',living:'Гостиная',office:'Кабинет',hallway:'Прихожая',dining:'Столовая'};
-    return m[parsed.room_type] || (currentLang==='en'?'Interior':'Интерьер');
-  }
-  const m = currentLang==='en' ? {house:'Residential house',office:'Office',cottage:'Cottage',hotel:'Hotel',bathhouse:'Bathhouse',townhouse:'Townhouse',villa:'Villa'} : {house:'Жилой дом',office:'Офис',cottage:'Коттедж',hotel:'Гостиница',bathhouse:'Баня',townhouse:'Таунхаус',villa:'Вилла'};
-  return m[parsed.type]||m[parsed.building_type]||(currentLang==='en'?'Building':'Здание');
-}
-// ═══════════════════ HELPER: Build reasoning ═══════════════════
-function buildReasoning(prompt, parsed) {
-  const steps = [];
-  const isInterior = parsed.object_type === 'interior' || parsed.room_type;
-  if(isInterior) {
-    steps.push(currentLang==='en'?'Detected: interior design request':'Определено: запрос на дизайн интерьера');
-    if(parsed.room_type) { const n={bathroom:'ванная комната',children:'детская',kitchen:'кухня',bedroom:'спальня',living:'гостиная',office:'кабинет'}; steps.push((currentLang==='en'?'Room: ':'Комната: ')+(n[parsed.room_type]||parsed.room_type)); }
-    if(parsed.style) steps.push((currentLang==='en'?'Style: ':'Стиль: ')+parsed.style);
-    if(parsed.width_m&&parsed.length_m) steps.push((currentLang==='en'?'Dimensions: ':'Размеры: ')+parsed.width_m+'×'+parsed.length_m+'м ('+Math.round(parsed.width_m*parsed.length_m)+' м²)');
-    if(parsed.features&&parsed.features.length) steps.push((currentLang==='en'?'Features: ':'Особенности: ')+parsed.features.join(', '));
-    if(parsed.furniture&&parsed.furniture.length) steps.push((currentLang==='en'?'Furniture: ':'Мебель: ')+parsed.furniture.join(', '));
-  } else {
-    steps.push(currentLang==='en'?'Detected: building request':'Определено: запрос на здание');
-    if(parsed.building_type||parsed.type) steps.push((currentLang==='en'?'Type: ':'Тип: ')+(parsed.building_type||parsed.type));
-    if(parsed.floors) steps.push((currentLang==='en'?'Floors: ':'Этажность: ')+parsed.floors);
-    if(parsed.width_m&&parsed.length_m) steps.push((currentLang==='en'?'Dimensions: ':'Размеры: ')+(parsed.width_m||parsed.width)+'×'+(parsed.length_m||parsed.length)+'м');
-    if(parsed.material) steps.push((currentLang==='en'?'Material: ':'Материал: ')+parsed.material);
-    if(parsed.roof_type&&parsed.roof_type!=='none') steps.push((currentLang==='en'?'Roof: ':'Кровля: ')+parsed.roof_type);
-  }
-  return steps;
-}
-// ═══════════════════ HELPER: Decomposition ═══════════════════
-function buildDecomposition(parsed) {
-  const tasks = [];
-  const isInterior = parsed.object_type === 'interior' || parsed.room_type;
-  if(isInterior) {
-    tasks.push({text:currentLang==='en'?'Analyze room layout':'Анализ планировки комнаты',service:'LLM'});
-    tasks.push({text:currentLang==='en'?'Design furniture placement':'Проектирование расстановки мебели',service:'Geometry'});
-    tasks.push({text:currentLang==='en'?'Apply materials and textures':'Применение материалов и текстур',service:'Texture'});
-    tasks.push({text:currentLang==='en'?'Setup interior lighting':'Настройка интерьерного освещения',service:'Lighting'});
-    tasks.push({text:currentLang==='en'?'Render photorealistic image':'Фотореалистичный рендер',service:'Blender'});
-  } else {
-    tasks.push({text:currentLang==='en'?'Parse building parameters':'Парсинг параметров здания',service:'LLM'});
-    tasks.push({text:currentLang==='en'?'Generate geometry':'Генерация геометрии',service:'Geometry'});
-    tasks.push({text:currentLang==='en'?'Apply facade materials':'Применение фасадных материалов',service:'Texture'});
-    tasks.push({text:currentLang==='en'?'Setup exterior lighting':'Настройка внешнего освещения',service:'Lighting'});
-    tasks.push({text:currentLang==='en'?'Render 4K preview':'Рендер 4K превью',service:'Blender'});
-  }
-  return tasks;
-}
-// ═══════════════════ HELPER: Clarifying questions ═══════════════════
-function buildClarificationQuestions(prompt, parsed) {
-  const questions = [];
-  const isInterior = parsed.object_type === 'interior' || parsed.room_type;
-  if(isInterior) {
-    if(!parsed.style) questions.push({field:'style',text:currentLang==='en'?'What style do you prefer?':'Какой стиль вы предпочитаете?',options:currentLang==='en'?['Modern','Classic','Minimalist','Scandinavian','Loft','Hi-Tech']:['Современный','Классика','Минимализм','Скандинавский','Лофт','Хайтек']});
-    questions.push({field:'quality',text:currentLang==='en'?'What quality level?':'Какой уровень качества?',options:currentLang==='en'?['Premium','Standard','Quick']:['Премиум','Стандарт','Быстрый']});
-  } else {
-    if(!parsed.material) questions.push({field:'material',text:currentLang==='en'?'What facade material?':'Какой материал фасада?',options:currentLang==='en'?['Brick','Wood','Glass','Plaster','Stone']:['Кирпич','Дерево','Стекло','Штукатурка','Камень']});
-    if(!parsed.roof_type||parsed.roof_type==='none') questions.push({field:'roof_type',text:currentLang==='en'?'What type of roof?':'Какой тип кровли?',options:currentLang==='en'?['Gabled','Flat','Hip']:['Двускатная','Плоская','Вальмовая']});
-  }
-  return questions.slice(0,3);
-}
-// ═══════════════════ HELPER: Clarification UI ═══════════════════
-let _pendingClarification = null;
-function showClarificationUI(questions, parsed, originalPrompt) {
-  _pendingClarification = {questions, parsed, originalPrompt, answers:{}};
-  let html = '<div style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1px solid #fbbf24;border-radius:14px;padding:14px 16px;margin-bottom:8px;max-width:460px">';
-  html += '<div style="font-weight:700;color:#92400e;margin-bottom:10px">💬 '+(currentLang==='en'?'Clarifying questions':'Уточняющие вопросы')+'</div>';
-  questions.forEach((q,i) => {
-    html += '<div style="margin-bottom:10px"><div style="font-size:12px;color:#78350f;margin-bottom:6px">'+esc(q.text)+'</div><div style="display:flex;flex-wrap:wrap;gap:4px">';
-    q.options.forEach((opt) => {
-      html += '<button onclick="answerClarification('+i+',\''+esc(opt)+'\')" style="padding:6px 12px;border-radius:16px;border:1px solid #d97706;background:#fffbeb;color:#92400e;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background=\'#fbbf24\';this.style.color=\'#fff\'" onmouseout="this.style.background=\'#fffbeb\';this.style.color=\'#92400e\'">'+esc(opt)+'</button>';
-    });
-    html += '</div></div>';
-  });
-  html += '<button onclick="skipClarification()" style="padding:6px 14px;border-radius:12px;border:1px solid #d97706;background:transparent;color:#92400e;font-size:11px;cursor:pointer;font-family:inherit;margin-top:4px">'+(currentLang==='en'?'Skip — generate now':'Пропустить — генерировать сейчас')+'</button>';
-  html += '</div>';
-  addMessage('assistant', html);
-}
-function answerClarification(qIdx, optText) {
-  if(!_pendingClarification) return;
-  _pendingClarification.answers[_pendingClarification.questions[qIdx].field] = optText;
-  addMessage('user', optText);
-  if(Object.keys(_pendingClarification.answers).length >= _pendingClarification.questions.length || Object.keys(_pendingClarification.answers).length >= 2) {
-    const merged = {..._pendingClarification.parsed, ..._pendingClarification.answers};
-    const prompt = _pendingClarification.originalPrompt;
-    addMessage('assistant', currentLang==='en'?'✅ Got it! Generating...':'✅ Понял! Генерирую...');
-    _pendingClarification = null;
-    proceedWithGeneration(prompt, merged);
-  }
-}
-function skipClarification() {
-  if(!_pendingClarification) return;
-  addMessage('assistant', currentLang==='en'?'⚡ Generating without clarifications...':'⚡ Генерирую без уточнений...');
-  const p = _pendingClarification.parsed; const pr = _pendingClarification.originalPrompt;
-  _pendingClarification = null;
-  proceedWithGeneration(pr, p);
-}
-async function proceedWithGeneration(prompt, parsed) {
-  if(!_backendOk) { addMessage('assistant', currentLang==='en'?'💡 Backend unavailable':'💡 Бэкенд недоступен'); return; }
-  try {
-    showGenOverlay();
-    const orchResult = await callOrchestratorAPI(prompt, parsed);
-    if(orchResult.status==='success' && orchResult.exports && orchResult.exports.glb) {
-      const glbUrl = orchResult.exports.glb.startsWith('http') ? orchResult.exports.glb : (_activeBackend||API_BASE) + '/api/v1/files/' + orchResult.exports.glb.replace(/^\/+/, '');
-      loadGLBModel(glbUrl);
-      addMessage('assistant', currentLang==='en'?'✅ 3D model ready!':'✅ 3D модель готова!');
-    } else { addMessage('assistant', currentLang==='en'?'⚠️ Generation incomplete':'⚠️ Генерация не завершена'); }
-  } catch(e) { console.warn('Gen error:', e); addMessage('assistant', '⚠️ '+e.message); }
-}
-// ═══════════════════ HELPER: References ═══════════════════
-function buildReferences(parsed) {
-  const refs = [];
-  const isInterior = parsed.object_type === 'interior' || parsed.room_type;
-  if(isInterior) {
-    const icons = {bathroom:'🛁',children:'🧸',kitchen:'🍳',bedroom:'🛏',living:'🛋',office:'📚'};
-    const styles = {hightech:['Хайтек интерьер','Умный дом','Минимализм'],classic:['Классический интерьер','Неоклассика'],minimalist:['Минимализм','Японский стиль'],scandinavian:['Скандинавский','Хюгге'],loft:['Лофт','Индустриальный'],modern:['Современный','Контемпорари']};
-    const icon = icons[parsed.room_type]||'🏠';
-    (styles[(parsed.style||'modern').toLowerCase().replace(/[^a-z]/g,'')]||styles.modern).forEach(l=>refs.push({icon,label:l}));
-    if(parsed.features) parsed.features.forEach(f=>{if(/джакузи/i.test(f))refs.push({icon:'💆',label:'Джакузи'});if(/душ/i.test(f))refs.push({icon:'🚿',label:'Душевая'});if(/камин/i.test(f))refs.push({icon:'🔥',label:'Камин'});if(/книж/i.test(f))refs.push({icon:'📚',label:'Библиотека'});if(/сейф/i.test(f))refs.push({icon:'🔐',label:'Сейф'});});
-  } else {
-    refs.push({icon:'🏗',label:'Архитектурный проект'});refs.push({icon:'📐',label:'Планировка'});refs.push({icon:'🎨',label:'Фасад'});
-  }
-  return refs.slice(0,6);
-}
-// ═══════════════════ HELPER: Dynamic chips ═══════════════════
-function updateQuickActions(parsed) {
-  const c = document.querySelector('.empty-actions');
-  if(!c) return;
-  const isInterior = parsed.object_type === 'interior' || parsed.room_type;
-  let chips;
-  if(isInterior) {
-    const rc = {bathroom:[{icon:'🛁',label:'Джакузи'},{icon:'🚿',label:'Душевая'},{icon:'🪞',label:'Зеркало'}],children:[{icon:'🧸',label:'Игровая'},{icon:'🛏',label:'Кроватка'},{icon:'📚',label:'Учебная зона'}],kitchen:[{icon:'🍳',label:'Остров'},{icon:'🧊',label:'Техника'},{icon:'💡',label:'Подсветка'}],bedroom:[{icon:'🛏',label:'Кровать'},{icon:'📺',label:'ТВ зона'},{icon:'👔',label:'Гардероб'}],living:[{icon:'🛋',label:'Диван'},{icon:'🔥',label:'Камин'},{icon:'📺',label:'ТВ зона'}],office:[{icon:'📚',label:'Книжный шкаф'},{icon:'💻',label:'Рабочий стол'},{icon:'🔐',label:'Сейф'}]};
-    chips = rc[parsed.room_type]||[{icon:'🏠',label:'Мебель'},{icon:'💡',label:'Свет'},{icon:'🎨',label:'Цвет'}];
-  } else { chips = [{icon:'🏠',label:'Дом'},{icon:'🏢',label:'Офис'},{icon:'🌲',label:'Коттедж'}]; }
-  c.innerHTML = chips.map(ch=>'<button class="empty-btn" onclick="go(\''+esc(ch.label)+'\')"><span>'+ch.icon+'</span> <span>'+esc(ch.label)+'</span></button>').join('');
-}
-function go(p) { document.getElementById('msgInput').value=p; sendMessage(); }
-function addMessage(role,text) {
-  const chat=document.getElementById('chatMessages'), div=document.createElement('div');
-  div.className=`msg ${role}`;
-  const time=new Date().toLocaleTimeString(currentLang==='en'?'en-US':'ru-RU',{hour:'2-digit',minute:'2-digit'});
-  const isHtml = role!=='user' && (text.startsWith('<') || text.includes('<div') || text.includes('<button') || text.includes('<b>') || text.includes('<span') || text.includes('<img'));
-  const content = isHtml ? text : esc(text);
-  div.innerHTML = role==='user'
-    ? `<div class="msg-meta"><span>${time}</span></div><div class="bubble">${content}</div>`
-    : `<div class="msg-meta"><div class="msg-avatar ai">A</div><span>Architect AI</span><span>${time}</span></div><div class="bubble">${content}</div>`;
-  chat.appendChild(div);
-  // Smooth scroll to bottom with delay for DOM render
-  requestAnimationFrame(() => { chat.scrollTo({top:chat.scrollHeight,behavior:'smooth'}); });
-}
-function hideWelcome() { const w=document.getElementById('welcomeScreen'); if(w) w.style.display='none'; }
-function showTyping() { const chat=document.getElementById('chatMessages'),d=document.createElement('div'); d.className='typing';d.id='typingIndicator';d.innerHTML='<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';chat.appendChild(d);chat.scrollTop=chat.scrollHeight; }
-function hideTyping() { const t=document.getElementById('typingIndicator'); if(t) t.remove(); }
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
-
-// ═══════════════════ GENERATION OVERLAY ═══════════════════
-function showGenOverlay() {
-  const ov=document.getElementById('genOverlay'); ov.style.display='flex';
-  const steps=[t('genStep1'),t('genStep2'),t('genStep3'),t('genStep4'),t('genStep5')];
-  const icons=['◉','○','○','○','○'];
-  const container=document.getElementById('genSteps'); container.innerHTML='';
-  steps.forEach((s,i)=>{const d=document.createElement('div');d.className='gen-step'+(i===0?' active':'');d.innerHTML=`<div class="gen-step-icon">${i===0?'◉':'○'}</div>${s}`;container.appendChild(d);});
-  let step=0; const fill=document.getElementById('genFill'),title=document.getElementById('genTitle'),sub=document.getElementById('genSub');
-  title.textContent=steps[0]; sub.textContent=t('genStepOf').replace('{n}','1'); fill.style.width='10%';
-  const iv=setInterval(()=>{
-    step++;
-    if(step>=steps.length){clearInterval(iv);setTimeout(()=>{ov.style.display='none';document.getElementById('emptyState').style.display='none';document.getElementById('c3d').style.display='block';showNotif(t('notif3d'));},500);return;}
-    fill.style.width=((step+1)/steps.length*100)+'%'; title.textContent=steps[step]; sub.textContent=t('genStepOf').replace('{n}',step+1);
-    container.children[step].className='gen-step active'; container.children[step].querySelector('.gen-step-icon').textContent='◉';
-    if(step>0){container.children[step-1].className='gen-step done';container.children[step-1].querySelector('.gen-step-icon').textContent='✓';}
-  },1200);
-}
-
-// ═══════════════════ VIEWER ═══════════════════
-function setView(el,v){document.querySelectorAll('.v-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');}
-function resetCamera(){showNotif(t('notifCam'));}
-function toggleDimensions(){document.getElementById('dimBtn').classList.toggle('active');}
-function toggleWireframe(){document.getElementById('wireBtn').classList.toggle('active');}
-
-// ═══════════════════ UTILS ═══════════════════
-function newProject(){showNotif(t('notifNew'));}
-function shareProject(){showNotif(t('notifLink'));}
-function showNotif(text){const n=document.getElementById('notif');n.textContent=text;n.style.display='flex';setTimeout(()=>{n.style.display='none';},3000);}
-
-// ═══════════════════ THREE.JS 3D VIEWER ═══════════════════
-let scene, camera, renderer, controls;
 function init3D() {
   const canvas = document.getElementById('c3d');
-  if(!canvas || !window.THREE) return;
+  const wrap = document.getElementById('canvasWrap');
+  if (!canvas || !window.THREE) return;
+
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x27272a);
-  camera = new THREE.PerspectiveCamera(50, canvas.clientWidth/canvas.clientHeight, 0.1, 1000);
+  scene.background = new THREE.Color(0x18181b);
+
+  camera = new THREE.PerspectiveCamera(50, wrap.clientWidth / wrap.clientHeight, 0.1, 1000);
   camera.position.set(15, 12, 15);
-  renderer = new THREE.WebGLRenderer({canvas, antialias:true});
-  renderer.setSize(canvas.clientWidth, canvas.clientHeight);
-  renderer.setPixelRatio(window.devicePixelRatio);
+
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.2;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
   // Lights
-  const amb = new THREE.AmbientLight(0xffffff, 0.6); scene.add(amb);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.8); dir.position.set(10,15,10); scene.add(dir);
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4); scene.add(hemi);
+  const amb = new THREE.AmbientLight(0xffffff, 0.5);
+  scene.add(amb);
+
+  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+  dir.position.set(10, 20, 10);
+  dir.castShadow = true;
+  dir.shadow.mapSize.width = 1024;
+  dir.shadow.mapSize.height = 1024;
+  scene.add(dir);
+
+  const hemi = new THREE.HemisphereLight(0x87ceeb, 0x362d1b, 0.3);
+  scene.add(hemi);
+
   // Ground
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(100,100),
-    new THREE.MeshStandardMaterial({color:0x1e1e23})
+    new THREE.PlaneGeometry(100, 100),
+    new THREE.MeshStandardMaterial({ color: 0x1e1e23, roughness: 0.9 })
   );
-  ground.rotation.x = -Math.PI/2; ground.position.y = -0.01; scene.add(ground);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.01;
+  ground.receiveShadow = true;
+  ground.name = 'Ground';
+  scene.add(ground);
+
   // Grid
-  const grid = new THREE.GridHelper(50, 50, 0x3f3f46, 0x2e2e33);
-  scene.add(grid);
+  gridHelper = new THREE.GridHelper(50, 50, 0x3f3f46, 0x27272a);
+  scene.add(gridHelper);
+
+  // Model group
+  _modelGroup = new THREE.Group();
+  _modelGroup.name = 'ModelGroup';
+  scene.add(_modelGroup);
+
   // Controls
-  if(THREE.OrbitControls) {
+  if (THREE.OrbitControls) {
     controls = new THREE.OrbitControls(camera, canvas);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.target.set(0, 3, 0);
+    controls.minDistance = 2;
+    controls.maxDistance = 100;
   }
+
   // Resize
-  const ro = new ResizeObserver(()=>{
-    const w=canvas.clientWidth, h=canvas.clientHeight;
-    camera.aspect=w/h; camera.updateProjectionMatrix();
-    renderer.setSize(w,h);
+  const ro = new ResizeObserver(() => {
+    const w = canvas.clientWidth || wrap.clientWidth;
+    const h = canvas.clientHeight || wrap.clientHeight;
+    if (w && h) {
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
   });
-  ro.observe(canvas.parentElement);
-  // Animate
-  function animate(){
+  ro.observe(wrap);
+
+  function animate() {
     requestAnimationFrame(animate);
-    if(controls) controls.update();
+    if (controls) controls.update();
     renderer.render(scene, camera);
   }
   animate();
 }
+
 function loadGLBModel(url) {
-  if(!scene) init3D();
-  if(!scene || !window.THREE || !THREE.GLTFLoader) {
-    console.warn('Three.js not ready');
-    return;
-  }
-  // Show canvas FIRST so it has non-zero dimensions
-  document.getElementById('c3d').style.display='block';
-  const es=document.getElementById('emptyState');
-  if(es) es.style.display='none';
-  // Force reflow and resize renderer to actual canvas size
+  if (!scene) init3D();
+  if (!scene || !window.THREE || !THREE.GLTFLoader) return;
+
+  _currentModelUrl = url;
+
+  // Show canvas
+  document.getElementById('c3d').style.display = 'block';
+  const es = document.getElementById('emptyState');
+  if (es) es.style.display = 'none';
+
+  // Force resize
   const canvas = document.getElementById('c3d');
   const wrap = document.getElementById('canvasWrap');
-  // Force layout reflow
   void canvas.offsetHeight;
-  const w = canvas.clientWidth || wrap.clientWidth || canvas.parentElement.clientWidth || 800;
-  const h = canvas.clientHeight || wrap.clientHeight || canvas.parentElement.clientHeight || 600;
-  if(renderer) {
+  const w = canvas.clientWidth || wrap.clientWidth || 800;
+  const h = canvas.clientHeight || wrap.clientHeight || 600;
+  if (renderer) {
     renderer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   }
+
   const loader = new THREE.GLTFLoader();
   loader.load(url, (gltf) => {
-    // Remove old models
-    const toRemove = [];
-    scene.traverse(child => {
-      if(child.isMesh && child.name !== 'Ground') toRemove.push(child);
-    });
-    toRemove.forEach(obj => {
-      if(obj.geometry) obj.geometry.dispose();
-      if(obj.material) {
-        if(Array.isArray(obj.material)) obj.material.forEach(m=>m.dispose());
-        else obj.material.dispose();
+    // Clear old
+    while (_modelGroup.children.length) {
+      const child = _modelGroup.children[0];
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+        else child.material.dispose();
       }
-      scene.remove(obj);
-    });
-    // Add new model
+      _modelGroup.remove(child);
+    }
+
     const model = gltf.scene;
-    scene.add(model);
+    model.traverse(child => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        if (_wireframeOn && child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => { m.wireframe = true; });
+          } else {
+            child.material.wireframe = true;
+          }
+        }
+      }
+    });
+
+    _modelGroup.add(model);
+
     // Center camera
     const box = new THREE.Box3().setFromObject(model);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z);
-    if(controls) {
+
+    if (controls) {
       controls.target.copy(center);
       controls.update();
     }
-    camera.position.set(center.x + maxDim*1.5, center.y + maxDim, center.z + maxDim*1.5);
+    camera.position.set(center.x + maxDim * 1.5, center.y + maxDim * 0.8, center.z + maxDim * 1.5);
     camera.lookAt(center);
-    showNotif(currentLang==='en'?'3D model ready!':'3D модель готова!');
+
+    // Show badge
+    const badge = document.getElementById('vBadge');
+    badge.textContent = `${Math.round(size.x)}×${Math.round(size.z)}м · ${Math.round(size.y)}м высота`;
+    badge.style.display = 'block';
+    document.getElementById('vHint').style.display = 'block';
+
+    showNotif('✅ 3D модель готова!');
   }, (progress) => {
-    console.log('Loading GLB:', Math.round(progress.loaded/progress.total*100)+'%');
+    if (progress.total) {
+      const pct = Math.round(progress.loaded / progress.total * 100);
+      document.getElementById('genSub').textContent = `Загрузка модели: ${pct}%`;
+    }
   }, (error) => {
     console.error('GLB load error:', error);
-    addMessage('assistant', currentLang==='en'?'⚠️ Failed to load 3D model':'⚠️ Не удалось загрузить 3D модель');
+    addMsg('ai', '⚠️ Не удалось загрузить 3D модель');
   });
 }
 
-// ═══════════════════ INIT ═══════════════════
-applyLang();
-// Init 3D viewer on load
-if(window.THREE) {
-  try { init3D(); } catch(e) { console.warn('3D init failed:', e); }
+function resetCamera() {
+  if (!controls || !_modelGroup) return;
+  const box = new THREE.Box3().setFromObject(_modelGroup);
+  if (box.isEmpty()) return;
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  controls.target.copy(center);
+  camera.position.set(center.x + maxDim * 1.5, center.y + maxDim * 0.8, center.z + maxDim * 1.5);
+  controls.update();
+  showNotif('Камера сброшена');
 }
-// Check backend on load
-if(API_BASE) { checkBackend().catch(()=>{}); }
+
+function toggleWireframe() {
+  _wireframeOn = !_wireframeOn;
+  if (!_modelGroup) return;
+  _modelGroup.traverse(child => {
+    if (child.isMesh && child.material) {
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach(m => { m.wireframe = _wireframeOn; });
+    }
+  });
+  showNotif(_wireframeOn ? 'Каркас включён' : 'Каркас выключен');
+}
+
+function toggleGrid() {
+  _gridOn = !_gridOn;
+  if (gridHelper) gridHelper.visible = _gridOn;
+  showNotif(_gridOn ? 'Сетка включена' : 'Сетка выключена');
+}
+
+// ═══ CHAT ═══
+const msgsEl = document.getElementById('msgs');
+const inpEl = document.getElementById('inp');
+let _processing = false;
+
+function addMsg(role, html) {
+  const w = document.getElementById('welcome');
+  if (w) w.remove();
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  div.innerHTML = `<div class="bubble">${html}</div><div class="msg-time">${time}</div>`;
+  msgsEl.appendChild(div);
+  requestAnimationFrame(() => { msgsEl.scrollTo({ top: msgsEl.scrollHeight, behavior: 'smooth' }); });
+  return div;
+}
+
+function showTyping() {
+  const d = document.createElement('div');
+  d.className = 'typing';
+  d.id = 'typing';
+  d.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+  msgsEl.appendChild(d);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+}
+
+function hideTyping() {
+  const t = document.getElementById('typing');
+  if (t) t.remove();
+}
+
+function quick(text) {
+  inpEl.value = text;
+  send();
+}
+
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ═══ GENERATION OVERLAY ═══
+function showGenOverlay(steps) {
+  const ov = document.getElementById('genOverlay');
+  ov.style.display = 'flex';
+  const container = document.getElementById('genSteps');
+  container.innerHTML = '';
+  steps.forEach((s, i) => {
+    const d = document.createElement('div');
+    d.className = 'gen-step' + (i === 0 ? ' active' : '');
+    d.innerHTML = `<div class="gen-step-icon">${i === 0 ? '◉' : '○'}</div>${s}`;
+    container.appendChild(d);
+  });
+  document.getElementById('genTitle').textContent = steps[0];
+  document.getElementById('genSub').textContent = 'Шаг 1 из ' + steps.length;
+  document.getElementById('genFill').style.width = '10%';
+}
+
+function updateGenStep(step, total, title) {
+  const container = document.getElementById('genSteps');
+  if (container.children[step]) {
+    container.children[step].className = 'gen-step active';
+    container.children[step].querySelector('.gen-step-icon').textContent = '◉';
+  }
+  if (step > 0 && container.children[step - 1]) {
+    container.children[step - 1].className = 'gen-step done';
+    container.children[step - 1].querySelector('.gen-step-icon').textContent = '✓';
+  }
+  document.getElementById('genTitle').textContent = title;
+  document.getElementById('genSub').textContent = `Шаг ${step + 1} из ${total}`;
+  document.getElementById('genFill').style.width = ((step + 1) / total * 100) + '%';
+}
+
+function hideGenOverlay() {
+  document.getElementById('genOverlay').style.display = 'none';
+}
+
+// ═══ MAIN SEND ═══
+async function send() {
+  const text = inpEl.value.trim();
+  if (!text || _processing) return;
+  _processing = true;
+  inpEl.value = '';
+  inpEl.style.height = 'auto';
+  addMsg('user', esc(text));
+
+  if (!_backend) await checkBackend();
+  if (!_backend) {
+    addMsg('ai', '❌ Бэкенд недоступен. Попробуйте позже.');
+    _processing = false;
+    return;
+  }
+
+  // Step 1: Parse
+  showTyping();
+  addMsg('ai', '🧠 <b>Анализирую описание…</b>');
+
+  let parsed;
+  try {
+    const parseR = await fetch(_backend + '/api/v1/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    if (!parseR.ok) throw new Error('Parse: HTTP ' + parseR.status);
+    parsed = await parseR.json();
+  } catch (e) {
+    hideTyping();
+    addMsg('ai', '❌ Ошибка парсинга: ' + e.message);
+    _processing = false;
+    return;
+  }
+
+  // Show parsed info
+  const isInterior = parsed.object_type === 'interior' || parsed.room_type;
+  const typeLabels = {
+    house: 'Жилой дом', cottage: 'Коттедж', office: 'Офис', hotel: 'Гостиница',
+    townhouse: 'Таунхаус', bathhouse: 'Баня', villa: 'Вилла',
+    bathroom: 'Ванная', kitchen: 'Кухня', bedroom: 'Спальня',
+    living: 'Гостиная', office: 'Офис', children: 'Детская'
+  };
+  const label = typeLabels[parsed.room_type] || typeLabels[parsed.building_type] || typeLabels[parsed.type] || 'Объект';
+  const w = parsed.width_m || 10;
+  const l = parsed.length_m || 12;
+  let desc = `🏗 <b>${label}</b> — ${w}×${l}м`;
+  if (parsed.style) desc += `, ${parsed.style}`;
+  if (parsed.floors) desc += `, ${parsed.floors} этажа`;
+  if (parsed.material) desc += `, ${parsed.material}`;
+  addMsg('ai', desc);
+
+  // Step 2: Generate
+  const steps = isInterior
+    ? ['Анализ планировки', 'Генерация геометрии', 'Материалы и текстуры', 'Освещение', 'Рендер 3D']
+    : ['Парсинг параметров', 'Генерация геометрии', 'Фасадные материалы', 'Освещение', 'Рендер 3D'];
+
+  showGenOverlay(steps);
+
+  try {
+    // Try orchestrator first (full pipeline with Blender)
+    updateGenStep(0, steps.length, steps[0]);
+    addMsg('ai', '⚡ <b>Генерирую 3D модель…</b>');
+
+    let glbUrl = null;
+    let renderUrl = null;
+
+    if (_quality === 'fast') {
+      // Fast: trimesh GLB only
+      updateGenStep(1, steps.length, steps[1]);
+      const fastR = await fetch(_backend + '/api/v1/generate/fast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: text })
+      });
+      if (fastR.ok) {
+        const blob = await fastR.blob();
+        if (blob.size > 500) {
+          glbUrl = URL.createObjectURL(blob);
+          updateGenStep(4, steps.length, steps[4]);
+        }
+      }
+    } else {
+      // Standard/High: orchestrator with Blender
+      updateGenStep(1, steps.length, steps[1]);
+      const orchR = await fetch(_backend + '/api/v1/orchestrator/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: text,
+          quality: _quality,
+          pipeline_profile: isInterior ? 'interior' : 'standard',
+          skip_clarification: true,
+          export_formats: ['glb']
+        })
+      });
+
+      if (orchR.ok) {
+        const orchResult = await orchR.json();
+
+        // Show pipeline steps
+        if (orchResult.steps && orchResult.steps.length) {
+          const decompHtml = '<div class="decomp-tree"><div class="decomp-title">📋 Этапы пайплайна</div>' +
+            orchResult.steps.map((s, i) =>
+              `<div class="decomp-item"><div class="di-num">${i + 1}</div><div class="di-line">${esc(s.name)}</div><div class="di-service">${s.status === 'done' ? '✅' : s.status === 'failed' ? '❌' : '⏭'}</div></div>`
+            ).join('') + '</div>';
+          addMsg('ai', decompHtml);
+        }
+
+        updateGenStep(3, steps.length, steps[3]);
+
+        // Get GLB
+        if (orchResult.exports && orchResult.exports.output_path) {
+          const path = orchResult.exports.output_path.replace(/^\/+/, '');
+          glbUrl = _backend + '/api/v1/files/' + path;
+        }
+
+        // Get render
+        if (orchResult.render && orchResult.render.output_path) {
+          const rPath = orchResult.render.output_path.replace(/^\/+/, '');
+          renderUrl = _backend + '/api/v1/files/' + rPath;
+        }
+
+        // Show duration
+        if (orchResult.duration_ms) {
+          const sec = Math.round(orchResult.duration_ms / 1000);
+          addMsg('ai', `<div style="font-size:10px;color:#52525b">⏱ Завершено за ${sec}с</div>`);
+        }
+      } else {
+        // Fallback to fast
+        addMsg('ai', '⚠️ Оркестратор недоступен, пробую быструю генерацию…');
+        const fastR = await fetch(_backend + '/api/v1/generate/fast', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: text })
+        });
+        if (fastR.ok) {
+          const blob = await fastR.blob();
+          if (blob.size > 500) glbUrl = URL.createObjectURL(blob);
+        }
+      }
+    }
+
+    hideGenOverlay();
+    hideTyping();
+
+    // Load 3D model
+    if (glbUrl) {
+      loadGLBModel(glbUrl);
+      addMsg('ai', '✅ <b>3D модель готова!</b> Используйте мышь для вращения.');
+    }
+
+    // Show render image
+    if (renderUrl) {
+      addMsg('ai', `<img src="${renderUrl}" style="max-width:100%;border-radius:10px;margin:4px 0" onerror="this.style.display='none'" />`);
+    }
+
+    if (!glbUrl && !renderUrl) {
+      addMsg('ai', '⚠️ Модель не создана. Попробуйте другой промт или упростите описание.');
+    }
+
+  } catch (e) {
+    hideGenOverlay();
+    hideTyping();
+    console.error('Generation error:', e);
+    addMsg('ai', '❌ Ошибка: ' + e.message);
+  }
+
+  _processing = false;
+}
+
+// ═══ EXPORT ═══
+function toggleExport() {
+  const panel = document.getElementById('exportPanel');
+  panel.style.display = panel.style.display === 'flex' ? 'none' : 'flex';
+}
+
+function exportModel(fmt) {
+  document.getElementById('exportPanel').style.display = 'none';
+  if (!_currentModelUrl) {
+    showNotif('Нет модели для экспорта');
+    return;
+  }
+  if (fmt === 'glb') {
+    const a = document.createElement('a');
+    a.href = _currentModelUrl;
+    a.download = 'architect_model.glb';
+    a.click();
+    showNotif('Скачивание GLB…');
+  } else if (fmt === 'png') {
+    if (!renderer) return;
+    renderer.render(scene, camera);
+    const dataUrl = renderer.domElement.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = 'architect_render.png';
+    a.click();
+    showNotif('Скачивание PNG…');
+  }
+}
+
+// ═══ VIEW TABS ═══
+function setView(el, v) {
+  document.querySelectorAll('.vtab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  if (!controls || !_modelGroup) return;
+  const box = new THREE.Box3().setFromObject(_modelGroup);
+  if (box.isEmpty()) return;
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+
+  if (v === '3d') {
+    camera.position.set(center.x + maxDim * 1.5, center.y + maxDim * 0.8, center.z + maxDim * 1.5);
+  } else if (v === 'plan') {
+    camera.position.set(center.x, center.y + maxDim * 3, center.z);
+  } else if (v === 'section') {
+    camera.position.set(center.x + maxDim * 2, center.y + maxDim * 0.5, center.z);
+  }
+  controls.target.copy(center);
+  controls.update();
+}
+
+// ═══ UTILS ═══
+function showNotif(text) {
+  const n = document.getElementById('notif');
+  n.textContent = text;
+  n.style.display = 'flex';
+  setTimeout(() => { n.style.display = 'none'; }, 3000);
+}
+
+// Auto-resize textarea
+inpEl.addEventListener('input', () => {
+  inpEl.style.height = 'auto';
+  inpEl.style.height = Math.min(inpEl.scrollHeight, 100) + 'px';
+});
+
+// Close export panel on click outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.export-panel') && !e.target.closest('.top-btn')) {
+    document.getElementById('exportPanel').style.display = 'none';
+  }
+});
+
+// ═══ INIT ═══
+if (window.THREE) {
+  try { init3D(); } catch (e) { console.warn('3D init:', e); }
+}
+checkBackend();
+setInterval(checkBackend, 30000);
 </script>
 </body>
 </html>
