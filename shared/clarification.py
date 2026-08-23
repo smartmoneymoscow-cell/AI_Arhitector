@@ -195,7 +195,23 @@ class ClarificationEngine:
 
         # Проверяем confidence
         if confidence >= self.MIN_CONFIDENCE:
-            # Даже при высокой уверенности проверяем критические поля
+            # ═══ FIX: If LLM returned specific object_type AND building_type, skip clarification ═══
+            obj_type = parsed_params.get("object_type", "")
+            bld_type = parsed_params.get("building_type", "")
+            room_type = parsed_params.get("room_type", "")
+            has_dimensions = parsed_params.get("width_m") and parsed_params.get("length_m")
+
+            # If LLM confidently identified the type with specifics — no questions needed
+            if obj_type and (bld_type or room_type):
+                logger.debug("Clarification skipped: obj_type=%s, bld_type=%s, room_type=%s, confidence=%.2f", obj_type, bld_type, room_type, confidence)
+                return ClarificationResult(
+                    needs_clarification=False,
+                    questions=[],
+                    confidence=confidence,
+                    partial_params=parsed_params,
+                )
+
+            # Even at high confidence, check critical fields
             for field_name, config in self.REQUIRED_FIELDS.items():
                 val = parsed_params.get(field_name)
                 if not val or val == "house":  # house = дефолт, возможно не определено

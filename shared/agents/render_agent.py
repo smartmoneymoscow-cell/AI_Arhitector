@@ -297,6 +297,21 @@ class RenderAgent(BaseAgent):
             if samples_override:
                 preset["samples"] = samples_override
 
+            # ═══ FORCE CORRECT RESOLUTION ═══
+            # Blender service may override resolution in geometry/texture scripts.
+            # Append a final resolution enforcement block AFTER all scripts.
+            resolution_enforce = f"""
+# ═══ RESOLUTION ENFORCE (quality={quality}) ═══
+import bpy
+bpy.context.scene.render.resolution_x = {preset['resolution_x']}
+bpy.context.scene.render.resolution_y = {preset['resolution_y']}
+bpy.context.scene.render.resolution_percentage = 100
+try:
+    bpy.context.scene.cycles.samples = {preset['samples']}
+except: pass
+print('RESOLUTION_ENFORCED: {preset['resolution_x']}x{preset['resolution_y']} samples={preset['samples']}')
+"""
+
             # Tiled render support (for ultra-high resolution)
             use_tiled = task.params.get("use_tiled_render", False)
             tile_count = task.params.get("tile_count", 4)
@@ -332,7 +347,7 @@ comp.location = (400, 0)
 tree.links.new(rl.outputs['Image'], comp.inputs['Image'])
 """
 
-            full_script = script + "\n" + render_script
+            full_script = script + "\n" + render_script + "\n" + resolution_enforce
 
             # Priority: Kaggle GPU (T4) → Blender service (Render) → local
             result = None
