@@ -1,5 +1,5 @@
 # Gateway requirements — minimal (no native deps needed)
-fastapi>=0.141.1
+fastapi>=0.143.0
 uvicorn>=0.52.0
 httpx>=0.28.1
 pydantic>=2.13.4
